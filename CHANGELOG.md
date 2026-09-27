@@ -5,6 +5,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-09-26
+
+### Changed
+- Workflow tracker: the chain is still injected into every prompt (and shown in the map), but the pi extension no longer draws it in pi's footer.
 ## [0.5.0] - 2026-09-25
 
 ### Added
