@@ -172,8 +172,7 @@ remembering this skill exists.
 ## Optional: mirror the chain in the status line (`/workflow-tracker setup`)
 
 Under pi, `make install-tracker` installs a pi extension that does the hooks' job (the chain or
-nudge is appended to every prompt) and shows the chain in pi's footer; the rest of this section is
-Claude Code only.
+nudge is appended to every prompt); the rest of this section is Claude Code only.
 
 Not needed for the conversation ticker. If the user explicitly wants the chain in the
 status bar too, plugins cannot set `statusLine`, so run:

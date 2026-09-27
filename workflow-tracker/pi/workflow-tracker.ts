@@ -1,9 +1,9 @@
-// workflow-tracker for pi: what the Claude Code hooks and status line do, as one pi extension.
+// workflow-tracker for pi: injects the current chain into the system prompt.
+// The chain is shown in PenguPool's map, so it is deliberately not drawn in pi's footer.
 // Installed by `make install-tracker` into ~/.pi/agent/extensions/workflow-tracker.ts.
 //
 //  - before each prompt, hook_prompt.sh's line (the current chain, or the nudge to set one) is appended
 //    to the system prompt, like the UserPromptSubmit/SessionStart hooks
-//  - the chain is shown in the footer, like the status line, refreshed after every bash call
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent"
 import { execFile } from "node:child_process"
 import * as path from "node:path"
@@ -16,11 +16,6 @@ const sh = (script: string, args: string[], cwd: string, input = "") => new Prom
 })
 
 export default function (pi: ExtensionAPI) {
-  const show = async (ctx: any) => {
-    if (ctx.hasUI) ctx.ui.setStatus("workflow-tracker", (await sh("steps.sh", ["render"], ctx.cwd)) || undefined)
-  }
-  pi.on("session_start", async (_event, ctx) => show(ctx))
-  pi.on("tool_result", async (event: any, ctx) => { if (event.toolName === "bash") await show(ctx) })
   pi.on("before_agent_start", async (event, ctx) => {
     const line = await sh("hook_prompt.sh", [], ctx.cwd, JSON.stringify({ cwd: ctx.cwd }))
     if (line) return { systemPrompt: `${event.systemPrompt}\n\n${line}` }
