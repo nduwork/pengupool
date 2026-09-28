@@ -168,21 +168,45 @@ def view_command(pane: str, name: str, view_id: str = "", h: str = "cc") -> str:
             f"\\; set-option -t {shlex.quote(view)} mouse on")
 
 
+def client_size(session: str = "", tty: str = "", h: str = "cc") -> tuple[str, str, str]:
+    """(name, width, height) of the client attached to `session`, or of client `tty` ('' when none)."""
+    fmt = "#{client_name}\t#{client_tty}\t#{client_session}\t#{client_width}\t#{client_height}"
+    for line in _run("list-clients", "-F", fmt, h=h).splitlines():
+        name, _, rest = line.partition("\t")
+        c_tty, _, rest = rest.partition("\t")
+        c_sess, _, rest = rest.partition("\t")
+        width, _, height = rest.partition("\t")
+        if (tty and c_tty == tty) or (not tty and c_sess == session):
+            return name, width, height
+    return "", "", ""
+
+
+def _size_before_showing(window: str, width: str, height: str, h: str = "cc") -> None:
+    """Give a shared window its client's size while it is still off screen. Selecting a window whose
+    size differs from the client's resizes it on screen, and that resize repaints the agent's whole TUI,
+    so resize first and let the repaint happen where nobody is looking. `resize-window` flips the window
+    to manual sizing, which is why every caller restores `window-size latest` right after. A window that
+    already fits is left alone: resizing it to the size it already has still sends the agent a SIGWINCH."""
+    if not (width and height):
+        return
+    now = _run("display-message", "-p", "-t", window, "#{window_width} #{window_height}", h=h).split()
+    if now != [width, height]:
+        _ok("resize-window", "-t", window, "-x", width, "-y", height, h=h)
+
+
 def select_view(pane: str, view_id: str, h: str = "cc") -> bool:
     """Switch one extension-owned grouped view to `pane` without typing into its tmux client."""
     view, win = _extension_view(pane, view_id, h)
     if not view or not _ok("has-session", "-t", "=" + view, h=h):
         return False
     target = f"{view}:{win}"
+    client, width, height = client_size(view, h=h)
+    _size_before_showing(target, width, height, h)
     # Older clients could leave shared windows in tmux's manual-size mode. Restore automatic
     # sizing and mark the extension's client as latest so its integrated terminal fills the panel.
     if not (_ok("set-option", "-w", "-t", target, "window-size", "latest", h=h) and
             _ok("select-window", "-t", target, h=h)):
         return False
-    clients = _run("list-clients", "-F", "#{client_name}\t#{session_name}", h=h)
-    client = next((name for line in clients.splitlines()
-                   for name, sep, session in [line.partition("\t")]
-                   if sep and session == view), "")
     return not client or _ok("switch-client", "-c", client, "-t", "=" + view, h=h)
 
 
@@ -207,6 +231,10 @@ def show_in_client(tty: str, pane: str, h: str = "cc") -> bool:
         # selects text and auto-copies to the clipboard on release (see enable_mouse_copy).
         _ok("set-option", "-t", view, "mouse", "on", h=h)
     enable_mouse_copy(h)
+    # Size the target window to this client before it is shown, so switching never resizes an on-screen
+    # pane (select_view does the same for the extension's client).
+    _, width, height = client_size(tty=tty, h=h)
+    _size_before_showing(f"{view}:{widx}", width, height, h)
     if not (_ok("switch-client", "-c", tty, "-t", view, h=h) and _ok("select-window", "-t", f"{view}:{widx}", h=h)
             and _ok("select-pane", "-t", pane, h=h)):
         return False

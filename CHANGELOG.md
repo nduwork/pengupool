@@ -5,6 +5,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- Switching sessions no longer repaints the agent's terminal. tmux resizes a window that becomes current at
+a size other than the client's, and that resize redraws the agent's whole TUI; the window is sized to the
+switching client while it is still off screen, and a window that already fits is left alone. The terminal
+UI's work pane is sized the same way.
+
 ## [0.5.1] - 2026-09-26
 
 ### Changed
