@@ -20,7 +20,7 @@ PENGU = Path(os.environ.get("PENGUPOOL_HOME", Path.home() / ".pengupool"))
 PI_LIVE = PENGU / "pi-sessions"
 STALE_S = 600
 # "clear logs": per-transcript byte watermark the moment the log was cleared, so already-seen
-# cross-session messages never re-emerge (durable, shared by the TUI-less backend and `serve`).
+# cross-session messages never re-emerge (durable: written by `ctl clear-logs`, read by `serve`).
 CLEARED = PENGU / "cleared.json"
 MSG_LABEL_MAX = 4000  # retained message text so the log/webview can show full details (never cropped)
 SYM = {"done": "✓", "active": "●", "failed": "✗"}
