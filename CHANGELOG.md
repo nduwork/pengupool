@@ -13,6 +13,10 @@ views and the `show_in_client`/`fit_window`/`kill_views` helpers, and the intern
 `serve`, `ctl` and the editor backend are unchanged.
 
 ### Fixed
+- The PenguPool terminal no longer opens tmux's right-click pane menu (Copy Line, Split, Swap, **Kill**,
+Respawn, Zoom). PenguPool turns the mouse on for wheel scrolling and drag-copying, which exposed tmux's
+stock binding; `Kill` would end the agent's session from a stray click, and the extension cannot manage a
+split. Right-click now just selects the pane, and is still forwarded when the agent uses the mouse itself.
 - Switching sessions no longer repaints the agent's terminal. tmux resizes a window that becomes current at
 a size other than the client's, and that resize redraws the agent's whole TUI; the window is sized to the
 switching client while it is still off screen, and a window that already fits is left alone.

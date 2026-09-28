@@ -225,13 +225,21 @@ def enable_mouse_copy(h: str = "cc") -> None:
     """Drag-select in the work pane auto-copies to the macOS clipboard, mouse staying on for
     scroll/click. tmux enters copy-mode on a left-drag; on release we pipe the selection to pbcopy
     and flash the copy hint in the top-right corner of that view (set-clipboard also lets
-    OSC52-capable terminals copy). Global binds, so set once per process."""
+    OSC52-capable terminals copy). Also drops tmux's right-click menu. Global binds, so set once per
+    process."""
     if h in _copy_ready:
         return
     _copy_ready.add(h)
     _ok("set-option", "-g", "set-clipboard", "on", h=h)
     for k, v in HINT.items():
         _ok("set-option", "-g", k, v, h=h)
+    # Right-click is tmux's stock binding: a display-menu offering Split, Swap, Kill, Respawn and Zoom on
+    # a window PenguPool owns. Kill would end the agent's session from a stray click, and a split is a
+    # layout the extension cannot manage, so keep the mouse but drop the menu: hand the click to the
+    # agent when the agent itself uses the mouse (mouse_any_flag), otherwise just select the pane.
+    for key in ("MouseDown3Pane", "M-MouseDown3Pane"):
+        _ok("bind-key", "-T", "root", key, "if-shell", "-F", "#{mouse_any_flag}",
+            "send-keys -M", "select-pane -t =", h=h)
     # tmux does NOT format-expand a `-t` target inside a key binding ("#{…}" is looked up literally →
     # "no such session"), so the bound set-option has no -t: it acts on the pressing client's own view
     # session. run-shell does expand its command, so the delayed hide can name that session.

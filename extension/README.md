@@ -110,7 +110,7 @@ window reload; PenguPool creates a fresh client when its Activity Bar view is re
 Log timestamps use the machine's local timezone and the compact `MM/DD/YYYY-HH:mm:ss` format.
 In the PenguPool Claude terminal, Shift+Enter sends Claude's multiline sequence while Enter submits. To
 copy terminal text on selection, enable VS Code's `terminal.integrated.copyOnSelection` setting.
-`Shift+R` (or right-click → Restart & Resume) stops a session and resumes it in the same terminal, so a
+`Shift+R` (or right-clicking the session in the Sessions list → Restart & Resume) stops a session and resumes it in the same terminal, so a
 Claude Code or pi update takes effect without losing the session or its group.
 
 Grouping is session-based: use `c` or `/compact` to stay grouped. Do not use `/new` or `/clear`,
