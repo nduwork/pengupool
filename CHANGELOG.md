@@ -5,11 +5,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Removed
+- The terminal UI (Textual). `pengupool` with no command, or `pengupool tui`, prints usage: the editor is
+the only front end. Removed with it: `pengupool/app.py`, `pengupool/graph.py`, the `textual` and
+`textual-fspicker` runtime dependencies, the private `pengupool-ui` tmux server with its `pv-tui-*`
+views and the `show_in_client`/`fit_window`/`kill_views` helpers, and the internal `--pane` entry point.
+`serve`, `ctl` and the editor backend are unchanged.
+
 ### Fixed
 - Switching sessions no longer repaints the agent's terminal. tmux resizes a window that becomes current at
 a size other than the client's, and that resize redraws the agent's whole TUI; the window is sized to the
-switching client while it is still off screen, and a window that already fits is left alone. The terminal
-UI's work pane is sized the same way.
+switching client while it is still off screen, and a window that already fits is left alone.
 
 ## [0.5.1] - 2026-09-26
 

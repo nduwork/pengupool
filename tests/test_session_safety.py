@@ -162,26 +162,6 @@ def test_select_view_without_a_client_leaves_the_size_alone(monkeypatch):
     assert [call[0] for call in calls] == ["has-session", "set-option", "select-window"]
 
 
-def test_show_in_client_sizes_the_window_before_selecting_it(monkeypatch):
-    monkeypatch.setattr(tmux, "_copy_ready", {"cc"})
-
-    def run(*args, **k):
-        if args[0] == "list-clients":
-            return "/dev/ttys052\t/dev/ttys052\tpv-tui-pengupool\t197\t21\n"
-        return "100 30\n" if args[-1] == "#{window_width} #{window_height}" else "\tpengupool\t3\n"
-    monkeypatch.setattr(tmux, "_run", run)
-    calls = []
-    monkeypatch.setattr(tmux, "_ok", lambda *args, **k: calls.append(args) or True)
-
-    assert tmux.show_in_client("/dev/ttys052", "%9")
-    assert calls[:4] == [
-        ("has-session", "-t", "=pv-tui-pengupool"),
-        ("resize-window", "-t", "pv-tui-pengupool:3", "-x", "197", "-y", "21"),
-        ("switch-client", "-c", "/dev/ttys052", "-t", "pv-tui-pengupool"),
-        ("select-window", "-t", "pv-tui-pengupool:3"),
-    ]
-
-
 def test_mouse_copy_flashes_the_hint_top_right(monkeypatch):
     monkeypatch.setattr(tmux, "_copy_ready", set())
     calls = []
@@ -214,7 +194,7 @@ def test_one_extension_view_can_target_different_windows(monkeypatch):
 
 def test_extension_view_cleanup_removes_only_detached_stale_views(monkeypatch):
     monkeypatch.setattr(tmux, "_run", lambda *args, **k:
-                        "pengupool\t0\npv-ext-old\t0\npv-ext-current\t0\npv-ext-live\t1\npv-tui-x\t0\n")
+                        "pengupool\t0\npv-ext-old\t0\npv-ext-current\t0\npv-ext-live\t1\n")
     killed = []
     monkeypatch.setattr(tmux, "_ok", lambda *args, **k: killed.append(args) or True)
     tmux.cleanup_extension_views("pv-ext-current")
