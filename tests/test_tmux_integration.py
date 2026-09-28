@@ -119,3 +119,109 @@ def test_a_wobbly_click_does_not_copy_but_a_real_selection_does(servers, monkeyp
     run(shared, "send-keys", "-t", pane, "-X", "begin-selection")
     run(shared, "send-keys", "-t", pane, "-X", "cursor-left")
     assert run(shared, "display-message", "-p", "-t", pane, tmux.MIN_SELECTION).stdout.strip() == "1"  # leftward
+
+
+@pytest.fixture
+def attached_client():
+    """Attach a real tmux client on its own pty, at an exact size. The disposable servers have no
+    clients, and a control-mode client reports no height, so a pty is the only honest way to test two
+    editor windows of different sizes."""
+    pty = pytest.importorskip("pty")
+    import fcntl
+    import os
+    import signal
+    import struct
+    import termios
+
+    live: list[tuple[int, int]] = []
+
+    def attach(shared: str, session: str, cols: int, rows: int) -> int:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.close(master)
+            os.setsid()
+            controlling_tty = getattr(termios, "TIOCSCTTY", None)   # so tmux can read the terminal
+            if controlling_tty is not None:
+                try:
+                    fcntl.ioctl(slave, controlling_tty, 0)
+                except OSError:
+                    pass
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.execvpe("tmux", ["tmux", "-S", shared, "attach", "-t", session],
+                       {**os.environ, "TERM": "xterm-256color"})   # the client needs usable terminfo
+            os._exit(127)  # only reached if execvp failed
+        os.close(slave)
+        # Size the pty from the master, the way pexpect does. Setting it on the slave before the fork
+        # works on macOS but not on Linux, where tmux would attach at the 80x24 default.
+        fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
+        live.append((pid, master))
+        return pid
+
+    yield attach
+    for pid, master in live:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        try:
+            os.waitpid(pid, 0)
+        except ChildProcessError:
+            pass
+        os.close(master)
+
+
+def test_a_switch_leaves_a_window_another_client_is_displaying_alone(servers, attached_client, monkeypatch):
+    """Grouped views share their windows, so a window another editor displays is off screen only for the
+    client that is switching: sizing it to that client would repaint the other editor's terminal."""
+    (shared, _, _), run = servers
+    for _ in range(3):
+        run(shared, "new-window", "-d", "-t", "pengupool:", "sleep", "120")
+    windows = {index: win for win, index in (line.split("\t") for line in run(
+        shared, "list-windows", "-t", "pengupool", "-F", "#{window_id}\t#{window_index}").stdout.splitlines() if line)}
+    shown, target, unseen = windows["1"], windows["2"], windows["3"]
+    for view, win in (("editor-a", shown), ("editor-b", target)):
+        run(shared, "new-session", "-d", "-s", f"pv-ext-{view}", "-t", "pengupool")
+        run(shared, "set-option", "-t", f"pv-ext-{view}", "status", "off")
+        run(shared, "select-window", "-t", f"pv-ext-{view}:{win}")
+    attached_client(shared, "pv-ext-editor-a", 100, 30)   # the client that switches
+    attached_client(shared, "pv-ext-editor-b", 60, 20)    # the client already looking at the target
+
+    def wait_for(view: str, size: str) -> None:
+        seen = ""
+        for _ in range(50):
+            seen = run(shared, "list-clients", "-F", "#{client_session} #{client_width}x#{client_height}").stdout.strip()
+            if f"{view} {size}" in seen:
+                return
+            time.sleep(0.1)
+        pytest.fail(f"{view} never attached at {size}; clients seen: {seen!r}")
+
+    wait_for("pv-ext-editor-a", "100x30")
+    wait_for("pv-ext-editor-b", "60x20")
+    size_of = lambda win: run(shared, "display-message", "-p", "-t", win, "#{window_width}x#{window_height}").stdout.strip()
+    pane_of = lambda win: run(shared, "list-panes", "-t", win, "-F", "#{pane_id}").stdout.strip()
+    assert size_of(target) == "60x20"              # the client displaying it owns its size
+
+    issued: list[tuple] = []
+    real_ok = tmux._ok
+    monkeypatch.setattr(tmux, "_ok", lambda *a, **k: (issued.append(a), real_ok(*a, **k))[1])
+
+    def resized() -> list[tuple]:
+        got = [call for call in issued if call[0] == "resize-window"]
+        issued.clear()
+        return got
+
+    assert target in tmux.shown_windows()          # who displays what, read from a live server
+    assert tmux.select_view(pane_of(target), "editor-a")
+    assert resized() == []                         # B is looking at it: we stay out of the way
+    assert run(shared, "display-message", "-p", "-t", "pv-ext-editor-a", "#{window_id}").stdout.strip() == target
+    # tmux still sizes the shared window to the switching client here, because A's select makes A the
+    # latest client and the window has one size. That is inherent to two clients of different sizes
+    # sharing a window — the alternative (`window-size largest`) crops the smaller client instead.
+
+    # A window nobody displays is still sized to the switching client before it appears (PR #37).
+    assert tmux.select_view(pane_of(unseen), "editor-a")
+    assert [call[1:3] for call in resized()] == [("-t", f"pv-ext-editor-a:{unseen}")]
+    assert size_of(unseen) == "100x30"

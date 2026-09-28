@@ -16,6 +16,10 @@ views and the `show_in_client`/`fit_window`/`kill_views` helpers, and the intern
 - Switching sessions no longer repaints the agent's terminal. tmux resizes a window that becomes current at
 a size other than the client's, and that resize redraws the agent's whole TUI; the window is sized to the
 switching client while it is still off screen, and a window that already fits is left alone.
+- Session switching no longer resizes a window another editor is displaying. Grouped views share their
+windows, so a window is off screen only for the client that is switching; the pre-switch sizing is skipped
+whenever any client already shows the target. tmux itself still sizes a shared window to the switching
+client, which is inherent to two clients of different sizes sharing one window.
 
 ## [0.5.1] - 2026-09-26
 

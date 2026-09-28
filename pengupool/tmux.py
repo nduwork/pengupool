@@ -165,13 +165,24 @@ def client_size(session: str = "", tty: str = "", h: str = "cc") -> tuple[str, s
     return "", "", ""
 
 
+def shown_windows(h: str = "cc") -> set[str]:
+    """Window ids an attached client is displaying right now. Grouped views share the same windows, so a
+    window in this set is visible to somebody and resizing it repaints that client's terminal too."""
+    return set(_run("list-clients", "-F", "#{window_id}", h=h).split())
+
+
 def _size_before_showing(window: str, width: str, height: str, h: str = "cc") -> None:
     """Give a shared window its client's size while it is still off screen. Selecting a window whose
     size differs from the client's resizes it on screen, and that resize repaints the agent's whole TUI,
     so resize first and let the repaint happen where nobody is looking. `resize-window` flips the window
-    to manual sizing, which is why every caller restores `window-size latest` right after. A window that
-    already fits is left alone: resizing it to the size it already has still sends the agent a SIGWINCH."""
+    to manual sizing, which is why every caller restores `window-size latest` right after.
+
+    Two windows are left alone: one that already fits (resizing it to the size it already has still
+    sends the agent a SIGWINCH), and one another client is displaying — the window is shared, so it is
+    off screen only for the client that is switching, and the resize would repaint everyone else's."""
     if not (width and height):
+        return
+    if window.rpartition(":")[2] in shown_windows(h):
         return
     now = _run("display-message", "-p", "-t", window, "#{window_width} #{window_height}", h=h).split()
     if now != [width, height]:
