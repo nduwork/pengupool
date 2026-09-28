@@ -194,7 +194,7 @@ def test_mouse_copy_flashes_the_hint_top_right(monkeypatch):
     assert calls[0] == ("set-option", "-g", "set-clipboard", "on")
     assert ("set-option", "-g", "status-position", "top") in calls
     assert ("set-option", "-g", "status-left", "") in calls
-    binds = [c for c in calls if c[0] == "bind-key"]
+    binds = [c for c in calls if c[0] == "bind-key" and c[1] == "-T" and c[2] in ("copy-mode", "copy-mode-vi")]
     for call, table in zip(binds, ("copy-mode", "copy-mode-vi"), strict=True):
         assert call == (
             "bind-key", "-T", table, "MouseDragEnd1Pane", "if-shell", "-F", tmux.MIN_SELECTION,
@@ -202,6 +202,24 @@ def test_mouse_copy_flashes_the_hint_top_right(monkeypatch):
             "\"sleep 2; tmux -L pengupool set-option -t '#{session_name}' status off\"",
             "send-keys -X cancel",  # a tiny drag (a wobbly click) leaves the clipboard alone
         )
+
+
+def test_right_click_does_not_offer_tmuxs_pane_menu(monkeypatch):
+    """Right-click is tmux's stock display-menu (Kill, Respawn, Split, Swap, Zoom) on a window PenguPool
+    owns: Kill would end the agent's session from a stray click, and a split is a layout the extension
+    cannot manage. The mouse stays on; the menu does not."""
+    monkeypatch.setattr(tmux, "_copy_ready", set())
+    calls = []
+    monkeypatch.setattr(tmux, "_ok", lambda *args, **k: calls.append(args) or True)
+
+    tmux.enable_mouse_copy()
+
+    binds = [call for call in calls if call[0] == "bind-key"
+             and call[3] in ("MouseDown3Pane", "M-MouseDown3Pane")]
+    assert [call[3] for call in binds] == ["MouseDown3Pane", "M-MouseDown3Pane"]  # the plain and Alt form
+    for call in binds:
+        assert call[-1] == "select-pane -t ="          # select the pane, open nothing
+    assert not [call for call in calls if "display-menu" in call]
 
 
 def test_one_extension_view_can_target_different_windows(monkeypatch):
