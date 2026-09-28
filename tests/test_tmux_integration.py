@@ -137,16 +137,25 @@ def attached_client():
 
     def attach(shared: str, session: str, cols: int, rows: int) -> int:
         master, slave = pty.openpty()
-        fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
         pid = os.fork()
         if pid == 0:
+            os.close(master)
             os.setsid()
+            controlling_tty = getattr(termios, "TIOCSCTTY", None)   # so tmux can read the terminal
+            if controlling_tty is not None:
+                try:
+                    fcntl.ioctl(slave, controlling_tty, 0)
+                except OSError:
+                    pass
             os.dup2(slave, 0)
             os.dup2(slave, 1)
             os.dup2(slave, 2)
             os.execvp("tmux", ["tmux", "-S", shared, "attach", "-t", session])
             os._exit(127)  # only reached if execvp failed
         os.close(slave)
+        # Size the pty from the master, the way pexpect does. Setting it on the slave before the fork
+        # works on macOS but not on Linux, where tmux would attach at the 80x24 default.
+        fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
         live.append((pid, master))
         return pid
 
