@@ -150,7 +150,8 @@ def attached_client():
             os.dup2(slave, 0)
             os.dup2(slave, 1)
             os.dup2(slave, 2)
-            os.execvp("tmux", ["tmux", "-S", shared, "attach", "-t", session])
+            os.execvpe("tmux", ["tmux", "-S", shared, "attach", "-t", session],
+                       {**os.environ, "TERM": "xterm-256color"})   # the client needs usable terminfo
             os._exit(127)  # only reached if execvp failed
         os.close(slave)
         # Size the pty from the master, the way pexpect does. Setting it on the slave before the fork
@@ -189,11 +190,13 @@ def test_a_switch_leaves_a_window_another_client_is_displaying_alone(servers, at
     attached_client(shared, "pv-ext-editor-b", 60, 20)    # the client already looking at the target
 
     def wait_for(view: str, size: str) -> None:
+        seen = ""
         for _ in range(50):
-            if f"{view} {size}" in run(shared, "list-clients", "-F", "#{client_session} #{client_width}x#{client_height}").stdout:
+            seen = run(shared, "list-clients", "-F", "#{client_session} #{client_width}x#{client_height}").stdout.strip()
+            if f"{view} {size}" in seen:
                 return
             time.sleep(0.1)
-        pytest.fail(f"{view} never attached at {size}")
+        pytest.fail(f"{view} never attached at {size}; clients seen: {seen!r}")
 
     wait_for("pv-ext-editor-a", "100x30")
     wait_for("pv-ext-editor-b", "60x20")
