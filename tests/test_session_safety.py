@@ -118,18 +118,67 @@ def test_extension_views_use_window_identity_not_display_name(monkeypatch):
     assert "set-option -w -t pv-ext-9:@9 window-size latest" in first
 
 
-def test_select_view_restores_automatic_window_sizing(monkeypatch):
-    monkeypatch.setattr(tmux, "_run", lambda *args, **k:
-                        "/dev/ttys052\tpv-ext-editor-1\n" if args[0] == "list-clients" else "@9\n")
+def test_select_view_sizes_the_window_before_selecting_it(monkeypatch):
+    """Selecting a window whose size differs from the client's repaints the agent's TUI, so the window
+    is resized to the switching client first (off screen), then selected, then automatic sizing returns."""
+    def run(*args, **k):
+        if args[0] == "list-clients":
+            return "/dev/ttys052\t/dev/ttys052\tpv-ext-editor-1\t197\t21\n"
+        return "@9\n" if args[-1] == "#{window_id}" else "100 30\n"
+    monkeypatch.setattr(tmux, "_run", run)
     calls = []
     monkeypatch.setattr(tmux, "_ok", lambda *args, **k: calls.append(args) or True)
 
     assert tmux.select_view("%9", "editor-1")
     assert calls == [
         ("has-session", "-t", "=pv-ext-editor-1"),
+        ("resize-window", "-t", "pv-ext-editor-1:@9", "-x", "197", "-y", "21"),
         ("set-option", "-w", "-t", "pv-ext-editor-1:@9", "window-size", "latest"),
         ("select-window", "-t", "pv-ext-editor-1:@9"),
         ("switch-client", "-c", "/dev/ttys052", "-t", "=pv-ext-editor-1"),
+    ]
+
+
+def test_select_view_leaves_a_window_that_already_fits(monkeypatch):
+    """Resizing a window to the size it already has still SIGWINCHes the agent, so it is skipped."""
+    def run(*args, **k):
+        if args[0] == "list-clients":
+            return "/dev/ttys052\t/dev/ttys052\tpv-ext-editor-1\t197\t21\n"
+        return "@9\n" if args[-1] == "#{window_id}" else "197 21\n"
+    monkeypatch.setattr(tmux, "_run", run)
+    calls = []
+    monkeypatch.setattr(tmux, "_ok", lambda *args, **k: calls.append(args) or True)
+
+    assert tmux.select_view("%9", "editor-1")
+    assert [call[0] for call in calls] == ["has-session", "set-option", "select-window", "switch-client"]
+
+
+def test_select_view_without_a_client_leaves_the_size_alone(monkeypatch):
+    monkeypatch.setattr(tmux, "_run", lambda *args, **k: "" if args[0] == "list-clients" else "@9\n")
+    calls = []
+    monkeypatch.setattr(tmux, "_ok", lambda *args, **k: calls.append(args) or True)
+
+    assert tmux.select_view("%9", "editor-1")
+    assert [call[0] for call in calls] == ["has-session", "set-option", "select-window"]
+
+
+def test_show_in_client_sizes_the_window_before_selecting_it(monkeypatch):
+    monkeypatch.setattr(tmux, "_copy_ready", {"cc"})
+
+    def run(*args, **k):
+        if args[0] == "list-clients":
+            return "/dev/ttys052\t/dev/ttys052\tpv-tui-pengupool\t197\t21\n"
+        return "100 30\n" if args[-1] == "#{window_width} #{window_height}" else "\tpengupool\t3\n"
+    monkeypatch.setattr(tmux, "_run", run)
+    calls = []
+    monkeypatch.setattr(tmux, "_ok", lambda *args, **k: calls.append(args) or True)
+
+    assert tmux.show_in_client("/dev/ttys052", "%9")
+    assert calls[:4] == [
+        ("has-session", "-t", "=pv-tui-pengupool"),
+        ("resize-window", "-t", "pv-tui-pengupool:3", "-x", "197", "-y", "21"),
+        ("switch-client", "-c", "/dev/ttys052", "-t", "pv-tui-pengupool"),
+        ("select-window", "-t", "pv-tui-pengupool:3"),
     ]
 
 
