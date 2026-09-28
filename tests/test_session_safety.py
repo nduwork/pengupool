@@ -118,12 +118,19 @@ def test_extension_views_use_window_identity_not_display_name(monkeypatch):
     assert "set-option -w -t pv-ext-9:@9 window-size latest" in first
 
 
+def _client_line(name="pv-ext-editor-1", width="197", height="21"):
+    return f"/dev/ttys052\t/dev/ttys052\t{name}\t{width}\t{height}\n"
+
+
+CLIENT_LINE = _client_line()  # `list-clients` answer for client_size: the editor's own client
+
+
 def test_select_view_sizes_the_window_before_selecting_it(monkeypatch):
     """Selecting a window whose size differs from the client's repaints the agent's TUI, so the window
     is resized to the switching client first (off screen), then selected, then automatic sizing returns."""
     def run(*args, **k):
         if args[0] == "list-clients":
-            return "/dev/ttys052\t/dev/ttys052\tpv-ext-editor-1\t197\t21\n"
+            return "" if "#{window_id}" in args else CLIENT_LINE   # nobody else displays the target
         return "@9\n" if args[-1] == "#{window_id}" else "100 30\n"
     monkeypatch.setattr(tmux, "_run", run)
     calls = []
@@ -143,8 +150,23 @@ def test_select_view_leaves_a_window_that_already_fits(monkeypatch):
     """Resizing a window to the size it already has still SIGWINCHes the agent, so it is skipped."""
     def run(*args, **k):
         if args[0] == "list-clients":
-            return "/dev/ttys052\t/dev/ttys052\tpv-ext-editor-1\t197\t21\n"
+            return "" if "#{window_id}" in args else CLIENT_LINE   # nobody else displays the target
         return "@9\n" if args[-1] == "#{window_id}" else "197 21\n"
+    monkeypatch.setattr(tmux, "_run", run)
+    calls = []
+    monkeypatch.setattr(tmux, "_ok", lambda *args, **k: calls.append(args) or True)
+
+    assert tmux.select_view("%9", "editor-1")
+    assert [call[0] for call in calls] == ["has-session", "set-option", "select-window", "switch-client"]
+
+
+def test_select_view_leaves_a_window_another_client_is_displaying(monkeypatch):
+    """Grouped views share their windows, so a window another client is displaying is off screen only for
+    the client that is switching: resizing it would repaint that other client's terminal."""
+    def run(*args, **k):
+        if args[0] == "list-clients":
+            return "@9\n" if "#{window_id}" in args else CLIENT_LINE   # another client shows the target
+        return "@9\n" if args[-1] == "#{window_id}" else "100 30\n"
     monkeypatch.setattr(tmux, "_run", run)
     calls = []
     monkeypatch.setattr(tmux, "_ok", lambda *args, **k: calls.append(args) or True)
