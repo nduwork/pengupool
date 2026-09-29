@@ -85,6 +85,11 @@ STEPS --shared clear                           # clear the repo's shared chain, 
 digits, `.`, `_`, `-` (it becomes a directory name); anything else is ignored and the shared tracker is
 used, so a mangled or hostile id can never leave the state directory.
 
+A session tracker that nothing has touched for 14 days (`STEP_STATUS_SESSION_TTL`, days) is pruned by
+the next `set`, so `.step-status/sessions/` does not grow one directory per session forever. `list
+--all` adds the other sessions' chains, labelled `session/<id>`, when you need to see what they are
+working on; plain `list` stays yours plus the shared chains.
+
 ### Messages between sessions
 
 When a workflow talks to another session (SendMessage or a pi-intercom send/ask out, a
