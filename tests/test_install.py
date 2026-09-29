@@ -6,17 +6,6 @@ import pytest
 
 from pengupool import install
 
-REAL_CLI = install._cli   # captured before the fixtures replace it with a deterministic fake
-
-
-def fake_cli(monkeypatch, have: set) -> None:
-    """Resolve a harness CLI from `have`, as `install._cli` does: PATH first, then ~/.local/bin. Pinned
-    in tests because the fallback consults the real home directory."""
-    monkeypatch.setattr(
-        install, "_cli",
-        lambda h: f"/bin/{install.harness.CLI[h]}" if install.harness.CLI[h] in have else None,
-    )
-
 
 @pytest.fixture
 def env(tmp_path, monkeypatch):
@@ -24,8 +13,6 @@ def env(tmp_path, monkeypatch):
     ran = []
     have = {"tmux", "claude", "pi", "brew", "pengupool"}
     monkeypatch.setattr(install.shutil, "which", lambda b: f"/bin/{b}" if b in have else None)
-    fake_cli(monkeypatch, have)
-    monkeypatch.setattr(install, "_npm_global_writable", lambda: True)
 
     def run(cmd, **k):
         ran.append(cmd)
@@ -65,7 +52,7 @@ def test_accepted_install_runs_the_official_installer(env, monkeypatch):
 def test_pi_setup_installs_intercom_and_the_extension(env):
     have, ran = env
     assert install.main(["setup", "pi"]) == 0
-    assert ["/bin/pi", "install", "npm:pi-intercom"] in ran   # pi is called by its resolved path
+    assert ["pi", "install", "npm:pi-intercom"] in ran
     src = install._pi_extension().read_text()
     assert '|| "/bin/pengupool"' in src                               # absolute CLI baked in
     assert not install._settings().exists()                           # Claude settings untouched
@@ -89,7 +76,6 @@ def test_unknown_harness_is_rejected(env):
                                               ({"claude"}, ["cc"]), (set(), ["cc"])])
 def test_auto_wires_every_installed_harness(monkeypatch, installed, wired):
     monkeypatch.setattr(install.shutil, "which", lambda b: f"/bin/{b}" if b in installed else None)
-    fake_cli(monkeypatch, installed)
     assert install._harnesses("auto") == wired
 
 
@@ -130,31 +116,3 @@ def test_without_a_package_manager_there_is_no_command_to_offer(env):
     have, _ = env
     have.clear()
     assert install._pkg_install("node") == ""
-
-
-def test_pi_installs_into_the_user_prefix_when_the_global_one_needs_root(env, monkeypatch):
-    # Debian/Ubuntu: npm's global prefix is root-owned, so `npm install -g` ends in EACCES and a remote
-    # could never get pi through `setup`. The user's own prefix needs no sudo and lands beside
-    # pengupool in ~/.local/bin.
-    monkeypatch.setattr(install, "_npm_global_writable", lambda: False)
-    assert install._pi_install() == 'npm install -g --prefix "$HOME/.local" --ignore-scripts ' + install.PI_PKG
-    assert install._cli_install("pi") == install._pi_install()
-
-
-def test_pi_uses_the_plain_global_install_when_it_can_write_there(env):
-    assert install._pi_install() == install.CLI_INSTALL["pi"]
-
-
-def test_a_harness_in_the_user_prefix_is_found_without_being_on_path(env, monkeypatch, tmp_path):
-    # pi installed with `--prefix $HOME/.local` is real but invisible to `shutil.which` in a
-    # non-interactive session, so `setup` must look for it before reporting pi missing.
-    have, _ = env
-    have.clear()
-    monkeypatch.setattr(install, "_cli", REAL_CLI)      # exercise the real resolver, not the fixture's
-    monkeypatch.setattr(install.Path, "home", staticmethod(lambda: tmp_path))
-    binp = tmp_path / ".local" / "bin"
-    binp.mkdir(parents=True)
-    (binp / "pi").write_text("#!/bin/sh\n")
-    assert install._cli("pi") == str(binp / "pi")
-    assert install._cli("cc") is None
-    assert install._harnesses("auto") == ["pi"]

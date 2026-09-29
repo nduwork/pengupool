@@ -6,10 +6,6 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Fixed
-- `pengupool setup pi` failed on Debian and Ubuntu: their npm installs into a root-owned global
-prefix, so `npm install -g` ended in EACCES. pi now goes into the user's own prefix
-(`~/.local`) when the global one cannot be written, `setup` finds a harness CLI that lives there
-rather than on PATH, and `check` says where it found it.
 - `pengupool setup` could not install a package on a host whose apt lists are absent or stale (a
 fresh box, a slim container): `apt-get install` never refreshes them, so it answered "Unable to
 locate package". apt now refreshes first, best-effort, before installing.
