@@ -97,7 +97,7 @@ def test_check_ignores_which_cli_path_was_baked_in(env, monkeypatch):
 
 
 @pytest.mark.parametrize("pm,expected", [
-    ("apt-get", "sudo apt-get update -qq || true; sudo apt-get install -y nodejs npm"),
+    ("apt-get", "sudo apt-get install -y nodejs npm"),
     ("dnf", "sudo dnf install -y nodejs"),
     ("pacman", "sudo pacman -S --noconfirm nodejs npm"),
     ("brew", "brew install node"),

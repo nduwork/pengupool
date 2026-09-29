@@ -56,14 +56,7 @@ def _pkg_install(pkg: str) -> str:
     for pm, cmd in (("brew", "brew install {}"), ("apt-get", "sudo apt-get install -y {}"),
                     ("dnf", "sudo dnf install -y {}"), ("pacman", "sudo pacman -S --noconfirm {}")):
         if shutil.which(pm):
-            command = cmd.format(PKG[pm].get(pkg, pkg))
-            # `apt-get install` never refreshes its package lists and a fresh box or slim container has
-            # none, so it answers "Unable to locate package" for any name. Refresh first, best-effort:
-            # a broken repo should not stop an install that cached lists could still satisfy. (dnf
-            # refreshes metadata on its own; pacman's -Sy is discouraged, so neither is changed.)
-            if pm == "apt-get":
-                command = "sudo apt-get update -qq || true; " + command
-            return command
+            return cmd.format(PKG[pm].get(pkg, pkg))
     return ""
 
 
