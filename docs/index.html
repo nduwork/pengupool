@@ -16,6 +16,7 @@
     <nav aria-label="Main navigation">
       <a href="#tutorial">Demo</a>
       <a href="#plugins">Plugins</a>
+      <a href="#local-first">Local first</a>
       <a href="#guide">Guide</a>
       <a href="#how-it-works">How it works</a>
       <a href="#install">Install</a>
@@ -91,6 +92,15 @@
         <article><div class="feature-icon">▣</div><h3>VS Code &amp; Cursor extension</h3><ul><li>Sessions and pi Sessions trees; drag a row to regroup</li><li>Live map: lines light green when a parent messages a child and milky blue on the reply; ungrouped sessions stack in their own column</li><li>Top-down or left-right layout, compact or roomy spacing, and <b>⟳ Refresh</b></li><li>Message log coloured by edge: parent → child, child → parent, <code>@session</code></li><li>One tmux-backed terminal per harness that switches sessions in place</li><li><kbd>Shift</kbd>+<kbd>R</kbd> Restart &amp; Resume after a Claude Code or pi update</li></ul></article>
         <article><div class="feature-icon">⚓</div><h3>Claude Code hooks</h3><ul><li>A <code>&lt;pengupool&gt;</code> block each prompt: tree, parent, children, role</li><li><code>SendMessage</code> guard: parent and direct children only</li><li><code>ROUTE CHECK</code> when a prompt matches a child's keywords: a hint, never a blocked turn</li><li><code>ROLE REQUIRED</code> until the session describes itself</li></ul></article>
         <article><div class="feature-icon">π</div><h3>pi extension</h3><ul><li>The same tree block, appended to pi's system prompt</li><li>pi-intercom <code>send</code>/<code>ask</code> checked against the routing rule</li><li>Workflow chain in pi's footer and prompt</li><li>Its own tmux server; never grouped with Claude Code sessions</li></ul></article>
+      </div>
+    </section>
+
+    <section class="features wrap" id="local-first">
+      <div class="section-intro"><span class="eyebrow">LOCAL FIRST</span><h2>No server in the middle.</h2><p>Agents message through the sockets their own harness already provides, so a Claude Code pool and a pi pool each stay self-contained. Nothing is hosted, nothing is polled, and nothing transits a third party.</p></div>
+      <div class="feature-grid">
+        <article><div class="feature-icon">⇥</div><h3>Push, not poll</h3><p>A message lands in a session that is already running, mid-turn — not waiting for the next time the agent asks.</p></article>
+        <article><div class="feature-icon">✓</div><h3>Built for teams, not calls</h3><p>Delivery receipts, ask-and-wait, cancel and retry, presence, and a message log per edge — pi-intercom does the delivery, PenguPool enforces the routing.</p></article>
+        <article><div class="feature-icon">⌂</div><h3>Nothing to configure, nothing to host</h3><p>No endpoint, token, OAuth or tunnel. State lives in <code>~/.pengupool/</code> and works offline.</p></article>
       </div>
     </section>
 
