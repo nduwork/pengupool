@@ -275,17 +275,21 @@ def test_write_json_keeps_a_symlink_and_its_mode(tmp_path):
     assert real.stat().st_mode & 0o777 == 0o600
 
 
-@pytest.mark.parametrize("platform,tools,want", [
-    ("darwin", {"pbcopy"}, "pbcopy"),
-    ("darwin", set(), "pbcopy"),                             # macOS always has it
-    ("linux", {"wl-copy", "xclip"}, "wl-copy"),              # Wayland first, X11 second
-    ("linux", {"xclip"}, "xclip -selection clipboard"),
-    ("linux", set(), ""),                                    # a headless box has neither
+@pytest.mark.parametrize("platform,env,tools,want", [
+    ("darwin", {}, {"pbcopy"}, "pbcopy"),
+    ("darwin", {}, set(), "pbcopy"),                          # macOS always has it
+    ("linux", {"WAYLAND_DISPLAY": "wayland-0", "DISPLAY": ":0"}, {"wl-copy", "xclip"}, "wl-copy"),
+    ("linux", {"DISPLAY": ":0"}, {"xclip"}, "xclip -selection clipboard"),
+    ("linux", {"WAYLAND_DISPLAY": "wayland-0"}, {"wl-copy"}, "wl-copy"),
+    ("linux", {}, {"wl-copy", "xclip"}, ""),                   # headless: a tool with nowhere to put it
+    ("linux", {"DISPLAY": ":0"}, set(), ""),                   # session, but no tool installed
 ])
-def test_the_clipboard_command_matches_the_host(monkeypatch, platform, tools, want):
-    # A Linux remote has no pbcopy: the binds used to hardcode it, so mouse copy failed there.
+def test_the_clipboard_command_matches_the_host(monkeypatch, platform, env, tools, want):
+    # A Linux remote has no pbcopy, and the binds hardcoded it, so mouse copy failed there. A headless
+    # box has nowhere to copy to at all, so naming xclip would only fail louder.
     monkeypatch.setattr(tmux.sys, "platform", platform)
     monkeypatch.setattr(tmux.shutil, "which", lambda b: f"/usr/bin/{b}" if b in tools else None)
+    monkeypatch.setattr(tmux.os, "environ", env)
     assert tmux.clip_command() == want
 
 
