@@ -30,7 +30,7 @@ a detail after `|` (e.g. `loop|check agent status`).
 base directory of this skill when loaded; installed as a plugin it is
 `${CLAUDE_PLUGIN_ROOT}` (Codex: `${PLUGIN_ROOT}`), as a symlinked skill it is
 `~/.claude/skills/workflow-tracker`, under pi it is `~/.pi/agent/skills/workflow-tracker`. Run it via the Bash tool from the project root — state
-lives in `./.step-status/` (self-ignoring, keyed by cwd).
+lives in `./.step-status/` (self-ignoring; each session gets a tracker of its own, see below).
 
 1. **At the start** of a multi-step workflow, define the chain once, naming it for the task
    with `--name`. That name is the `[bracket]` label on every ticker line, so pick something
@@ -55,8 +55,28 @@ lives in `./.step-status/` (self-ignoring, keyed by cwd).
    bare `set` starts `default` instead of overwriting it, so the next workflow always runs `set --name`
    for its own chain. Its files stay, and `list` shows it as history (`use` marks it `(finished)`).
    A chain with an active step never expires, and neither does a loop (a chain you have `cycle`d):
-   it ends only with `set` or `clear`. Session starts and compaction preserve the shared chain and
+   it ends only with `set` or `clear`. Session starts and compaction preserve the chain and
    reinject tracking instructions.
+
+### Sessions: one tracker per session
+
+Two sessions in one directory must not read or advance each other's chain, so the tracker keeps one
+per session. `STEP_STATUS_SESSION` names the session; state then lands in
+`.step-status/sessions/<id>/`, with its own `current`, its own chains, notes and `✗` marks. A session
+sees and moves only its own workflow. Without a valid key — a script, cron, a human at a shell — the
+shared `.step-status/` is used, exactly as it always was, and that is where chains predating this
+live. `list` shows the session's chains first, then the shared ones labelled `shared `.
+
+```bash
+STEPS list                                     # mine, then the repo's shared chains
+STEPS --shared list                            # only the shared tracker, whatever the environment says
+STEPS --session <id> render                    # one call against another session's tracker
+STEPS --shared clear                           # clear the repo's shared chain, not mine
+```
+
+`--session <id>` and `--shared` win over the environment for that one call. A session id is letters,
+digits, `.`, `_`, `-` (it becomes a directory name); anything else is ignored and the shared tracker is
+used, so a mangled or hostile id can never leave the state directory.
 
 ### Messages between sessions
 
@@ -164,9 +184,9 @@ One short line from you at each transition, e.g.
 ```
 
 Every mutating `steps.sh` command echoes that line; quote it verbatim. Keep it to the chain
-alone — no preamble — so the messages read as a ticker. A `SessionStart` hook clears any
-chain left in the cwd from a previous session. A `UserPromptSubmit` hook injects the current
-chain (or a nudge to `set` one) into every turn, so the ticker does not depend on Claude
+alone — no preamble — so the messages read as a ticker. A `SessionStart` hook reinjects the
+tracking instructions (it never erases a chain). A `UserPromptSubmit` hook injects the chain
+(or a nudge to `set` one) into every turn, so the ticker does not depend on Claude
 remembering this skill exists.
 
 ## Optional: mirror the chain in the status line (`/workflow-tracker setup`)
@@ -199,8 +219,10 @@ for s in workflow-tracker/scripts/*.sh; do bash -n "$s"; done
 
 ## Gotchas
 
-- State is keyed by cwd, not session. Two Claude sessions in the same directory share
-  (and clobber) the same chains and `current` pointer.
+- State is keyed by (repo, session). `STEP_STATUS_SESSION` names the session and the state lands in
+  `.step-status/sessions/<id>/`, so two sessions in one directory no longer share `current`, a chain
+  or a note. Keyless callers (a script, cron, a human at a shell) keep using the shared
+  `.step-status/`, which `list` shows prefixed `shared `.
 - The SessionStart hook clears the chain on `startup|clear` only; `/compact` and resume keep it.
 - Step names must not be empty or contain tabs/newlines, and must be unique in a chain.
 - Tool output is not reliably shown to the user: the progress line only exists if you
