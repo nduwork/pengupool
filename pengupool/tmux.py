@@ -235,11 +235,16 @@ def enable_mouse_copy(h: str = "cc") -> None:
         _ok("set-option", "-g", k, v, h=h)
     # Right-click is tmux's stock binding: a display-menu offering Split, Swap, Kill, Respawn and Zoom on
     # a window PenguPool owns. Kill would end the agent's session from a stray click, and a split is a
-    # layout the extension cannot manage, so keep the mouse but drop the menu: hand the click to the
-    # agent when the agent itself uses the mouse (mouse_any_flag), otherwise just select the pane.
+    # layout the extension cannot manage, so keep the mouse and drop the menu. The click still copies what
+    # it points at, the way the menu's Copy items did: `copy-mode -M` starts at the pointer, `select-word`
+    # takes the word there, and pbcopy puts it on the system clipboard. Over blank space it only selects
+    # the pane, so a stray click never clears the clipboard. Clicks are handed to the agent when the agent
+    # itself uses the mouse (mouse_any_flag).
+    copy_word = ('if-shell -F "#{mouse_word}" "select-pane -t = ; copy-mode -M ; '
+                 'send-keys -X select-word ; send-keys -X copy-pipe-and-cancel pbcopy" "select-pane -t ="')
     for key in ("MouseDown3Pane", "M-MouseDown3Pane"):
         _ok("bind-key", "-T", "root", key, "if-shell", "-F", "#{mouse_any_flag}",
-            "send-keys -M", "select-pane -t =", h=h)
+            "send-keys -M", copy_word, h=h)
     # tmux does NOT format-expand a `-t` target inside a key binding ("#{…}" is looked up literally →
     # "no such session"), so the bound set-option has no -t: it acts on the pressing client's own view
     # session. run-shell does expand its command, so the delayed hide can name that session.
