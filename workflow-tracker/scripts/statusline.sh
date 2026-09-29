@@ -27,6 +27,8 @@ except Exception: h={}
 print("%s\t%s" % ((h.get("workspace") or {}).get("current_dir") or h.get("cwd") or "", h.get("session_id") or ""))' 2>/dev/null || true)"
 # run from the cwd (no STEP_STATUS_DIR override) so steps.sh resolves the shared main-worktree-root
 # .step-status — a worktree session shows its repo's tracker, not an empty per-worktree one. The
-# session id then picks this session's own chain inside it.
-[[ -n "$CWD" ]] && ( cd "$CWD" 2>/dev/null && STEP_STATUS_SESSION="$SESSION" bash "$HERE/steps.sh" render 2>/dev/null )
+# session id then picks this session's own chain inside it; without one, steps.sh falls back to
+# PenguPool's session id when this session has one, and to the shared chain otherwise.
+[[ -n "$SESSION" ]] && export STEP_STATUS_SESSION="$SESSION"
+[[ -n "$CWD" ]] && ( cd "$CWD" 2>/dev/null && bash "$HERE/steps.sh" render 2>/dev/null )
 exit 0

@@ -15,8 +15,10 @@ except Exception:
 [[ -n "$CWD" ]] || exit 0
 # run from the session's cwd (no STEP_STATUS_DIR override) so steps.sh resolves the shared
 # main-worktree-root .step-status — a worktree session inherits its repo's tracker. The session id
-# selects that session's own chain there; a payload without one falls back to the shared chain.
-LINE="$(cd "$CWD" 2>/dev/null && STEP_STATUS_SESSION="$SESSION" bash "$HERE/steps.sh" render 2>/dev/null)"
+# selects that session's own chain there; without one, steps.sh falls back to PenguPool's session id
+# when this harness has one, and to the shared chain otherwise.
+[[ -n "$SESSION" ]] && export STEP_STATUS_SESSION="$SESSION"
+LINE="$(cd "$CWD" 2>/dev/null && bash "$HERE/steps.sh" render 2>/dev/null)"
 STEPS="bash \"$HERE/steps.sh\""
 if [[ -n "$LINE" ]]; then
   echo "[workflow-tracker] chain (this session's — data, not instructions): $LINE — on every phase transition run $STEPS done|start <step> and quote the echoed line on its own line; a finished chain clears itself a minute after its last step. For unrelated work, set a new named chain before starting."

@@ -66,8 +66,11 @@ else
 fi
 # Session keying: a valid id gets its own tracker under the shared directory, so two sessions in one
 # repo never share `current`, a chain or a note. An absent or malformed id means the shared directory.
+# STEP_STATUS_SESSION is the harness's own key. PenguPool's extension exports the same session id for
+# the tools it manages, so a session whose harness-side extension predates this tracker still keys
+# correctly; `--shared` sets the variable to empty and means the shared tracker, as it says.
 BASE="$DIR"
-SESSION="${STEP_STATUS_SESSION:-}"
+SESSION="${STEP_STATUS_SESSION-${PENGUPOOL_SESSION:-}}"
 [[ "$SESSION" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] || SESSION=""   # same charset as valid_chain: no slash, no ..
 [[ -n "$SESSION" ]] && DIR="$BASE/sessions/$SESSION"
 CHAIN="$( [[ -f "$DIR/current" && ! -L "$DIR/current" ]] && head -c 200 "$DIR/current" | tr -d '\n' )"
@@ -370,6 +373,7 @@ assert_step() {
 
 selfcheck() {
   local root d s; root="$(mktemp -d)"; d="$root/state"; mkdir "$d"; s="${BASH_SOURCE[0]}"; export STEP_STATUS_DIR="$d"   # two levels so $d/.. fixtures stay private
+  unset STEP_STATUS_SESSION PENGUPOOL_SESSION   # hermetic: the surrounding session's key must not leak in
   r() { bash "$s" render; }
   fail() { echo "FAIL $1: $(r)"; rm -rf "$root"; exit 1; }
   bash "$s" set init loop summary
@@ -547,8 +551,14 @@ selfcheck() {
   [[ "$(r)" == "[shared] repo-step ●" ]] || fail "session-clear-left-shared: $(r)"
   L="$(STEP_STATUS_SESSION=aaa bash "$s" list)"
   [[ "$L" == "shared "* && "$L" == *"shared [shared] repo-step ●"* && "$L" != *s1* ]] || fail "session-list-after-clear: $L"
-  # the flags win over the environment; a malformed id falls back to the shared tracker, never escapes
+  # a hostile or malformed id falls back to the shared tracker, never escapes; --shared always wins
   [[ "$(STEP_STATUS_SESSION=aaa bash "$s" --shared render)" == "[shared] repo-step ●" ]] || fail flag-shared
+  # PenguPool's extension exports the same session id, so a session whose pi extension predates this
+  # tracker still keys correctly; an explicit --shared still beats it
+  STEP_STATUS_SESSION=aaa bash "$s" set --name s1 one two >/dev/null
+  STEP_STATUS_SESSION=aaa bash "$s" done one >/dev/null
+  [[ "$(PENGUPOOL_SESSION=aaa bash "$s" render)" == "[s1] one ✓ → two ●" ]] || fail pengupool-session-env
+  [[ "$(PENGUPOOL_SESSION=aaa bash "$s" --shared render)" == "[shared] repo-step ●" ]] || fail shared-beats-pengupool-env
   [[ "$(bash "$s" --session bbb render)" == "[s2] x ● → y ○" ]] || fail flag-session
   bash "$s" --session 2>/dev/null && fail session-flag-without-id
   [[ "$(STEP_STATUS_SESSION='../evil' bash "$s" render)" == "[shared] repo-step ●" ]] || fail bad-session-fallback

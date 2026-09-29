@@ -68,7 +68,8 @@ extension exports `STEP_STATUS_SESSION` (pi spawns the session's tools from its 
 inherit it) and passes the session id to the prompt hook; Claude Code's `SessionStart` hook appends
 `export STEP_STATUS_SESSION=<id>` to `$CLAUDE_ENV_FILE`, which Claude Code applies to the session's Bash
 tool. So the prompt line, the status line and the agent's own `steps.sh` calls all agree on which
-workflow is this session's. Without a valid key — a script, cron, a human at a shell, a harness that
+workflow is this session's. PenguPool's own extension exports the same session id, so a session
+whose pi extension predates this still keys correctly. Without a valid key — a script, cron, a human at a shell, a harness that
 sends no session id — the shared `.step-status/` is used, exactly as it always was, and that is where
 chains predating this live. `list` shows the session's chains first, then the shared ones labelled
 `shared `.

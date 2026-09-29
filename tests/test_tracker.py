@@ -5,6 +5,9 @@ import subprocess
 from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parents[1] / 'workflow-tracker/scripts'
+# PenguPool exports a session id for the tools it manages, and the tracker falls back to it, so a test
+# that inherited this session's id would key the fixtures to it. Tests start from a clean env.
+CLEAN = {k: v for k, v in os.environ.items() if k not in ('PENGUPOOL_SESSION', 'STEP_STATUS_SESSION')}
 
 
 def test_session_start_preserves_chain_and_reinjects_instructions(tmp_path):
@@ -15,7 +18,7 @@ def test_session_start_preserves_chain_and_reinjects_instructions(tmp_path):
     for source in ('startup', 'resume', 'compact', 'clear'):
         result = subprocess.run(['bash', str(SCRIPTS / 'hook_session_start.sh')],
                                 input=json.dumps({'cwd': str(tmp_path), 'source': source}),
-                                text=True, capture_output=True, check=True)
+                                text=True, capture_output=True, check=True, env=CLEAN)
         assert (state / 'fix.state').exists()
         assert 'diagnose' in result.stdout
         assert 'clear` when finished' not in result.stdout
@@ -34,7 +37,7 @@ def _tracked(tmp_path, session=None, chain='fix', step='diagnose'):
 
 def _hook(script, payload, env=None):
     return subprocess.run(['bash', str(SCRIPTS / script)], input=json.dumps(payload), text=True,
-                          capture_output=True, check=True, env=env)
+                          capture_output=True, check=True, env=env or CLEAN)
 
 
 def test_prompt_hook_injects_the_sessions_own_chain(tmp_path):
@@ -61,6 +64,18 @@ def test_session_start_exports_the_session_key(tmp_path, monkeypatch):
     _hook('hook_session_start.sh', {'cwd': str(tmp_path), 'session_id': 'x; rm -rf /'}, env=env)
     _hook('hook_session_start.sh', {'cwd': str(tmp_path), 'session_id': '../evil'}, env=env)
     assert env_file.read_text() == 'export STEP_STATUS_SESSION=sess-1\n'
+
+
+def test_the_pengupool_session_id_keys_a_harness_that_sends_none(tmp_path):
+    """A pi extension that predates this tracker sends no session id. PenguPool's extension exports the
+    same id for the session's tools, so the tracker still keys correctly; --shared still wins."""
+    _tracked(tmp_path, chain='shared-work', step='shared-step')
+    _tracked(tmp_path, session='sess-1', chain='mine', step='my-step')
+    env = {**CLEAN, 'PENGUPOOL_SESSION': 'sess-1'}
+    out = _hook('hook_prompt.sh', {'cwd': str(tmp_path)}, env=env).stdout
+    assert '[mine] my-step ●' in out and 'shared-work' not in out
+    env.pop('PENGUPOOL_SESSION')
+    assert '[shared-work] shared-step ●' in _hook('hook_prompt.sh', {'cwd': str(tmp_path)}, env=env).stdout
 
 
 def test_statusline_shows_the_sessions_chain(tmp_path):

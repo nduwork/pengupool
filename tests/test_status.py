@@ -142,7 +142,8 @@ def test_the_map_and_steps_sh_render_the_same_chain(tmp_path):
     sub = repo / "app"
     sub.mkdir(parents=True)
     subprocess.run(["git", "init", "-q", str(repo)], check=True)
-    env = {k: v for k, v in os.environ.items() if k not in ("STEP_STATUS_DIR", "STEP_STATUS_DONE_TTL")}
+    env = {k: v for k, v in os.environ.items()   # no session key: the map reads the shared tracker here
+           if k not in ("STEP_STATUS_DIR", "STEP_STATUS_DONE_TTL", "PENGUPOOL_SESSION", "STEP_STATUS_SESSION")}
     sh = lambda *a: subprocess.run(["bash", str(steps), *a], cwd=sub, env=env, capture_output=True,
                                     text=True).stdout.strip()
     model._STATUS_DIR_CACHE.clear()
