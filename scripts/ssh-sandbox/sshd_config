@@ -1,0 +1,17 @@
+# Minimal sshd config for the sandbox: key auth only, no root, no PAM, sshd in the foreground.
+Port 2222
+AddressFamily any
+ListenAddress 0.0.0.0
+
+# Host keys live in a volume so a rebuild does not invalidate the pinned known_hosts entry.
+HostKey /etc/ssh/hostkeys/ssh_host_ed25519_key
+
+PermitRootLogin no
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+UsePAM no
+X11Forwarding no
+PrintMotd no
+AcceptEnv LANG LC_* TERM
+
+Subsystem sftp internal-sftp

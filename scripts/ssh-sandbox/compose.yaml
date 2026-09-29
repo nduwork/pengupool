@@ -1,0 +1,24 @@
+# Loopback only: the sandbox listens on 127.0.0.1:2222, never on the network.
+name: pengupool-ssh-sandbox
+
+services:
+  sshd:
+    build:
+      context: .
+      args:
+        USER_NAME: sandbox
+    image: pengupool-ssh-sandbox:latest
+    container_name: pengupool-ssh-sandbox
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:2222:2222"
+    environment:
+      PUBLIC_KEY: ${PUBLIC_KEY:-}
+    volumes:
+      - hostkeys:/etc/ssh/hostkeys   # stable host key, so the pinned known_hosts entry keeps working
+      - home:/home/sandbox           # installed tools survive `sandbox.sh up` after a rebuild
+      - ../..:/src:ro                # this repo, for `uv tool install /src`
+
+volumes:
+  hostkeys:
+  home:
