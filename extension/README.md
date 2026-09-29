@@ -76,6 +76,28 @@ in the terminal version inside VS Code (xterm.js drops button-held motion / mous
 CHANGELOG and [xterm.js #4781](https://github.com/xtermjs/xterm.js/issues/4781) /
 [VS Code #336284](https://github.com/microsoft/vscode/issues/336284)).
 
+## Remote host (ssh)
+
+Sessions can live on another machine. Set `pengupool.remoteHost` to an ssh target (an `~/.ssh/config`
+alias, or `user@host`) and the extension talks to the backend there instead of locally: the snapshot
+stream, every `ctl` call and each session's terminal go over one shared ssh connection. The host needs
+sshd, tmux 3.2+ and the `pengupool` CLI, and nothing else.
+
+`PenguPool: Install on Remote Host` provisions a fresh host over that same ssh, in a terminal, so you
+can see the prompts and confirm an unknown host key. It runs the published installer and then offers to
+reload the window. If the backend is missing, the failure message names the host and offers the same
+action.
+
+Notes:
+
+- One host per window. There is no fleet view yet, and each window shows the pool of the host it points
+  at; leave the setting empty for local sessions.
+- The CLI's location on the host is resolved automatically, because a non-interactive ssh does not read
+  the shell rc and so cannot see `~/.local/bin` where the installer puts it. An explicit
+  `pengupool.command` overrides that.
+- A new or resumed session asks for a directory path on that host instead of opening a folder dialog: a
+  local dialog would hand back a local path the host cannot use.
+
 ## Architecture
 
 ```

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { Harness, SessionNode } from './serveClient';
 import { runCtl } from './util';
+import { isRemote, remoteHost, sshArgs } from './remote';
 
 const LEGACY_STATE_KEY = 'pengupool.attachedTerminals';
 
@@ -130,11 +131,15 @@ export class TerminalManager implements vscode.Disposable {
 
     const slot = this.slot(view.harness);
     slot.term?.dispose();
+    // A remote session's terminal is an ssh into the host whose tmux owns the pane: `view.command` is a
+    // remote tmux command, and the local cwd is not sent, since a remote path means nothing here.
+    const remote = isRemote();
     slot.term = vscode.window.createTerminal({
       name: slot.name,
-      shellPath: '/bin/sh',
-      shellArgs: ['-lc', `exec ${view.command}`],
-      cwd: view.cwd || undefined,
+      shellPath: remote ? 'ssh' : '/bin/sh',
+      shellArgs: remote ? [...sshArgs(true), remoteHost(), `exec ${view.command}`]
+        : ['-lc', `exec ${view.command}`],
+      cwd: remote ? undefined : (view.cwd || undefined),
       env: { ...process.env },
       strictEnv: true,
       isTransient: true,

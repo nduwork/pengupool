@@ -9,8 +9,9 @@ import { registerCommands } from './commands';
 import { DefaultLayout } from './defaultLayout';
 import { SessionsView } from './sessionsView';
 import { bothHarnessesContext } from './harness';
+import { backendCommand, installCommand, isRemote, remoteHost, resolveRemoteCommand, sshArgs } from './remote';
 
-export function activate(context: vscode.ExtensionContext): void {
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const output = vscode.window.createOutputChannel('PenguPool');
   const provider = new SessionsProvider();
   const terminals = new TerminalManager(context);
@@ -38,6 +39,19 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(client.onSpawnError((err) => {
     if (setupNoticeShown) { return; }
     setupNoticeShown = true;
+    if (isRemote()) {   // the backend is missing on that host, not on this machine
+      void vscode.window.showErrorMessage(
+        `PenguPool is not set up on ${remoteHost()}: ${err.message}`,
+        'Install on this host', 'Open setting',
+      ).then((choice) => {
+        if (choice === 'Install on this host') {
+          void vscode.commands.executeCommand('pengupool.installRemote');
+        } else if (choice === 'Open setting') {
+          void vscode.commands.executeCommand('workbench.action.openSettings', 'pengupool.remoteHost');
+        }
+      });
+      return;
+    }
     void vscode.window.showErrorMessage(
       `PenguPool could not start its CLI (${err.message}). Install the backend or set pengupool.command.`,
       'Setup guide', 'Open setting',
@@ -57,8 +71,39 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('pengupool.showMap', () => MapPanel.toggle(context, client.lastSnapshot)),
     vscode.commands.registerCommand('pengupool.showLog', () => LogPanel.toggle(client.lastSnapshot)),
     vscode.commands.registerCommand('pengupool.refresh', () => client.restart()),
+    // Set the backend up on the remote host over the same ssh the rest of the extension uses. Interactive
+    // on purpose: the installer asks before installing tmux or an agent CLI, and this is where a host key
+    // gets confirmed, which a background connection never does.
+    vscode.commands.registerCommand('pengupool.installRemote', async () => {
+      const host = remoteHost();
+      if (!host) {
+        void vscode.window.showInformationMessage(
+          'PenguPool: set `pengupool.remoteHost` to an ssh host before installing on one.');
+        return;
+      }
+      const term = vscode.window.createTerminal({
+        name: `PenguPool setup · ${host}`,
+        shellPath: 'ssh',
+        shellArgs: [...sshArgs(true), host, installCommand()],
+        isTransient: false,
+      });
+      term.show();
+      const pick = await vscode.window.showInformationMessage(
+        `Installing PenguPool on ${host}. Reload this window when it finishes, so the extension picks up the new backend.`,
+        'Reload Window',
+      );
+      if (pick === 'Reload Window') {
+        void vscode.commands.executeCommand('workbench.action.reloadWindow');
+      }
+    }),
   );
 
+  if (isRemote()) {
+    // Ask where the remote CLI is before the first spawn: no non-interactive ssh has ~/.local/bin on
+    // PATH, which is where the installer puts it.
+    await resolveRemoteCommand();
+    output.appendLine(`[pengupool] remote host ${remoteHost()}, backend ${backendCommand()}`);
+  }
   client.start();
 }
 

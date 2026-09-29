@@ -115,6 +115,10 @@
         "command": "pengupool.refresh",
         "title": "PenguPool: Refresh",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "pengupool.installRemote",
+        "title": "PenguPool: Install on Remote Host"
       }
     ],
     "menus": {
@@ -203,6 +207,12 @@
           "type": "string",
           "default": "pengupool",
           "description": "Path to the pengupool CLI. `<command> serve` streams NDJSON; `<command> ctl …` runs mutations."
+        },
+        "pengupool.remoteHost": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "markdownDescription": "Run the backend on this ssh host (an `~/.ssh/config` alias, or `user@host`) instead of on this machine. Sessions, terminals and every mutation go over ssh, so the host needs sshd, tmux and the `pengupool` CLI. Empty means local sessions."
         }
       }
     }

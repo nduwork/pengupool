@@ -3,6 +3,7 @@ import { Harness, SessionNode } from './serveClient';
 import { SessionsProvider } from './sessionsTree';
 import { TerminalManager } from './terminals';
 import { runCtl } from './util';
+import { isRemote, remoteHost } from './remote';
 import { SessionsView } from './sessionsView';
 import { MapPanel } from './mapPanel';
 import { LogPanel } from './logPanel';
@@ -39,6 +40,20 @@ export function registerCommands(context: vscode.ExtensionContext, d: Deps): voi
   const defaultDir = (): vscode.Uri =>
     vscode.workspace.workspaceFolders?.[0]?.uri ?? vscode.Uri.file(process.env.HOME || '/');
 
+  /** Where a new or resumed session runs. A remote host's path cannot come from the editor's folder
+   *  dialog, which hands back a local one, so it is typed, seeded with a path already in that host's
+   *  snapshot. */
+  const askDirectory = async (openLabel: string, defaultUri: vscode.Uri): Promise<string | undefined> => {
+    if (isRemote()) {
+      const seen = d.provider.all.map((node) => node.cwd).filter(Boolean);
+      return vscode.window.showInputBox({ prompt: `Directory on ${remoteHost()}`, value: seen[0] ?? '~' });
+    }
+    const dir = await vscode.window.showOpenDialog({
+      canSelectFolders: true, canSelectFiles: false, canSelectMany: false, defaultUri, openLabel,
+    });
+    return dir?.length ? dir[0].fsPath : undefined;
+  };
+
   const reg = (id: string, fn: (...a: any[]) => any) =>
     context.subscriptions.push(vscode.commands.registerCommand(id, fn));
 
@@ -59,12 +74,9 @@ export function registerCommands(context: vscode.ExtensionContext, d: Deps): voi
   });
 
   reg('pengupool.new', async () => {
-    const dir = await vscode.window.showOpenDialog({
-      canSelectFolders: true, canSelectFiles: false, canSelectMany: false,
-      defaultUri: defaultDir(), openLabel: 'New session here',
-    });
-    if (!dir?.length) { return; }
-    const name = await vscode.window.showInputBox({ prompt: 'Session name', value: dir[0].path.split('/').pop() });
+    const cwd = await askDirectory('New session here', defaultDir());
+    if (!cwd) { return; }
+    const name = await vscode.window.showInputBox({ prompt: 'Session name', value: cwd.split('/').filter(Boolean).pop() });
     if (!name) { return; }
     const placement = await vscode.window.showQuickPick([
       { label: 'Create a worktree', description: 'isolated branch for this session', value: 'worktree' },
@@ -76,17 +88,14 @@ export function registerCommands(context: vscode.ExtensionContext, d: Deps): voi
       { placeHolder: 'Choose the agent harness' },
     );
     if (!harness) { return; }
-    await d.terminals.newSession(dir[0].fsPath, name, harness.value, placement.value === 'worktree');
+    await d.terminals.newSession(cwd, name, harness.value, placement.value === 'worktree');
   });
 
   reg('pengupool.add', async () => {
-    const dir = await vscode.window.showOpenDialog({
-      canSelectFolders: true, canSelectFiles: false, canSelectMany: false,
-      defaultUri: lastAddDirectory(context, defaultDir()), openLabel: 'Add previous from here',
-    });
-    if (!dir?.length) { return; }
-    await rememberAddDirectory(context, dir[0]);
-    const r = await runCtl(['past', dir[0].fsPath]);
+    const cwd = await askDirectory('Add previous from here', lastAddDirectory(context, defaultDir()));
+    if (!cwd) { return; }
+    if (!isRemote()) { await rememberAddDirectory(context, vscode.Uri.file(cwd)); }
+    const r = await runCtl(['past', cwd]);
     if (r.code !== 0) { vscode.window.showErrorMessage(`PenguPool: ${r.stderr || 'no past sessions'}`); return; }
     let past: [string, string, Harness?][] = [];
     try { past = JSON.parse(r.stdout || '[]'); } catch { /* empty */ }
@@ -100,7 +109,7 @@ export function registerCommands(context: vscode.ExtensionContext, d: Deps): voi
     if (!pick) { return; }
     const name = await vscode.window.showInputBox({ prompt: 'Session name', value: pick.label.slice(0, 40) });
     if (!name) { return; }
-    await d.terminals.resume(dir[0].fsPath, name, pick.id, pick.harness);
+    await d.terminals.resume(cwd, name, pick.id, pick.harness);
   });
 
   reg('pengupool.group', async (node?: SessionNode) => {

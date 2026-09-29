@@ -42,6 +42,8 @@ function harness() {
     requests.push(args);
     return { code: 0, stdout: JSON.stringify({ command: 'tmux attach', pane: '%9', cwd: '/repo-wt-worker' }), stderr: '' };
   } };
+  // Local workspace here: the ssh endpoint is exercised in remote-ssh.test.cjs.
+  const remote = { isRemote: () => false, remoteHost: () => '', sshArgs: () => [], backendCommand: () => 'pengupool' };
   const spawn = () => {
     const child = new EventEmitter();
     child.stdout = new PassThrough();
@@ -61,6 +63,7 @@ function harness() {
       require: (id) => {
         if (id === 'vscode') return vscode;
         if (id === './util') return ctl;
+        if (id === './remote') return remote;
         if (id === 'child_process') return { spawn };
         throw new Error('Unexpected dependency: ' + id);
       },

@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
+import { backendCommand, isRemote, remoteHost, sshArgs } from './remote';
 
 /** Agent CLI hosting a session. Each harness has its own tmux server; they never share a tree. */
 export type Harness = 'cc' | 'pi';
@@ -67,6 +68,9 @@ export class ServeClient implements vscode.Disposable {
   }
 
   private command(): { cmd: string; args: string[] } {
+    if (isRemote()) {          // the backend runs there: the snapshot stream travels over ssh
+      return { cmd: 'ssh', args: [...sshArgs(), remoteHost(), backendCommand(), 'serve'] };
+    }
     const cfg = vscode.workspace.getConfiguration('pengupool').get<string>('command', 'pengupool');
     return { cmd: cfg, args: ['serve'] };
   }

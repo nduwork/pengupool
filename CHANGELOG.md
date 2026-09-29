@@ -5,6 +5,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- `pengupool.remoteHost` runs the backend on another machine over ssh: the snapshot stream, every
+`ctl` call and each session's terminal share one connection, and the CLI's location there is
+resolved automatically because a non-interactive ssh cannot see `~/.local/bin`. `PenguPool:
+Install on Remote Host`, and the missing-backend message, provision a fresh host with the
+published installer.
+
 ### Fixed
 - `pengupool setup pi` installed pi on a node too old to run it (pi needs 22.19+; Debian 13 has 20,
 Ubuntu 24.04 has 18) and reported success. It now refuses, naming the version needed and the
