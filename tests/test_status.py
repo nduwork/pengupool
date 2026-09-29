@@ -210,3 +210,37 @@ def test_the_map_and_steps_sh_render_the_same_chain(tmp_path):
     old = time.time() - 120
     os.utime(repo / ".step-status" / "ship.state", (old, old))
     assert same() == ("", "")
+
+
+def test_a_second_session_in_the_same_repo_does_not_inherit_the_chain(tmp_path, monkeypatch):
+    """A worktree shares its repo's tracker, so a session alone in that directory must not follow the
+    shared `current`: that is the other session's chain."""
+    model._STATUS_DIR_CACHE.clear()
+    monkeypatch.setattr(model, "CLAUDE", tmp_path)
+    monkeypatch.setattr(model, "PENGU", tmp_path)
+    monkeypatch.setattr(model, "GROUPS", tmp_path / "groups.json")
+    main = tmp_path / "repo"
+    (main / ".git").mkdir(parents=True)
+    ss = main / ".step-status"
+    ss.mkdir()
+    (ss / "current").write_text("pr-review-flow")
+    (ss / "pr-review-flow.state").write_text("active\tsummary\t\n")
+    wt = tmp_path / "repo-wt"
+    wt.mkdir()
+    (wt / ".git").write_text(f"gitdir: {main}/.git/worktrees/wt\n")
+    monkeypatch.setattr(model, 'load_sessions', lambda *a, **k: [
+        {'sessionId': 'sid-main', 'name': 'a', 'cwd': str(main), 'pid': 1, 'state': 'active'},
+        {'sessionId': 'sid-wt', 'name': 'b', 'cwd': str(wt), 'pid': 2, 'state': 'active'}])
+
+    class FakeT:  # sid-main switched to that chain; sid-wt never ran a chain command
+        chains = {'sid-main': 'pr-review-flow'}
+        ctx: dict = {}
+
+        def scan(self, sessions):
+            return []
+    monkeypatch.setattr(model, "TRANSCRIPTS", FakeT())
+
+    roots, _cross, _msgs = model.snapshot()
+    lines = {s.session_id: s.status_line for s in roots}
+    assert lines['sid-main'] == '[pr-review-flow] summary ●'
+    assert lines['sid-wt'] == ''

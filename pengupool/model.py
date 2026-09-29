@@ -492,20 +492,24 @@ def snapshot(light: bool = False) -> tuple[list[Node], list[Edge], list["Msg"]]:
     sessions = load_sessions()
     msgs = [] if light else TRANSCRIPTS.scan(sessions)
     groups = load_groups()
-    per_cwd: dict[str, int] = {}
+    # Count sessions per tracker, not per cwd. A worktree shares its repo's .step-status, so a session
+    # there is not alone just because no other session uses that directory; treating it as alone would
+    # hand it the repo's `current`, which is some other session's chain.
+    per_repo: dict[str, int] = {}
     for s in sessions:
-        per_cwd[s["cwd"]] = per_cwd.get(s["cwd"], 0) + 1
+        key = str(status_dir(s["cwd"]))
+        per_repo[key] = per_repo.get(key, 0) + 1
     for s in sessions:
         # the tracker keys state by session (0.7.0+), so read this session's own tracker first: a
         # parent and a child in the same repo then never show each other's progress. Failing that, a
-        # directory with a single session follows its `current`, and a shared directory falls back to
-        # the chain that session last switched to — the only signal a pre-0.7.0 tracker gives us.
+        # repo with a single session follows its `current`, and one with several falls back to the
+        # chain that session last switched to — the only signal a pre-0.7.0 tracker gives us.
         chain = TRANSCRIPTS.chains.get(s["sessionId"])
         own = read_status(s["cwd"], session=s["sessionId"]) if s.get("sessionId") else ""
         if own:
             s["status_line"] = own
-        elif per_cwd[s["cwd"]] == 1:
-            s["status_line"] = read_status(s["cwd"])            # sole session: follow current (no stale pin)
+        elif per_repo[str(status_dir(s["cwd"]))] == 1:
+            s["status_line"] = read_status(s["cwd"])            # sole session in this repo: follow current
         elif chain:
             s["status_line"] = read_status(s["cwd"], chain)     # shared cwd: this session's own chain
         else:
