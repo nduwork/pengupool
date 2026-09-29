@@ -63,9 +63,15 @@ lives in `./.step-status/` (self-ignoring; each session gets a tracker of its ow
 Two sessions in one directory must not read or advance each other's chain, so the tracker keeps one
 per session. `STEP_STATUS_SESSION` names the session; state then lands in
 `.step-status/sessions/<id>/`, with its own `current`, its own chains, notes and `✗` marks. A session
-sees and moves only its own workflow. Without a valid key — a script, cron, a human at a shell — the
-shared `.step-status/` is used, exactly as it always was, and that is where chains predating this
-live. `list` shows the session's chains first, then the shared ones labelled `shared `.
+sees and moves only its own workflow. The harness sets that key for the session's own tools: pi's
+extension exports `STEP_STATUS_SESSION` (pi spawns the session's tools from its own process, so they
+inherit it) and passes the session id to the prompt hook; Claude Code's `SessionStart` hook appends
+`export STEP_STATUS_SESSION=<id>` to `$CLAUDE_ENV_FILE`, which Claude Code applies to the session's Bash
+tool. So the prompt line, the status line and the agent's own `steps.sh` calls all agree on which
+workflow is this session's. Without a valid key — a script, cron, a human at a shell, a harness that
+sends no session id — the shared `.step-status/` is used, exactly as it always was, and that is where
+chains predating this live. `list` shows the session's chains first, then the shared ones labelled
+`shared `.
 
 ```bash
 STEPS list                                     # mine, then the repo's shared chains
@@ -185,9 +191,9 @@ One short line from you at each transition, e.g.
 
 Every mutating `steps.sh` command echoes that line; quote it verbatim. Keep it to the chain
 alone — no preamble — so the messages read as a ticker. A `SessionStart` hook reinjects the
-tracking instructions (it never erases a chain). A `UserPromptSubmit` hook injects the chain
-(or a nudge to `set` one) into every turn, so the ticker does not depend on Claude
-remembering this skill exists.
+tracking instructions and keys the session (it never erases a chain). A `UserPromptSubmit` hook
+injects this session's chain (or a nudge to `set` one) into every turn, so the ticker does not depend
+on Claude remembering this skill exists.
 
 ## Optional: mirror the chain in the status line (`/workflow-tracker setup`)
 

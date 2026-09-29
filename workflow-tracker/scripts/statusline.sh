@@ -21,11 +21,12 @@ if [[ -n "${1-}" ]]; then
 fi
 
 # Fail closed: without a cwd from the JSON, show nothing rather than another directory's chain.
-CWD="$(STEP_INPUT="$INPUT" python3 -c 'import json,os
+IFS=$'\t' read -r CWD SESSION <<<"$(STEP_INPUT="$INPUT" python3 -c 'import json,os
 try: h=json.loads(os.environ["STEP_INPUT"] or "{}")
 except Exception: h={}
-print((h.get("workspace") or {}).get("current_dir") or h.get("cwd") or "")' 2>/dev/null || true)"
+print("%s\t%s" % ((h.get("workspace") or {}).get("current_dir") or h.get("cwd") or "", h.get("session_id") or ""))' 2>/dev/null || true)"
 # run from the cwd (no STEP_STATUS_DIR override) so steps.sh resolves the shared main-worktree-root
-# .step-status — a worktree session shows its repo's chain, not an empty per-worktree one
-[[ -n "$CWD" ]] && ( cd "$CWD" 2>/dev/null && bash "$HERE/steps.sh" render 2>/dev/null )
+# .step-status — a worktree session shows its repo's tracker, not an empty per-worktree one. The
+# session id then picks this session's own chain inside it.
+[[ -n "$CWD" ]] && ( cd "$CWD" 2>/dev/null && STEP_STATUS_SESSION="$SESSION" bash "$HERE/steps.sh" render 2>/dev/null )
 exit 0
