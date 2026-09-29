@@ -19,10 +19,16 @@ from pathlib import Path
 
 from . import harness, hook, model
 
-CLI_INSTALL = {  # official installers
+PI_PKG = "@earendil-works/pi-coding-agent"
+CLI_INSTALL = {  # official installers (pi's is built by `_pi_install`: it may need a user prefix)
     "cc": "curl -fsSL https://claude.ai/install.sh | bash",
-    "pi": "npm install -g --ignore-scripts @earendil-works/pi-coding-agent",
+    "pi": f"npm install -g --ignore-scripts {PI_PKG}",
 }
+
+
+def _cli_install(h: str) -> str:
+    """The install command to offer for a harness CLI."""
+    return _pi_install() if h == "pi" else CLI_INSTALL[h]
 # Which system package provides a tool, per manager. Debian and Arch have no package called `node`:
 # they ship `nodejs` and `npm` separately, so `apt-get install -y node` fails with "Unable to locate
 # package node" — which is what a Debian remote reported when `setup pi` offered to install npm.
@@ -49,6 +55,36 @@ def _confirm(question: str) -> bool:
         return input(f"{question} [y/N] ").strip().lower() in ("y", "yes")
     except EOFError:  # non-interactive (CI, piped): never install system software unasked
         return False
+
+
+def _npm_global_writable() -> bool:
+    """Whether `npm install -g` can write to its global prefix. False on Debian/Ubuntu, where the
+    system npm owns /usr/local, and on any host where npm has not been set up for this user."""
+    try:
+        probe = subprocess.run(["npm", "prefix", "-g"], capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    prefix = probe.stdout.strip() if probe.returncode == 0 else ""
+    return bool(prefix) and os.access(prefix, os.W_OK)
+
+
+def _pi_install() -> str:
+    """`npm install -g <pi>` — into the user's own prefix when the global one needs root, which is the
+    difference between `setup pi` working and ending in EACCES on a Debian or Ubuntu remote."""
+    prefix = "" if _npm_global_writable() else '--prefix "$HOME/.local" '
+    return f"npm install -g {prefix}--ignore-scripts {PI_PKG}"
+
+
+def _cli(h: str) -> str | None:
+    """Path to a harness CLI: PATH first, then the user-global npm prefix, where pi lands when the
+    global one is root-owned. Without this second look, `setup` would report pi missing and then fail
+    to run it right after installing it."""
+    name = harness.CLI[h]
+    on_path = shutil.which(name)
+    if on_path:
+        return on_path
+    fallback = Path.home() / ".local" / "bin" / name
+    return str(fallback) if fallback.exists() else None
 
 
 def _pkg_install(pkg: str) -> str:
@@ -87,8 +123,13 @@ def ensure(name: str, binary: str, command: str) -> bool:
 
 
 def _has_intercom() -> bool:
+    exe = _cli("pi")
+    if not exe:
+        return False
     try:
-        out = subprocess.run([harness.CLI["pi"], "list"], capture_output=True, text=True, timeout=30).stdout
+        out = subprocess.run([exe, "list"], capture_output=True, text=True, timeout=30).stdout
+    except OSError:
+        return False
     except (OSError, subprocess.TimeoutExpired):
         return False
     return "pi-intercom" in out
@@ -112,7 +153,11 @@ def wire(h: str) -> bool:
         return True
     if not _has_intercom():
         print(f"installing pi-intercom ({INTERCOM}) — PenguPool sessions message each other through it")
-        if subprocess.run([harness.CLI["pi"], "install", INTERCOM]).returncode != 0:
+        try:  # `pi` may sit in ~/.local/bin rather than on PATH: resolve it, do not assume
+            rc = subprocess.run([_cli("pi") or harness.CLI["pi"], "install", INTERCOM]).returncode
+        except OSError:
+            rc = 1
+        if rc != 0:
             print(f"  could not install pi-intercom: run `pi install {INTERCOM}` and re-run")
             return False
     target = _pi_extension()
@@ -134,8 +179,10 @@ def unwire(h: str) -> None:
 
 
 def check(h: str) -> bool:
-    ok = bool(shutil.which(harness.CLI[h]))
-    print(f"{'✓' if ok else '✗'} {harness.CLI[h]} on PATH")
+    exe = _cli(h)
+    ok = bool(exe)
+    where = "on PATH" if exe and shutil.which(harness.CLI[h]) else (f"at {exe}" if exe else "missing")
+    print(f"{'✓' if ok else '✗'} {harness.CLI[h]} {where}")
     if h == "cc":
         try:
             text = _settings().read_text()
@@ -156,7 +203,7 @@ def _harnesses(arg: str) -> list[str]:
     if arg in ("both", "all"):
         return list(harness.HARNESSES)
     if arg == "auto":  # a pi user who just runs `make install` must not end up with pi unwired
-        return [h for h in harness.HARNESSES if shutil.which(harness.CLI[h])] or ["cc"]
+        return [h for h in harness.HARNESSES if _cli(h)] or ["cc"]
     return [harness.check(arg)]
 
 
@@ -181,11 +228,12 @@ def main(args: list[str]) -> int:
         return 1
     ok = True
     for h in hs:
-        if h == "pi" and not shutil.which(harness.CLI["pi"]) \
+        exe = _cli(h)                        # installed but off PATH (~/.local/bin) still counts
+        if h == "pi" and not exe \
                 and not ensure("npm (needed to install pi)", "npm", _pkg_install("node")):
             ok = False
             continue
-        if ensure(f"{harness.LABEL[h]} ({harness.CLI[h]})", harness.CLI[h], CLI_INSTALL[h]):
+        if exe or ensure(f"{harness.LABEL[h]} ({harness.CLI[h]})", harness.CLI[h], _cli_install(h)):
             ok = wire(h) and ok
         else:
             ok = False
