@@ -79,7 +79,7 @@ it installed the VSIX *locally* and silently skipped the remote, which is why `v
 
 ## Findings this sandbox has already produced
 
-Four bugs, all in the path a hub's *set up this host* action would drive, all found by running `pengupool setup pi` here:
+Five bugs, all in the path a hub's *set up this host* action would drive, four found by running `pengupool setup pi` here and one by watching copy fail:
 
 | # | Finding | Fixed by |
 |---|---|---|
@@ -87,6 +87,7 @@ Four bugs, all in the path a hub's *set up this host* action would drive, all fo
 | 2 | `apt-get install` never refreshes its lists, so a fresh box answered "Unable to locate package" for names that were correct | `fix(install): refresh apt lists before installing a package` (#46) |
 | 3 | `npm install -g` ended in EACCES: Debian's npm prefix is root-owned, so pi could never be installed as the login user | `fix(install): install pi into the user's prefix when npm needs root` (#47) |
 | 4 | pi installed and reported success on node 20, which cannot run it (pi needs 22.19+; it dies on import) | `fix(install): refuse to install pi on a node too old to run it` (#48) |
+| 5 | mouse copy hardcoded `pbcopy`, which this box does not have, so drag-select and right-click copy went nowhere | `fix(tmux): copy with the host's clipboard command` (#50) |
 
 Plus the transport and prerequisite facts the plan predicted:
 
