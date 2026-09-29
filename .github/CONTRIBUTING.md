@@ -4,7 +4,7 @@ Thanks for helping improve PenguPool. Contributions go through a fork and pull r
 
 The maintainer merges every PR with squash and merge, so `main` gets one commit per pull request and the branch's individual commits do not land. The PR title becomes the commit subject, so keep it Conventional Commit style.
 
-Approval comes before merge: a green test run is not a go-ahead. Nothing — including an automated or agent session working in this repository — is merged until the maintainer says so in the session. See [AGENTS.md](../AGENTS.md) for the agent-facing rules.
+Approval comes before merge. A green test run is not a go-ahead, and an automated or agent session is held to the same rule. The maintainer merges nothing until they say so. See [AGENTS.md](../AGENTS.md) for the rules an agent session follows here.
 
 Merging does not cut a release. Releases are made deliberately when a change warrants one; docs, chore and CI changes land without a version bump.
 
