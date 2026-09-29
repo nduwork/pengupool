@@ -6,6 +6,9 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Fixed
+- Mouse drag-select and right-click copy did nothing on a Linux remote: the tmux binds hardcoded
+`pbcopy`, which only macOS has. `tmux.clip_command()` now picks `pbcopy`, `wl-copy` or `xclip` for
+the host it runs on, and a host with none of them leaves copy-mode instead of failing.
 - `pengupool setup pi` installed pi on a node too old to run it (pi needs 22.19+; Debian 13 has 20,
 Ubuntu 24.04 has 18) and reported success. It now refuses, naming the version needed and the
 remedies; when pi is already installed it warns instead. `setup --check` reports the node it found.
