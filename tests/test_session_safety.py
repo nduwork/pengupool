@@ -204,10 +204,10 @@ def test_mouse_copy_flashes_the_hint_top_right(monkeypatch):
         )
 
 
-def test_right_click_does_not_offer_tmuxs_pane_menu(monkeypatch):
-    """Right-click is tmux's stock display-menu (Kill, Respawn, Split, Swap, Zoom) on a window PenguPool
-    owns: Kill would end the agent's session from a stray click, and a split is a layout the extension
-    cannot manage. The mouse stays on; the menu does not."""
+def test_right_click_copies_without_tmuxs_pane_menu(monkeypatch):
+    """Right-click used to open tmux's stock display-menu (Split, Swap, Kill, Respawn, Zoom) on a window
+    PenguPool owns: Kill would end the agent's session from a stray click, and a split is a layout the
+    extension cannot manage. It copies the word under the pointer instead, and nothing binds a menu."""
     monkeypatch.setattr(tmux, "_copy_ready", set())
     calls = []
     monkeypatch.setattr(tmux, "_ok", lambda *args, **k: calls.append(args) or True)
@@ -218,7 +218,9 @@ def test_right_click_does_not_offer_tmuxs_pane_menu(monkeypatch):
              and call[3] in ("MouseDown3Pane", "M-MouseDown3Pane")]
     assert [call[3] for call in binds] == ["MouseDown3Pane", "M-MouseDown3Pane"]  # the plain and Alt form
     for call in binds:
-        assert call[-1] == "select-pane -t ="          # select the pane, open nothing
+        assert "#{mouse_word}" in call[-1]                  # only where there is a word to copy
+        assert "copy-pipe-and-cancel pbcopy" in call[-1]    # and it reaches the system clipboard
+        assert call[-1].endswith('"select-pane -t ="')     # blank space: no clipboard change
     assert not [call for call in calls if "display-menu" in call]
 
 

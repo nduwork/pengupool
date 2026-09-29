@@ -105,7 +105,9 @@ once per extension activation, so later manual editor and panel rearrangement is
 
 The terminal directly owns the tmux client and enables tmux mouse mode. The wheel therefore enters
 tmux copy-mode and scrolls the session's history instead of being translated by xterm into Up/Down
-key presses. The terminal is transient: VS Code does not restore it as a stale zsh terminal after a
+key presses, and a left-drag selects text and copies it on release. Right-click copies the word under
+the pointer; tmux's pane menu (Split, Kill, Respawn…) is not shown, because those act on a window the
+extension owns. The terminal is transient: VS Code does not restore it as a stale zsh terminal after a
 window reload; PenguPool creates a fresh client when its Activity Bar view is revealed again.
 Log timestamps use the machine's local timezone and the compact `MM/DD/YYYY-HH:mm:ss` format.
 In the PenguPool Claude terminal, Shift+Enter sends Claude's multiline sequence while Enter submits. To
