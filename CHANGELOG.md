@@ -6,6 +6,9 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Fixed
+- `pengupool setup` could not install a package on a host whose apt lists are absent or stale (a
+fresh box, a slim container): `apt-get install` never refreshes them, so it answered "Unable to
+locate package". apt now refreshes first, best-effort, before installing.
 - `pengupool setup` could not install node on a Debian or Arch remote: it asked the package manager for a
 package called `node`, which does not exist there (they ship `nodejs` and `npm`), so `setup pi`
 dead-ended with "Unable to locate package node". Each manager now maps the tool to the name it
