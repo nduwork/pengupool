@@ -224,14 +224,16 @@ MIN_SELECTION = ("#{||:#{!=:#{selection_start_y},#{selection_end_y}},"
 
 
 def clip_command() -> str:
-    """The system clipboard command on this host, as tmux should run it. macOS ships pbcopy; a Linux
-    remote has wl-copy under Wayland or xclip under X11. '' means neither is installed, which is normal
-    on a headless box, and the copy binds then just leave copy-mode instead of failing."""
+    """The clipboard command this host can actually receive a copy with, as tmux should run it. macOS
+    ships pbcopy. On Linux, wl-copy needs a Wayland session and xclip an X11 one, so a headless remote
+    (no WAYLAND_DISPLAY, no DISPLAY) answers '' rather than naming a tool that would fail the copy; the
+    binds then leave copy-mode instead."""
     if sys.platform == "darwin":
         return "pbcopy"
-    for cmd in ("wl-copy", "xclip -selection clipboard"):
-        if shutil.which(cmd.split()[0]):
-            return cmd
+    if os.environ.get("WAYLAND_DISPLAY") and shutil.which("wl-copy"):
+        return "wl-copy"
+    if os.environ.get("DISPLAY") and shutil.which("xclip"):
+        return "xclip -selection clipboard"
     return ""
 
 
