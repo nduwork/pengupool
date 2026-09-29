@@ -5,13 +5,6 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Fixed
-- A grouped session could reach a session on another machine by appending `@machine` to a name:
-pi-intercom relays that form over SSH, and the routing guard treated any name it could not map as a
-plain teammate and let it through. An unmappable address containing `@` is now refused the same way
-a `uds:` socket address is, with the same "message by name" reply. A session actually named `x@y`
-still resolves by name, and a typo without `@` is still left to the harness.
-
 ## [0.6.0] - 2026-09-28
 
 ### Removed
