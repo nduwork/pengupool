@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.1
+
+- right-click copies the word under the pointer instead of opening tmux's menu (#41)
+- drop tmux's right-click pane menu in the agent terminal (#40)
+
+Ships with PenguPool v0.6.0.
+
 ## 0.3.0
 
 - Added a **clear** button to the message log panel that wipes the cross-session message log

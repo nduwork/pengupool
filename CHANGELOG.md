@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-28
+
 ### Removed
 - The terminal UI (Textual). `pengupool` with no command, or `pengupool tui`, prints usage: the editor is
 the only front end. Removed with it: `pengupool/app.py`, `pengupool/graph.py`, the `textual` and
@@ -26,6 +28,7 @@ windows, so a window is off screen only for the client that is switching; the pr
 whenever any client already shows the target. tmux itself still sizes a shared window to the switching
 client, which is inherent to two clients of different sizes sharing one window.
 
+- Editor extension: 0.3.1 (install both with `install.sh`; they ship together in this tag).
 ## [0.5.1] - 2026-09-26
 
 ### Changed
