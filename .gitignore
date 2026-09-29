@@ -11,3 +11,8 @@ dist/
 # must never be committed. Ignore the whole scaffold so a routine `git add -A` can't leak it.
 .env
 .pi/
+
+# The editor's installed dependencies. extension/.gitignore already covers them for git, but the build
+# backend reads only this root file, so without this line the source distribution shipped 5,130 of them
+# (43 MB) with every release.
+node_modules/
