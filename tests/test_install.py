@@ -50,8 +50,7 @@ def test_non_interactive_never_installs(env, monkeypatch):
     have.discard("pi")
     monkeypatch.setattr("builtins.input", lambda q: (_ for _ in ()).throw(EOFError))
     assert install.main(["setup", "pi"]) == 1
-    # nothing was installed (the version probe is not an install)
-    assert not [c for c in ran if c and c[0] in ("bash", "npm")]
+    assert ran == []
 
 
 def test_accepted_install_runs_the_official_installer(env, monkeypatch):
@@ -159,36 +158,3 @@ def test_a_harness_in_the_user_prefix_is_found_without_being_on_path(env, monkey
     assert install._cli("pi") == str(binp / "pi")
     assert install._cli("cc") is None
     assert install._harnesses("auto") == ["pi"]
-
-
-def _node(monkeypatch, version: str | None) -> None:
-    """Answer `node --version` with `version`, and leave every other command to the fixture."""
-    inner = install.subprocess.run
-    def run(cmd, **k):
-        if cmd == ["node", "--version"]:
-            return subprocess.CompletedProcess(cmd, 0 if version else 127,
-                                               stdout=f"{version}\n" if version else "")
-        return inner(cmd, **k)
-    monkeypatch.setattr(install.subprocess, "run", run)
-
-
-@pytest.mark.parametrize("version,ok", [("v22.19.0", True), ("v24.1.0", True), ("v22.18.0", False),
-                                       ("v20.19.2", False), (None, False)])
-def test_pi_needs_a_node_new_enough_to_run_it(monkeypatch, version, ok):
-    # pi's engines say node >=22.19; Debian 13 ships 20, where pi dies on import. Installing anyway
-    # leaves a pi that cannot start, so `setup` refuses when it would have to install one.
-    _node(monkeypatch, version)
-    assert install._node_ok() is ok
-    want = ".".join(version.lstrip("v").split(".")[:2]) if version else "no node"
-    assert install._node_label() == want
-
-
-def test_pi_setup_stops_on_a_node_too_old_to_run_pi(env, monkeypatch, capsys):
-    have, ran = env
-    have.discard("pi")
-    _node(monkeypatch, "v20.19.2")
-    assert install.main(["setup", "pi"]) == 1
-    out = capsys.readouterr().out
-    assert "pi needs node 22.19" in out and "nvm" in out
-    assert not [c for c in ran if c[:2] == ["npm", "install"]]      # nothing installed, nothing wired
-    assert not install._pi_extension().exists()

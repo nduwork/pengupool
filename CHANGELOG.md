@@ -6,9 +6,6 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Fixed
-- `pengupool setup pi` installed pi on a node too old to run it (pi needs 22.19+; Debian 13 has 20,
-Ubuntu 24.04 has 18) and reported success. It now refuses, naming the version needed and the
-remedies; when pi is already installed it warns instead. `setup --check` reports the node it found.
 - `pengupool setup pi` failed on Debian and Ubuntu: their npm installs into a root-owned global
 prefix, so `npm install -g` ended in EACCES. pi now goes into the user's own prefix
 (`~/.local`) when the global one cannot be written, `setup` finds a harness CLI that lives there
