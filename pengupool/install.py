@@ -23,15 +23,6 @@ CLI_INSTALL = {  # official installers
     "cc": "curl -fsSL https://claude.ai/install.sh | bash",
     "pi": "npm install -g --ignore-scripts @earendil-works/pi-coding-agent",
 }
-# Which system package provides a tool, per manager. Debian and Arch have no package called `node`:
-# they ship `nodejs` and `npm` separately, so `apt-get install -y node` fails with "Unable to locate
-# package node" — which is what a Debian remote reported when `setup pi` offered to install npm.
-PKG: dict[str, dict[str, str]] = {
-    "brew": {"node": "node", "tmux": "tmux"},
-    "apt-get": {"node": "nodejs npm", "tmux": "tmux"},
-    "dnf": {"node": "nodejs", "tmux": "tmux"},
-    "pacman": {"node": "nodejs npm", "tmux": "tmux"},
-}
 INTERCOM = "npm:pi-intercom"
 EXTENSION = Path(__file__).with_name("pi_extension.ts")
 
@@ -53,10 +44,10 @@ def _confirm(question: str) -> bool:
 
 def _pkg_install(pkg: str) -> str:
     """Install command for a system package via the first package manager found ('' = none)."""
-    for pm, cmd in (("brew", "brew install {}"), ("apt-get", "sudo apt-get install -y {}"),
-                    ("dnf", "sudo dnf install -y {}"), ("pacman", "sudo pacman -S --noconfirm {}")):
+    for pm, cmd in (("brew", f"brew install {pkg}"), ("apt-get", f"sudo apt-get install -y {pkg}"),
+                    ("dnf", f"sudo dnf install -y {pkg}"), ("pacman", f"sudo pacman -S --noconfirm {pkg}")):
         if shutil.which(pm):
-            return cmd.format(PKG[pm].get(pkg, pkg))
+            return cmd
     return ""
 
 

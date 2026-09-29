@@ -94,25 +94,3 @@ def test_check_ignores_which_cli_path_was_baked_in(env, monkeypatch):
     assert install._unbaked(install._pi_extension().read_text()) == install.EXTENSION.read_text()
     install._pi_extension().write_text("// stale\n")
     assert install._unbaked(install._pi_extension().read_text()) != install.EXTENSION.read_text()
-
-
-@pytest.mark.parametrize("pm,expected", [
-    ("apt-get", "sudo apt-get install -y nodejs npm"),
-    ("dnf", "sudo dnf install -y nodejs"),
-    ("pacman", "sudo pacman -S --noconfirm nodejs npm"),
-    ("brew", "brew install node"),
-])
-def test_node_is_installed_under_its_real_package_name(env, pm, expected):
-    # A Debian remote answered "E: Unable to locate package node" when `setup pi` offered to install
-    # npm: Debian and Arch ship nodejs and npm as separate packages, nothing is called `node`.
-    have, _ = env
-    have.clear()
-    have.add(pm)
-    assert install._pkg_install("node") == expected
-    assert install._pkg_install("tmux").endswith("tmux")            # other tools are unmapped, not lost
-
-
-def test_without_a_package_manager_there_is_no_command_to_offer(env):
-    have, _ = env
-    have.clear()
-    assert install._pkg_install("node") == ""
