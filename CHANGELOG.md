@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Fixed
+- `pengupool setup` could not install node on a Debian or Arch remote: it asked the package manager for a
+package called `node`, which does not exist there (they ship `nodejs` and `npm`), so `setup pi`
+dead-ended with "Unable to locate package node". Each manager now maps the tool to the name it
+actually uses.
 - A grouped session could reach a session on another machine by appending `@machine` to a name:
 pi-intercom relays that form over SSH, and the routing guard treated any name it could not map as a
 plain teammate and let it through. An unmappable address containing `@` is now refused the same way
