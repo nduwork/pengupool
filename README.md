@@ -43,36 +43,11 @@ Open the PenguPool view (penguin icon in the Activity Bar). The Sessions tree li
 
 See the [guide](docs/guide.md) for how to brief a pool and keep work routed well.
 
-Grouped sessions receive a short `<pengupool>` block with their tree, parent, children and role. Routing is enforced: a grouped session may message only its parent or direct children (Claude Code through a `PreToolUse` guard, pi through the bundled extension and pi-intercom), and `pengupool ctl route <id> <target>` names the next hop. The guard runs inside each harness, so a pool of Claude Code sessions and a pool of pi sessions are each self-contained; sessions of different harnesses are never grouped. Tag a session in your prompt (`@reviewer …`) to let the session you typed into message it directly until your next prompt.
+Grouped sessions receive a short `<pengupool>` block with their tree, parent, children and role. Routing is enforced: a grouped session may message only its parent or direct children (Claude Code through a `PreToolUse` guard, pi through the bundled extension and pi-intercom), and `pengupool ctl route <id> <target>` names the next hop. Tag a session in your prompt (`@reviewer …`) to let the session you typed into message it directly until your next prompt.
 
 Triage gets a hint from code. When a prompt matches a child's routing keywords (`pengupool ctl describe <id> --keywords "lexer, parser"`), name, workspace or role, the session is told `ROUTE CHECK` with the words that matched, and decides whether to route. A session with no role is told `ROLE REQUIRED`. Messages from other sessions, idle notices and subagent reports never trigger the check. Each grouped reply starts with a `Triage:` line, and "do it yourself" in a prompt turns the check off for that prompt.
 
 PenguPool reads local Claude Code and pi session files and keeps its own state under `~/.pengupool/`. It does not need a cloud account or hosted service. The bundled [workflow tracker](workflow-tracker/SKILL.md) shows each session's current work phase under its map card.
-
-## Why not MCP?
-
-PenguPool coordinates agents through the messaging each harness already provides, not through a server in the middle. Claude Code sessions talk over their own per-session inbox socket, pi sessions through pi-intercom's local broker, and PenguPool keeps the routing rules on both sides. Nothing is hosted and nothing is polled.
-
-That buys three things a tool server does not. Messages are **pushed into a session that is already running** — Anthropic's own comparison puts it plainly: a standard MCP server means *"Claude queries it during a task; nothing is pushed to the session."* On the pi side, delivery carries **receipts, ask-and-wait, cancel and retry**, presence and attachments — semantics a bare tool call does not have. And there is **nothing to configure**: no endpoint, token, OAuth or tunnel; state lives in `~/.pengupool/` and works offline.
-
-| | PenguPool's local path | An MCP-based bus |
-| --- | --- | --- |
-| Transport | each harness's own local socket | HTTP or stdio — you host it |
-| Delivery | pushed into the running session | pulled when the agent calls the tool (`channels` adds push, in research preview) |
-| Setup | none beyond the install wiring | server, endpoint, TLS, auth, tokens |
-| Receipts, ask, cancel, names, presence | built in (pi-intercom) | build them |
-| Cross-harness | no — one harness at a time | yes, one client per harness |
-| Cross-machine | not shipped here; pi-intercom's own SSH path can send to another machine, without ask or reply | yes, if you expose an endpoint |
-| Third-party agents (CI, web, cloud) | no | yes |
-| Offline | yes | only if self-hosted locally |
-
-The limits are real:
-
-- **One harness at a time.** A Claude Code session cannot message a pi child: the two transports do not meet. PenguPool unifies the policy and the message graph, not the plumbing.
-- **Installed harnesses only.** A CI job, a script or a web session cannot take part without a bridge.
-- **Cross-machine work is not shipped here.** It is [planned](docs/remote-sessions-plan.md). pi-intercom's own SSH path reaches another machine today, but sends without ask or reply, and its identity is asserted by SSH rather than cryptographically verified.
-
-Reach for MCP instead when the agents are not yours to install — another vendor, another runtime, cloud or CI — or when messages have to cross a trust boundary that needs auth, tenancy and audit. MCP solves tool access; PenguPool solves local team coordination on your own machine. They are complements, not competitors.
 
 ## Develop
 

@@ -4,7 +4,9 @@ from __future__ import annotations
 import os
 import re
 import shlex
+import shutil
 import subprocess
+import sys
 import time
 
 from . import harness, model
@@ -221,6 +223,31 @@ MIN_SELECTION = ("#{||:#{!=:#{selection_start_y},#{selection_end_y}},"
                  "#{e|>=|:#{e|-|:#{selection_start_x},#{selection_end_x}},1}}}")
 
 
+def clip_command() -> str:
+    """The clipboard command this host can actually receive a copy with, as tmux should run it. macOS
+    ships pbcopy. On Linux, wl-copy needs a Wayland session and xclip an X11 one, so a headless remote
+    (no WAYLAND_DISPLAY, no DISPLAY) answers '' rather than naming a tool that would fail the copy; the
+    binds then leave copy-mode instead."""
+    if sys.platform == "darwin":
+        return "pbcopy"
+    if os.environ.get("WAYLAND_DISPLAY") and shutil.which("wl-copy"):
+        return "wl-copy"
+    if os.environ.get("DISPLAY") and shutil.which("xclip"):
+        return "xclip -selection clipboard"
+    return ""
+
+
+def _copy_pipe(rest: str) -> str:
+    """`send-keys -X copy-pipe-and-cancel <clipboard>` with `rest` appended, or a plain cancel when the
+    host has no clipboard command. tmux parses this bind string itself, so a command with arguments is
+    quoted."""
+    clip = clip_command()
+    if not clip:
+        return "send-keys -X cancel"
+    arg = f"'{clip}'" if " " in clip else clip   # tmux parses this string, so quote a command with args
+    return f"send-keys -X copy-pipe-and-cancel {arg}{rest}"
+
+
 def enable_mouse_copy(h: str = "cc") -> None:
     """Drag-select in the work pane auto-copies to the macOS clipboard, mouse staying on for
     scroll/click. tmux enters copy-mode on a left-drag; on release we pipe the selection to pbcopy
@@ -241,7 +268,7 @@ def enable_mouse_copy(h: str = "cc") -> None:
     # the pane, so a stray click never clears the clipboard. Clicks are handed to the agent when the agent
     # itself uses the mouse (mouse_any_flag).
     copy_word = ('if-shell -F "#{mouse_word}" "select-pane -t = ; copy-mode -M ; '
-                 'send-keys -X select-word ; send-keys -X copy-pipe-and-cancel pbcopy" "select-pane -t ="')
+                 f'send-keys -X select-word ; {_copy_pipe("")}" "select-pane -t ="')
     for key in ("MouseDown3Pane", "M-MouseDown3Pane"):
         _ok("bind-key", "-T", "root", key, "if-shell", "-F", "#{mouse_any_flag}",
             "send-keys -M", copy_word, h=h)
@@ -249,7 +276,7 @@ def enable_mouse_copy(h: str = "cc") -> None:
     # "no such session"), so the bound set-option has no -t: it acts on the pressing client's own view
     # session. run-shell does expand its command, so the delayed hide can name that session.
     hide_status = f"sleep 2; tmux -L {harness.SOCK[h]} set-option -t '#{{session_name}}' status off"
-    copy = f'send-keys -X copy-pipe-and-cancel pbcopy ; set-option status on ; run-shell -b "{hide_status}"'
+    copy = _copy_pipe(f' ; set-option status on ; run-shell -b "{hide_status}"')
     for table in ("copy-mode", "copy-mode-vi"):
         # A click that wobbles a pixel is a drag too: copying its 1-character "selection" would replace
         # the user's clipboard (they click into the chat, then Cmd+V pastes nothing useful). Copy only

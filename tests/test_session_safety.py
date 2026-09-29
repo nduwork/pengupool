@@ -186,6 +186,7 @@ def test_select_view_without_a_client_leaves_the_size_alone(monkeypatch):
 
 def test_mouse_copy_flashes_the_hint_top_right(monkeypatch):
     monkeypatch.setattr(tmux, "_copy_ready", set())
+    monkeypatch.setattr(tmux, "clip_command", lambda: "pbcopy")
     calls = []
     monkeypatch.setattr(tmux, "_ok", lambda *args, **k: calls.append(args) or True)
 
@@ -209,6 +210,7 @@ def test_right_click_copies_without_tmuxs_pane_menu(monkeypatch):
     PenguPool owns: Kill would end the agent's session from a stray click, and a split is a layout the
     extension cannot manage. It copies the word under the pointer instead, and nothing binds a menu."""
     monkeypatch.setattr(tmux, "_copy_ready", set())
+    monkeypatch.setattr(tmux, "clip_command", lambda: "pbcopy")
     calls = []
     monkeypatch.setattr(tmux, "_ok", lambda *args, **k: calls.append(args) or True)
 
@@ -271,3 +273,46 @@ def test_write_json_keeps_a_symlink_and_its_mode(tmp_path):
     model.write_json(link, {"a": 1})
     assert link.is_symlink() and json.loads(real.read_text()) == {"a": 1}
     assert real.stat().st_mode & 0o777 == 0o600
+
+
+@pytest.mark.parametrize("platform,env,tools,want", [
+    ("darwin", {}, {"pbcopy"}, "pbcopy"),
+    ("darwin", {}, set(), "pbcopy"),                          # macOS always has it
+    ("linux", {"WAYLAND_DISPLAY": "wayland-0", "DISPLAY": ":0"}, {"wl-copy", "xclip"}, "wl-copy"),
+    ("linux", {"DISPLAY": ":0"}, {"xclip"}, "xclip -selection clipboard"),
+    ("linux", {"WAYLAND_DISPLAY": "wayland-0"}, {"wl-copy"}, "wl-copy"),
+    ("linux", {}, {"wl-copy", "xclip"}, ""),                   # headless: a tool with nowhere to put it
+    ("linux", {"DISPLAY": ":0"}, set(), ""),                   # session, but no tool installed
+])
+def test_the_clipboard_command_matches_the_host(monkeypatch, platform, env, tools, want):
+    # A Linux remote has no pbcopy, and the binds hardcoded it, so mouse copy failed there. A headless
+    # box has nowhere to copy to at all, so naming xclip would only fail louder.
+    monkeypatch.setattr(tmux.sys, "platform", platform)
+    monkeypatch.setattr(tmux.shutil, "which", lambda b: f"/usr/bin/{b}" if b in tools else None)
+    monkeypatch.setattr(tmux.os, "environ", env)
+    assert tmux.clip_command() == want
+
+
+def test_a_host_without_a_clipboard_leaves_copy_mode_instead_of_failing(monkeypatch):
+    monkeypatch.setattr(tmux, "_copy_ready", set())
+    monkeypatch.setattr(tmux, "clip_command", lambda: "")
+    calls = []
+    monkeypatch.setattr(tmux, "_ok", lambda *args, **k: calls.append(args) or True)
+
+    tmux.enable_mouse_copy()
+
+    drags = [c for c in calls if c[0] == "bind-key" and c[3] == "MouseDragEnd1Pane"]
+    assert drags and all(c[7] == "send-keys -X cancel" for c in drags)   # c[7] is the copy branch
+    assert not [c for c in calls if any("copy-pipe-and-cancel" in str(a) for a in c)]
+
+
+def test_a_clipboard_command_with_arguments_is_quoted_for_tmux(monkeypatch):
+    monkeypatch.setattr(tmux, "_copy_ready", set())
+    monkeypatch.setattr(tmux, "clip_command", lambda: "xclip -selection clipboard")
+    calls = []
+    monkeypatch.setattr(tmux, "_ok", lambda *args, **k: calls.append(args) or True)
+
+    tmux.enable_mouse_copy()
+
+    words = [c for c in calls if c[0] == "bind-key" and c[3] == "MouseDown3Pane"]
+    assert words and "'xclip -selection clipboard'" in words[0][-1]

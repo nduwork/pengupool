@@ -6,25 +6,9 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Fixed
-- `pengupool setup pi` installed pi on a node too old to run it (pi needs 22.19+; Debian 13 has 20,
-Ubuntu 24.04 has 18) and reported success. It now refuses, naming the version needed and the
-remedies; when pi is already installed it warns instead. `setup --check` reports the node it found.
-- `pengupool setup pi` failed on Debian and Ubuntu: their npm installs into a root-owned global
-prefix, so `npm install -g` ended in EACCES. pi now goes into the user's own prefix
-(`~/.local`) when the global one cannot be written, `setup` finds a harness CLI that lives there
-rather than on PATH, and `check` says where it found it.
-- `pengupool setup` could not install a package on a host whose apt lists are absent or stale (a
-fresh box, a slim container): `apt-get install` never refreshes them, so it answered "Unable to
-locate package". apt now refreshes first, best-effort, before installing.
-- `pengupool setup` could not install node on a Debian or Arch remote: it asked the package manager for a
-package called `node`, which does not exist there (they ship `nodejs` and `npm`), so `setup pi`
-dead-ended with "Unable to locate package node". Each manager now maps the tool to the name it
-actually uses.
-- A grouped session could reach a session on another machine by appending `@machine` to a name:
-pi-intercom relays that form over SSH, and the routing guard treated any name it could not map as a
-plain teammate and let it through. An unmappable address containing `@` is now refused the same way
-a `uds:` socket address is, with the same "message by name" reply. A session actually named `x@y`
-still resolves by name, and a typo without `@` is still left to the harness.
+- Mouse drag-select and right-click copy did nothing on a Linux remote: the tmux binds hardcoded
+`pbcopy`, which only macOS has. `tmux.clip_command()` now picks `pbcopy`, `wl-copy` or `xclip` for
+the host it runs on, and a host with none of them leaves copy-mode instead of failing.
 
 ## [0.6.0] - 2026-09-28
 
