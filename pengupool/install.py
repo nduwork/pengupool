@@ -20,6 +20,9 @@ from pathlib import Path
 from . import harness, hook, model
 
 PI_PKG = "@earendil-works/pi-coding-agent"
+# pi's own `engines`: node >=22.19.0. Debian 13 ships 20 and Ubuntu 24.04 ships 18, so a distro npm
+# produces a pi that dies on import (`enableCompileCache` is a 22.3 API) if we install without looking.
+PI_NODE = (22, 19)
 CLI_INSTALL = {  # official installers (pi's is built by `_pi_install`: it may need a user prefix)
     "cc": "curl -fsSL https://claude.ai/install.sh | bash",
     "pi": f"npm install -g --ignore-scripts {PI_PKG}",
@@ -73,6 +76,27 @@ def _pi_install() -> str:
     difference between `setup pi` working and ending in EACCES on a Debian or Ubuntu remote."""
     prefix = "" if _npm_global_writable() else '--prefix "$HOME/.local" '
     return f"npm install -g {prefix}--ignore-scripts {PI_PKG}"
+
+
+def _node_version() -> tuple[int, int] | None:
+    """(major, minor) of the node on PATH, or None when there is none to ask."""
+    try:
+        out = subprocess.run(["node", "--version"], capture_output=True, text=True, timeout=30).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    m = re.match(r"v?(\d+)\.(\d+)", out.strip())
+    return (int(m.group(1)), int(m.group(2))) if m else None
+
+
+def _node_ok() -> bool:
+    """Whether the node on PATH is new enough to run pi."""
+    v = _node_version()
+    return bool(v) and v >= PI_NODE
+
+
+def _node_label() -> str:
+    v = _node_version()
+    return f"{v[0]}.{v[1]}" if v else "no node"
 
 
 def _cli(h: str) -> str | None:
@@ -195,6 +219,7 @@ def check(h: str) -> bool:
     print(f"{'✓' if wired else '✗'} PenguPool pi extension at {_pi_extension()}"
           + ("" if wired or not _pi_extension().is_file() else " (outdated: re-run setup)"))
     intercom = ok and _has_intercom()
+    print(f"{'✓' if _node_ok() else '✗'} node {_node_label()} for pi (needs {PI_NODE[0]}.{PI_NODE[1]}+)")
     print(f"{'✓' if intercom else '✗'} pi-intercom installed")
     return ok and wired and intercom
 
@@ -229,6 +254,16 @@ def main(args: list[str]) -> int:
     ok = True
     for h in hs:
         exe = _cli(h)                        # installed but off PATH (~/.local/bin) still counts
+        if h == "pi" and not exe and not _node_ok():
+            # Better to stop than to install a pi that cannot start: the npm install would "succeed"
+            # and every later `pi` call would die with a SyntaxError about enableCompileCache.
+            print(f"✗ pi needs node {PI_NODE[0]}.{PI_NODE[1]}+ and this host has {_node_label()}")
+            print("  install a newer node (nvm, fnm, volta or NodeSource), then re-run: pengupool setup pi")
+            ok = False
+            continue
+        if h == "pi" and exe and not _node_ok():
+            print(f"  ! node {_node_label()} is older than {PI_NODE[0]}.{PI_NODE[1]}; "
+                  "`pi --version` will say whether this build still runs")
         if h == "pi" and not exe \
                 and not ensure("npm (needed to install pi)", "npm", _pkg_install("node")):
             ok = False
