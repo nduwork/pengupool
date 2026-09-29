@@ -158,7 +158,9 @@ def granted(a: str, b: str) -> bool:
 
 def authorize_send(sender: str, recipient: str, t: Tree | None = None) -> tuple[bool, str]:
     """(allowed, reason). Only a grouped sender is managed; a solo session keeps its normal behaviour.
-    A name that is no live session of this harness (a teammate, a typo) is left to the harness.
+    A name that is no live session of this harness (a teammate, a typo) is left to the harness — but
+    not an address form a harness would deliver somewhere the tree cannot see: a `uds:` socket, or
+    pi-intercom's cross-machine `name@machine`, which it relays over SSH.
     A session the user tagged with @name in the current prompt is reachable directly (see grant)."""
     t = t or live_tree()
     if sender not in t.parent or not adjacent(t, sender):
@@ -168,10 +170,18 @@ def authorize_send(sender: str, recipient: str, t: Tree | None = None) -> tuple[
         who = ", ".join(t.name[s] for s in ok)
         return False, f"PenguPool: name the session you are messaging (to=…); you may message: {who}."
     hits = resolve(t, sender, recipient)
-    sock = str(recipient).strip().startswith("uds:")
-    if not hits and sock:  # a session address we cannot map: refuse
+    addr = str(recipient).strip()
+    sock = addr.startswith("uds:")
+    # `name@machine` is a session on another machine: unmappable here, but pi-intercom relays it. Leaving
+    # it to the harness would let a grouped session reach a non-adjacent session by appending `@machine`
+    # (the same name is refused locally), so it is refused like a socket. A session actually *named*
+    # `x@y` still matches above, and a plain name keeps its intended free pass.
+    remote = bool(re.fullmatch(r"[^\s@]+@[^\s@]+", addr))
+    if not hits and (sock or remote):  # an address form we cannot map: refuse by name
         who = ", ".join(t.name[s] for s in ok)
-        return False, f"PenguPool: {recipient} is not a session you may message; message by name: {who}."
+        what = "a cross-machine address, which PenguPool does not route" if remote else \
+            "not a session you may message"
+        return False, f"PenguPool: {recipient} is {what}; message by name: {who}."
     if not hits:
         return True, ""
     target = next(iter(hits))

@@ -308,6 +308,24 @@ def test_socket_addresses_and_name_case_do_not_slip_past_the_guard():
     assert routing.authorize_send(B, "LEAD", t) == (True, "")
 
 
+def test_a_cross_machine_address_cannot_slip_past_the_guard():
+    # pi-intercom relays `name@machine` to another machine: unmappable here, so "left to the harness"
+    # would let a grouped session reach a non-adjacent session by appending @machine — the same name
+    # is refused locally. Refused like a socket, with the same message shape.
+    t = _tree()
+    ok, why = routing.authorize_send(D, "other@workstation", t)          # 'other' is a non-adjacent sibling branch
+    assert not ok and "cross-machine" in why and "message by name: kid" in why
+    assert routing.authorize_send(B, "lead@workstation", t)[0] is False  # adjacent locally, remote anyway
+    # a session actually named like that still resolves by name, and adjacency still decides
+    t.name[C] = "other@workstation"
+    assert routing.authorize_send(A, "other@workstation", t) == (True, "")   # parent to its own child
+    ok, why = routing.authorize_send(B, "other@workstation", t)              # sibling: still not adjacent
+    assert not ok and "Send it to lead" in why
+    # and the two intended free passes are untouched
+    assert routing.authorize_send(B, "teammate", t) == (True, "")           # a typo/teammate is the harness's
+    assert routing.authorize_send(E, "other@workstation", t) == (True, "")  # a solo session is unmanaged
+
+
 def test_a_prefix_the_parent_shares_with_its_child_is_not_a_match(home, monkeypatch):
     # parent "acme-shop-portal" in a worktree of acme-shop, child "acme-shop-site" in acme-shop itself:
     # "shop" or "acme-shop" is the parent's own repo, not the child; the child's own word ("site") still routes
