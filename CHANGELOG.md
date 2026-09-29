@@ -5,11 +5,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-09-28
+
 ### Fixed
 - Mouse drag-select and right-click copy did nothing on a Linux remote: the tmux binds hardcoded
 `pbcopy`, which only macOS has. `tmux.clip_command()` now picks `pbcopy`, `wl-copy` or `xclip` for
 the host it runs on, and a host with none of them leaves copy-mode instead of failing.
-
 ## [0.6.0] - 2026-09-28
 
 ### Removed
