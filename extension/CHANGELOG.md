@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0
+
+- resume every previous session after a restart (#64)
+- find a session's folder from the list (#63)
+
+Ships with PenguPool v0.7.1.
+
 ## 0.3.1
 
 - right-click copies the word under the pointer instead of opening tmux's menu (#41)

@@ -5,6 +5,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-09-30
+
+### Added
+- resume every previous session after a restart (#64)
+- find a session's folder from the list (#63)
+
+- Editor extension: 0.4.0 (install both with `install.sh`; they ship together in this tag).
 ## [0.7.0] - 2026-09-29
 
 ### Added
