@@ -51,6 +51,7 @@ function loadPanel(sourceName) {
         CTX_LEVEL_JS: load('sessionState').CTX_LEVEL_JS,   // the real level rule, so tests check it
         CTX_LEVEL_CSS: '',
       };
+      if (id === './webviewMenu') return { MENU_CSS: '', MENU_HTML: '', MENU_JS: '', runMenuCommand: async () => true };
       if (id === './util') return {
         runCtl: async (args) => { ctl.push(args); return { code: 0, stdout: '', stderr: '' }; },
       };

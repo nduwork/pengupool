@@ -43,8 +43,10 @@ stopping and resuming that process.
 Drag a session row onto another row to group it underneath, or onto empty tree space to move it to
 top level. Click a map node to select the matching sidebar row and show that session in the shared
 terminal; focused map nodes also respond to Enter and Space.
-Right-click a session row for its actions. Right-click empty space in Sessions to create a new
-session or add a previous one. The run-all button in the Sessions title (**Resume Previous
+Right-click a session row, or a map node, for its actions. Right-click empty space in Sessions or on
+the map to create a new session or add a previous one. Both views build that menu from one shared
+definition, and both suppress VS Code's cut/copy/paste menu: neither holds editable text, so the
+system menu would only cover what the pool has to say. The run-all button in the Sessions title (**Resume Previous
 Sessions…**) rebuilds the pool after a reboot: it lists every session the backend can still resume,
 newest first, and puts the ticked ones back on the tmux server. Selecting a session also reveals its
 folder in the Explorer, when this window already contains it (`pengupool.explorerFollow: false` turns
