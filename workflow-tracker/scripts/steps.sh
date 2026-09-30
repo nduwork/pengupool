@@ -15,7 +15,9 @@
 #   steps.sh render                   print the current chain (nothing if no chain)
 #   steps.sh clear                    remove the current chain (and its note)
 #   steps.sh use <chain>              switch to (or create) a named chain; the status line follows
-#   steps.sh list                     all chains in this dir: * marks current, with notes
+#   steps.sh list [--all]             chains for this session: * marks the active one, with notes;
+#                                     --all adds other sessions' chains as session/<id>, and `shared`
+#                                     prefixes the repo's shared ones
 #   steps.sh note [text]              set (or print) a one-line context note for the current chain
 #   steps.sh --selfcheck              run the built-in check
 #
@@ -83,6 +85,10 @@ NOTE="$DIR/$CHAIN.note"
 
 DONE_TTL="${STEP_STATUS_DONE_TTL:-60}"; DONE_TTL="${DONE_TTL//[^0-9]/}"; DONE_TTL="${DONE_TTL:0:9}"
 DONE_TTL=$((10#${DONE_TTL:-60}))   # 10#: "08" is eight seconds, not an octal error
+# Other sessions' trackers that nothing has touched for this many days are pruned by the next `set`,
+# so `.step-status/sessions/` stays bounded (one directory per session accumulates otherwise).
+SESSION_TTL="${STEP_STATUS_SESSION_TTL:-14}"; SESSION_TTL="${SESSION_TTL//[^0-9]/}"; SESSION_TTL="${SESSION_TTL:0:4}"
+SESSION_TTL=$((10#${SESSION_TTL:-14}))
 
 # expired <state-file> — true when no step is active, the chain isn't a loop, and the file is older
 # than DONE_TTL. mtime is the last update, i.e. when the chain finished (no-op updates don't write).
@@ -203,15 +209,21 @@ list_one() {
   printf '%s%s[%s] %s%s\n' "$prefix" "$mark" "$n" "$(render_file "$f" "$bf" "$bl" "$cnt")" "${note:+  # $note}"
 }
 
-# list_chains — this session's chains (`*` on its active one), then the repo's shared ones: what a
-# keyless caller (a script, cron, an older harness) writes, and where chains predating session keying
-# live. A keyless caller's DIR *is* BASE, so it prints one section, exactly as it always has.
+# list_chains [--all] — this session's chains (`*` on its active one), then the repo's shared ones:
+# what a keyless caller (a script, cron, an older harness) writes, and where chains predating session
+# keying live. A keyless caller's DIR *is* BASE, so it prints one section, exactly as it always has.
+# --all adds the other sessions' chains, labelled session/<id>, for seeing what they are working on.
 list_chains() {
+  local all="${1-}" f d
   safe_state || return 1
-  local f
   [[ -d "$DIR" ]] && for f in "$DIR"/*.state; do list_one "$DIR" "$f" ""; done
   [[ "$DIR" == "$BASE" || -L "$BASE" || ! -d "$BASE" ]] && return 0
   for f in "$BASE"/*.state; do list_one "$BASE" "$f" "shared "; done
+  [[ "$all" == --all ]] || return 0
+  for d in "$BASE"/sessions/*; do
+    [[ -d "$d" && ! -L "$d" && "$d" != "$DIR" ]] || continue
+    for f in "$d"/*.state; do list_one "$d" "$f" "session/$(basename "$d") "; done
+  done
 }
 
 note_chain() {
@@ -293,9 +305,29 @@ check_steps() {
     seen+="$n"$'\n'
   done
 }
+# prune_sessions — drop the OTHER sessions' trackers that nothing in them has been touched for
+# SESSION_TTL days. Called on `set`: a new workflow is the natural moment, it never touches this
+# session's own tracker, and it never follows a symlink. A find that fails prunes nothing.
+prune_sessions() {
+  [[ -d "$BASE/sessions" && ! -L "$BASE/sessions" ]] || return 0
+  local d recent
+  for d in "$BASE"/sessions/*; do
+    [[ -d "$d" && ! -L "$d" ]] || continue
+    [[ "$d" == "$DIR" ]] && continue
+    if ! recent="$(find "$d" -type f -mtime "-$SESSION_TTL" -print 2>/dev/null | head -n1)"; then
+      continue                                  # find failed: leave the tracker alone
+    fi
+    [[ -n "$recent" ]] && continue              # touched inside the TTL: a live (or recent) session
+    rm -f "$d"/*.state "$d"/*.note "$d"/current "$d"/.gitignore 2>/dev/null   # only ever our own files
+    rmdir "$d" 2>/dev/null || true              # a foreign file keeps the directory, and that is fine
+  done
+  return 0
+}
+
 set_chain() {
   check_steps "$@" || return $?
   ensure_dir || return 1
+  prune_sessions
   rm -f "$DIR/$CHAIN.cycle"   # a fresh set is pass 1 — drop any stale ↻ counter
   { printf 'active\t%s\t\n' "$1"; shift; for n in "$@"; do printf 'planned\t%s\t\n' "$n"; done; } | write_state
 }
@@ -569,6 +601,24 @@ selfcheck() {
   ln -sfn /tmp "$d/sessions/link"
   STEP_STATUS_SESSION=link bash "$s" set x 2>/dev/null && fail symlink-session-followed
   rm -f "$d/sessions/link"
+  # `set` prunes other sessions' abandoned trackers (STEP_STATUS_SESSION_TTL days); --all shows the rest
+  STEP_STATUS_SESSION=old bash "$s" set --name stale a b >/dev/null
+  find "$d/sessions/old" -exec touch -t 202001010000 {} +
+  STEP_STATUS_SESSION=aaa bash "$s" set --name fresh a b >/dev/null   # a set prunes
+  [[ ! -d "$d/sessions/old" ]] || fail prune-kept-stale
+  [[ -d "$d/sessions/bbb" ]] || fail prune-dropped-recent
+  [[ -d "$d/sessions/aaa" ]] || fail prune-dropped-own
+  # the TTL is configurable, and pruning never touches the tracker of the session that ran it
+  STEP_STATUS_SESSION=old2 bash "$s" set --name stale a b >/dev/null
+  find "$d/sessions/old2" -exec touch -t 202001010000 {} +
+  STEP_STATUS_SESSION=aaa STEP_STATUS_SESSION_TTL=1 bash "$s" set --name fresh a b >/dev/null
+  [[ ! -d "$d/sessions/old2" ]] || fail prune-ttl-ignored
+  [[ -d "$d/sessions/aaa" ]] || fail prune-ate-own-tracker
+  # --all lists the other sessions' chains; without it they stay out of the way
+  L="$(STEP_STATUS_SESSION=aaa bash "$s" list --all)"
+  [[ "$L" == *"session/bbb [s2] x ● → y ○"* ]] || fail "list-all: $L"
+  [[ "$L" == *"shared [shared] repo-step ●"* ]] || fail "list-all-shared: $L"
+  [[ "$(STEP_STATUS_SESSION=aaa bash "$s" list)" != *"session/bbb"* ]] || fail "list-without-all: $(STEP_STATUS_SESSION=aaa bash "$s" list)"
   rm -rf "$root"; echo "selfcheck OK"
 }
 
@@ -590,7 +640,7 @@ main() {
     render) render ;;
     clear) safe_state || return 1; rm -f "$STATE" "$NOTE" "$DIR/$CHAIN.cycle" ;;
     use)   need_name "${1-}" use && use_chain "$1" ;;
-    list)  list_chains ;;
+    list)  list_chains "${1-}" ;;
     note)  note_chain "$@" ;;
     --selfcheck) selfcheck ;;
     -h|--help) sed -n '2,23p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' ;;
