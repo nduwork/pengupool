@@ -5,6 +5,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-29
+
+### Added
+- keep abandoned session trackers from piling up (#57)
+- read the chain of the session, not the directory (#56)
+- tell each session which tracker is its own (#55)
+- keep one workflow chain per session (#54)
 ## [0.6.1] - 2026-09-28
 
 ### Fixed
