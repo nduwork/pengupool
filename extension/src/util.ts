@@ -1,6 +1,10 @@
 import * as vscode from 'vscode';
 import { execFile } from 'child_process';
 
+/** The OS file manager, named the way VS Code names it: Finder on macOS, the containing folder elsewhere. */
+export const REVEAL_LABEL =
+  typeof process !== 'undefined' && process.platform !== 'darwin' ? 'Open Containing Folder' : 'Reveal in Finder';
+
 export function claudePath(): string {
   return vscode.workspace.getConfiguration('pengupool').get<string>('command', 'pengupool');
 }

@@ -35,7 +35,8 @@ test('Resume Previous Sessions is a contributed title action next to Add Previou
 });
 
 test('every session command the Sessions webview runs is contributed by the manifest', () => {
-  const source = fs.readFileSync(path.join(__dirname, '../src/sessionsView.ts'), 'utf8');
+  const source = ['sessionsView.ts', 'webviewMenu.ts']
+    .map((file) => fs.readFileSync(path.join(__dirname, '../src', file), 'utf8')).join('\n');
   const contributed = new Set(manifest.contributes.commands.map((item) => item.command));
   const named = [...source.matchAll(/'(pengupool\.[A-Za-z]+)'/g)].map((match) => match[1]);
   assert.ok(named.includes('pengupool.reveal'), 'the reveal row action is missing from the webview');

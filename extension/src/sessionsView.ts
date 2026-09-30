@@ -3,12 +3,10 @@ import { Harness, SessionNode, Snapshot } from './serveClient';
 import { SessionsProvider } from './sessionsTree';
 import { CTX_LEVEL_CSS, CTX_LEVEL_JS, SESSION_STATES, SESSION_STATE_CSS } from './sessionState';
 import { bothHarnesses, findNode, splitByHarness } from './harness';
+import { MENU_CSS, MENU_HTML, MENU_JS, runMenuCommand } from './webviewMenu';
+import { REVEAL_LABEL } from './util';
 
 type VisibilityEvent = { visible: boolean };
-
-/** The OS file manager, named the way VS Code names it: Finder on macOS, the containing folder elsewhere. */
-const REVEAL_LABEL =
-  typeof process !== 'undefined' && process.platform !== 'darwin' ? 'Open Containing Folder' : 'Reveal in Finder';
 
 /** Webview-backed Sessions list. VS Code's native TreeView discards context-menu events whose
  * target is empty space, so the view owns its background menu while preserving tree interactions.
@@ -90,21 +88,8 @@ export class SessionsView implements vscode.WebviewViewProvider, vscode.Disposab
       await this.provider.group(message.source, typeof message.target === 'string' ? message.target : '');
       return;
     }
-    if (message?.type !== 'command' || typeof message.command !== 'string') { return; }
-    const global = new Set(['pengupool.new', 'pengupool.add', 'pengupool.resumePrevious']);
-    const perSession = new Set([
-      'pengupool.switch', 'pengupool.reveal', 'pengupool.group', 'pengupool.rename', 'pengupool.describe',
-      'pengupool.compact', 'pengupool.restart', 'pengupool.close',
-    ]);
-    if (global.has(message.command)) {
-      await vscode.commands.executeCommand(message.command);
-      return;
-    }
-    if (!perSession.has(message.command) || typeof message.id !== 'string') { return; }
-    const node = this.provider.find(message.id);
-    if (!node) { return; }
-    SessionsView.selectedId = node.id;
-    await vscode.commands.executeCommand(message.command, message.command === 'pengupool.switch' ? node.id : node);
+    if (message?.type !== 'command') { return; }
+    await runMenuCommand(message.command, message.id, (id) => this.provider.find(id), (id) => { SessionsView.selectedId = id; });
   }
 
   private async postState(focus = false): Promise<void> {
@@ -144,67 +129,27 @@ export function sessionsHtml(): string {
   .desc { margin-left:auto; color:var(--vscode-descriptionForeground); overflow:hidden; text-overflow:ellipsis; }
   .children.collapsed { display:none; }
   #empty { padding:8px 20px; color:var(--vscode-descriptionForeground); }
-  #menu { position:fixed; z-index:10; min-width:210px; padding:4px 0; display:none;
-    color:var(--vscode-menu-foreground); background:var(--vscode-menu-background);
-    border:1px solid var(--vscode-menu-border, var(--vscode-widget-border));
-    box-shadow:0 2px 8px var(--vscode-widget-shadow); }
-  #menu button { display:block; width:100%; height:24px; padding:2px 24px; text-align:left; border:0;
-    color:inherit; background:none; font:inherit; }
-  #menu button:hover, #menu button:focus { color:var(--vscode-menu-selectionForeground);
-    background:var(--vscode-menu-selectionBackground); outline:none; }
-  #menu hr { margin:4px 0; border:0; border-top:1px solid var(--vscode-menu-separatorBackground); }
+  ${MENU_CSS}
   ${SESSION_STATE_CSS}
   ${CTX_LEVEL_CSS}
 </style></head><body>
 <div id="tree" role="tree" aria-label="PenguPool sessions" tabindex="0"></div>
-<div id="menu" role="menu"></div>
+${MENU_HTML}
 <script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
   const tree = document.getElementById('tree');
-  const menu = document.getElementById('menu');
   const states = ${JSON.stringify(SESSION_STATES)};
   const revealLabel = ${JSON.stringify(REVEAL_LABEL)};
   ${CTX_LEVEL_JS}
-  let selected = '', dragged = '', menuId = '';
+  ${MENU_JS}
+  let selected = '', dragged = '';
   const collapsed = new Set();
 
-  const command = (name, id=menuId) => vscode.postMessage({type:'command', command:name, id});
   function rows(){ return [...tree.querySelectorAll('.row')]; }
   function select(id, notify=true){
     selected=id||''; rows().forEach(row => row.classList.toggle('selected', row.dataset.id===selected));
     if(notify) vscode.postMessage({type:'select', id:selected});
   }
-  function hideMenu(){ menu.style.display='none'; menu.innerHTML=''; }
-  function addMenuItem(label, cmd){
-    const button=document.createElement('button'); button.type='button'; button.role='menuitem';
-    button.textContent=label; button.dataset.command=cmd; button.addEventListener('click',()=>{ hideMenu(); command(cmd); });
-    menu.appendChild(button);
-  }
-  function showMenu(event, id){
-    event.preventDefault(); event.stopPropagation(); menuId=id||''; if(id) select(id);
-    hideMenu();
-    addMenuItem('New Session', 'pengupool.new');
-    addMenuItem('Add Previous Session…', 'pengupool.add');
-    addMenuItem('Resume Previous Sessions…', 'pengupool.resumePrevious');
-    if(id){
-      menu.appendChild(document.createElement('hr'));
-      addMenuItem('Open / Focus Session', 'pengupool.switch');
-      addMenuItem(revealLabel, 'pengupool.reveal');
-      addMenuItem('Group Under…', 'pengupool.group');
-      addMenuItem('Rename', 'pengupool.rename');
-      addMenuItem('Describe Role…', 'pengupool.describe');
-      addMenuItem('Compact (/compact)', 'pengupool.compact');
-      addMenuItem('Restart & Resume (Shift+R)', 'pengupool.restart');
-      menu.appendChild(document.createElement('hr'));
-      addMenuItem('Close', 'pengupool.close');
-    }
-    menu.style.display='block';
-    const box=menu.getBoundingClientRect();
-    menu.style.left=Math.max(2,Math.min(event.clientX,innerWidth-box.width-2))+'px';
-    menu.style.top=Math.max(2,Math.min(event.clientY,innerHeight-box.height-2))+'px';
-    menu.querySelector('button')?.focus();
-  }
-
   function renderNode(node, depth){
     const wrap=document.createElement('div');
     const row=document.createElement('div'); row.className='row state-'+node.state; row.dataset.id=node.id;
@@ -231,7 +176,7 @@ export function sessionsHtml(): string {
       closed?collapsed.add(node.id):collapsed.delete(node.id);
       twist.textContent=closed?'›':'⌄'; row.setAttribute('aria-expanded',String(!closed)); });
     row.addEventListener('click',()=>command('pengupool.switch',node.id));
-    row.addEventListener('contextmenu',event=>showMenu(event,node.id));
+    row.addEventListener('contextmenu',event=>{ select(node.id); showMenu(event,node.id,revealLabel); });
     row.addEventListener('dragstart',event=>{ dragged=node.id; event.dataTransfer?.setData('text/plain',node.id); });
     row.addEventListener('dragover',event=>event.preventDefault());
     row.addEventListener('drop',event=>{ event.preventDefault(); event.stopPropagation();
@@ -249,7 +194,7 @@ export function sessionsHtml(): string {
     tree.scrollTop=scroll;
   }
 
-  tree.addEventListener('contextmenu',event=>{ if(!event.target.closest('.row')) showMenu(event, null); });
+  tree.addEventListener('contextmenu',event=>{ if(!event.target.closest('.row')) showMenu(event, null, revealLabel); });
   tree.addEventListener('dragover',event=>event.preventDefault());
   tree.addEventListener('drop',event=>{ if(event.target.closest('.row')) return; event.preventDefault();
     if(dragged) vscode.postMessage({type:'group',source:dragged,target:''}); dragged=''; });
@@ -266,8 +211,6 @@ export function sessionsHtml(): string {
     const cmd=shortcuts[event.key]; if(cmd&&(!['g','r','x','c','R'].includes(event.key)||selected)){
       event.preventDefault(); command(cmd,selected); }
   });
-  document.addEventListener('pointerdown',event=>{ if(!menu.contains(event.target)) hideMenu(); });
-  document.addEventListener('keydown',event=>{ if(event.key==='Escape') hideMenu(); });
   window.addEventListener('message',event=>{ if(event.data?.type!=='snapshot') return;
     selected=event.data.selectedId||''; render(event.data.snapshot); if(event.data.focus) tree.focus(); });
   vscode.postMessage({type:'ready'});
