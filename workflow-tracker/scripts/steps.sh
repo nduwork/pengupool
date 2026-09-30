@@ -19,6 +19,9 @@
 #   steps.sh note [text]              set (or print) a one-line context note for the current chain
 #   steps.sh --selfcheck              run the built-in check
 #
+# --session <id> and --shared pick the tracker for one call: a session's own (see State below) or the
+# repo's shared one. They win over STEP_STATUS_SESSION, which is how a harness names the caller.
+#
 # A finished chain — no step active (all ✓, or stopped at a ✗, or the last step done past a
 # skipped ○) and not a loop — expires DONE_TTL seconds after its last update ($STEP_STATUS_DONE_TTL,
 # default 60). render prints nothing, start/done/fail/msg refuse it, and a bare `set` starts a new
@@ -26,11 +29,26 @@
 # files stay; `list` still shows it. A looping chain (one that has been `cycle`d) never expires:
 # it ends only with `set` or `clear`.
 #
-# State: $STEP_STATUS_DIR (default ./.step-status). `current` names the active chain (default:
+# State: one tracker per session, because two sessions in one directory must not read or advance each
+# other's chain. STEP_STATUS_SESSION names the session and the harnesses set it before the agent's own
+# calls (pi: the extension exports it into the session's tools; Claude Code: the SessionStart hook
+# appends it to $CLAUDE_ENV_FILE), so state lands in $STEP_STATUS_DIR/sessions/<id>/. Without a valid
+# key — a script, cron, or a human at a shell — the shared $STEP_STATUS_DIR is used, exactly as before,
+# and that is where chains predating this change still live. `current` names the active chain (default:
 # "default"); <chain>.state holds one step per line, <chain>.note an optional context line:
 #   <status>\t<name>\t<detail>     status ∈ planned|active|done|failed
 set -uo pipefail
-# ponytail: cwd-keyed — two sessions in one dir clobber each other; key by session if that bites.
+# --session <id> / --shared: pick the tracker for this one call, over the environment.
+_args=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --session) [[ $# -ge 2 ]] || { echo "steps.sh: --session needs an id" >&2; exit 2; }
+               STEP_STATUS_SESSION="$2"; shift 2 ;;
+    --shared)  STEP_STATUS_SESSION=""; shift ;;
+    *) _args+=("$1"); shift ;;
+  esac
+done
+set -- ${_args[@]+"${_args[@]}"}
 
 # STEP_STATUS_DIR overrides everything (selfcheck, callers). Otherwise, inside a git repo, use the
 # MAIN worktree root's .step-status so every linked worktree shares one tracker (matches PenguPool's
@@ -46,6 +64,12 @@ else
   fi
   DIR="${DIR:-$PWD/.step-status}"
 fi
+# Session keying: a valid id gets its own tracker under the shared directory, so two sessions in one
+# repo never share `current`, a chain or a note. An absent or malformed id means the shared directory.
+BASE="$DIR"
+SESSION="${STEP_STATUS_SESSION:-}"
+[[ "$SESSION" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] || SESSION=""   # same charset as valid_chain: no slash, no ..
+[[ -n "$SESSION" ]] && DIR="$BASE/sessions/$SESSION"
 CHAIN="$( [[ -f "$DIR/current" && ! -L "$DIR/current" ]] && head -c 200 "$DIR/current" | tr -d '\n' )"
 # `current` is repo-controlled: enforce the same charset as valid_chain() so a hostile
 # current file can't traverse out of $DIR (e.g. ../../foo) via $DIR/$CHAIN.state.
@@ -129,8 +153,8 @@ render() {
 
 # read_cycle — for a looping chain, echo "<body-first>\t<body-last>\t<count>" (first/last body
 # step in chain order); nothing if the chain isn't looping. The ↻ segment lives inside the chain.
-read_cycle() {                       # read_cycle [chain] — defaults to the current chain
-  local cf="$DIR/${1:-$CHAIN}.cycle" sf="$DIR/${1:-$CHAIN}.state" cnt body
+read_cycle() {                       # read_cycle [chain] [dir] — both default to the current chain/tracker
+  local cf="${2:-$DIR}/${1:-$CHAIN}.cycle" sf="${2:-$DIR}/${1:-$CHAIN}.state" cnt body
   [[ -f "$sf" && -f "$cf" && ! -L "$cf" ]] || return 0
   { IFS= read -r cnt; IFS= read -r body; } < "$cf"
   cnt="${cnt//[^0-9]/}"; cnt="${cnt:0:6}"; [[ -n "$cnt" ]] || return 0   # repo-controlled: strip + cap so junk can't overflow
@@ -161,19 +185,30 @@ use_chain() {
   printf '[%s] (empty — run 'set')\n' "$CHAIN"
 }
 
+# list_one <dir> <state-file> <prefix> — one line: "<prefix><*| > [chain] steps  # note". The marker
+# column belongs to the session's own section: a shared line carries the prefix instead.
+list_one() {
+  local dir="$1" f="$2" prefix="$3" n mark="" note bf="" bl="" cnt=""
+  [[ -f "$f" ]] || return 0
+  n="$(basename "$f" .state)"
+  valid_chain "$n" 2>/dev/null || return 0   # skip foreign *.state names (never ours; may carry control bytes)
+  if [[ -z "$prefix" ]]; then
+    mark="  "; [[ "$dir" == "$DIR" && "$n" == "$CHAIN" ]] && mark="* "
+  fi
+  note=""; [[ -f "$dir/$n.note" && ! -L "$dir/$n.note" ]] && note="$(head -n1 "$dir/$n.note" | tr -d '\000-\037\177')"
+  IFS=$'\t' read -r bf bl cnt <<<"$(read_cycle "$n" "$dir")"
+  printf '%s%s[%s] %s%s\n' "$prefix" "$mark" "$n" "$(render_file "$f" "$bf" "$bl" "$cnt")" "${note:+  # $note}"
+}
+
+# list_chains — this session's chains (`*` on its active one), then the repo's shared ones: what a
+# keyless caller (a script, cron, an older harness) writes, and where chains predating session keying
+# live. A keyless caller's DIR *is* BASE, so it prints one section, exactly as it always has.
 list_chains() {
-  [[ -d "$DIR" ]] || return 0
   safe_state || return 1
-  local f n mark note
-  for f in "$DIR"/*.state; do
-    [[ -f "$f" ]] || continue
-    n="$(basename "$f" .state)"
-    valid_chain "$n" 2>/dev/null || continue   # skip foreign *.state names (never ours; may carry control bytes)
-    mark=" "; [[ "$n" == "$CHAIN" ]] && mark="*"
-    note=""; [[ -f "$DIR/$n.note" && ! -L "$DIR/$n.note" ]] && note="$(head -n1 "$DIR/$n.note" | tr -d '\000-\037\177')"
-    local bf="" bl="" cnt=""; IFS=$'\t' read -r bf bl cnt <<<"$(read_cycle "$n")"
-    printf '%s [%s] %s%s\n' "$mark" "$n" "$(render_file "$f" "$bf" "$bl" "$cnt")" "${note:+  # $note}"
-  done
+  local f
+  [[ -d "$DIR" ]] && for f in "$DIR"/*.state; do list_one "$DIR" "$f" ""; done
+  [[ "$DIR" == "$BASE" || -L "$BASE" || ! -d "$BASE" ]] && return 0
+  for f in "$BASE"/*.state; do list_one "$BASE" "$f" "shared "; done
 }
 
 note_chain() {
@@ -492,6 +527,38 @@ selfcheck() {
   [[ "$(STEP_STATUS_DONE_TTL=100000 bash "$s" render)" == "[ttl] a ✓ → b ✓" ]] || fail "ttl-configurable"
   [[ -z "$(STEP_STATUS_DONE_TTL=08 bash "$s" render 2>&1)" ]] || fail "ttl-leading-zero"
   bash "$s" clear; bash "$s" use default >/dev/null
+  # sessions: one tracker per session id, so two sessions in one repo never share a chain, `current`
+  # or note, while a keyless caller keeps the shared tracker it has always used
+  bash "$s" set --name shared repo-step >/dev/null
+  STEP_STATUS_SESSION=aaa bash "$s" set --name s1 one two >/dev/null
+  STEP_STATUS_SESSION=bbb bash "$s" set --name s2 x y >/dev/null
+  [[ "$(STEP_STATUS_SESSION=aaa bash "$s" render)" == "[s1] one ● → two ○" ]] || fail "session-a: $(STEP_STATUS_SESSION=aaa bash "$s" render)"
+  [[ "$(STEP_STATUS_SESSION=bbb bash "$s" render)" == "[s2] x ● → y ○" ]] || fail "session-b: $(STEP_STATUS_SESSION=bbb bash "$s" render)"
+  STEP_STATUS_SESSION=aaa bash "$s" done one >/dev/null
+  [[ "$(STEP_STATUS_SESSION=bbb bash "$s" render)" == "[s2] x ● → y ○" ]] || fail "session-isolation: b moved with a: $(STEP_STATUS_SESSION=bbb bash "$s" render)"
+  [[ "$(r)" == "[shared] repo-step ●" ]] || fail "session-shared-untouched: $(r)"
+  L="$(STEP_STATUS_SESSION=aaa bash "$s" list)"
+  [[ "$L" == "* [s1] one ✓ → two ●"$'\n'* ]] || fail "session-list-first: $L"
+  [[ "$L" == *"shared [shared] repo-step ●"* ]] || fail "session-list-shared: $L"
+  [[ "$(cat "$d/sessions/aaa/current")" == s1 ]] || fail session-current-file
+  STEP_STATUS_SESSION=bbb bash "$s" use s2 >/dev/null
+  [[ "$(STEP_STATUS_SESSION=aaa bash "$s" use s1)" == "[s1] one ✓ → two ●" ]] || fail session-use
+  STEP_STATUS_SESSION=aaa bash "$s" clear; [[ -z "$(STEP_STATUS_SESSION=aaa bash "$s" render)" ]] || fail session-clear
+  [[ "$(r)" == "[shared] repo-step ●" ]] || fail "session-clear-left-shared: $(r)"
+  L="$(STEP_STATUS_SESSION=aaa bash "$s" list)"
+  [[ "$L" == "shared "* && "$L" == *"shared [shared] repo-step ●"* && "$L" != *s1* ]] || fail "session-list-after-clear: $L"
+  # the flags win over the environment; a malformed id falls back to the shared tracker, never escapes
+  [[ "$(STEP_STATUS_SESSION=aaa bash "$s" --shared render)" == "[shared] repo-step ●" ]] || fail flag-shared
+  [[ "$(bash "$s" --session bbb render)" == "[s2] x ● → y ○" ]] || fail flag-session
+  bash "$s" --session 2>/dev/null && fail session-flag-without-id
+  [[ "$(STEP_STATUS_SESSION='../evil' bash "$s" render)" == "[shared] repo-step ●" ]] || fail bad-session-fallback
+  [[ ! -e "$d/evil" && ! -e "$d/sessions/../evil" ]] || fail bad-session-escaped
+  [[ "$(STEP_STATUS_SESSION='a/b' bash "$s" render)" == "[shared] repo-step ●" ]] || fail bad-session-slash
+  [[ ! -d "$d/sessions/a" ]] || fail bad-session-created-dir
+  # a symlinked session tracker is refused, never written into
+  ln -sfn /tmp "$d/sessions/link"
+  STEP_STATUS_SESSION=link bash "$s" set x 2>/dev/null && fail symlink-session-followed
+  rm -f "$d/sessions/link"
   rm -rf "$root"; echo "selfcheck OK"
 }
 
