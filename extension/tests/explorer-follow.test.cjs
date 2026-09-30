@@ -12,7 +12,7 @@ function transpile(name) {
   }).outputText;
 }
 
-/** Fake window: roots the workspace has, what was asked of VS Code, and the remembered session root. */
+/** Fake window: its roots, what was asked of VS Code, and the remembered session root. */
 function window(options = {}) {
   const calls = [], folders = (options.folders ?? []).map((fsPath) => ({
     uri: { fsPath, toString: () => 'file://' + fsPath },
@@ -22,9 +22,7 @@ function window(options = {}) {
     Uri: { file: (fsPath) => ({ fsPath, toString: () => 'file://' + fsPath }) },
     commands: { executeCommand: async (...args) => { calls.push(['executeCommand', ...args]); } },
     workspace: {
-      get configuration() { return undefined; },   // replaced below
-      getConfiguration: () => ({ get: (key, fallback) => key === 'explorerSessionRoot'
-        ? (options.roots ?? false) : (options.follow ?? fallback) }),
+      getConfiguration: () => ({ get: (key, fallback) => key === 'sessionFolder' ? (options.mode ?? fallback) : fallback }),
       get workspaceFolders() { return folders.length ? folders : undefined; },
       getWorkspaceFolder: (uri) => folders.find((folder) => uri.fsPath === folder.uri.fsPath
         || uri.fsPath.startsWith(folder.uri.fsPath + '/')),
@@ -37,10 +35,7 @@ function window(options = {}) {
       },
     },
   };
-  const state = {
-    get: (key) => saved.get(key),
-    update: async (key, value) => { saved.set(key, value); },
-  };
+  const state = { get: (key) => saved.get(key), update: async (key, value) => { saved.set(key, value); } };
   const exports = {};
   vm.runInNewContext(transpile('explorer'), {
     exports, require: (id) => (id === 'vscode' ? vscode : {}), setTimeout, Promise,
@@ -48,26 +43,44 @@ function window(options = {}) {
   return { follow: new exports.ExplorerFollow(state).follow.bind(new exports.ExplorerFollow(state)), calls, folders, saved };
 }
 
-const reveal = (calls) => calls.filter((call) => call[0] === 'executeCommand' && call[1] === 'revealInExplorer');
+const revealed = (calls) => calls.filter((call) => call[0] === 'executeCommand' && call[1] === 'revealInExplorer');
 const folderChanges = (calls) => calls.filter((call) => call[0] === 'updateWorkspaceFolders');
+const opened = (calls) => calls.filter((call) => call[0] === 'executeCommand' && call[1] === 'vscode.openFolder');
 
-test('a session folder inside the window is revealed without touching the workspace', async () => {
-  const w = window({ folders: ['/repos/pool'], follow: true });
+test('reveal: a session folder inside the window is revealed without touching the workspace', async () => {
+  const w = window({ folders: ['/repos/pool'] });
   await w.follow('/repos/pool/wt-lead');
-  assert.equal(reveal(w.calls).length, 1);
+  assert.equal(revealed(w.calls).length, 1);
   assert.deepEqual(folderChanges(w.calls), []);
   assert.equal(w.saved.size, 0);
 });
 
-test('a folder outside the window is left alone unless the window may take an extra root', async () => {
-  const w = window({ folders: ['/repos/pool'], follow: true });
+test('reveal: a folder outside the window is left alone — no reload, no workspace change', async () => {
+  const w = window({ folders: ['/repos/pool'] });
   await w.follow('/repos/other/wt-lead');
-  assert.deepEqual(w.calls, []);            // no reveal, and above all no "UNTITLED (WORKSPACE)" window
+  assert.deepEqual(w.calls, []);
   assert.equal(w.saved.size, 0);
 });
 
-test('a session folder outside the workspace is added and then revealed when that is opted in', async () => {
-  const w = window({ folders: ['/repos/pool'], follow: true, roots: true });
+test('window: an outside folder becomes this window\'s folder, in place', async () => {
+  const w = window({ folders: ['/repos/pool'], mode: 'window' });
+  await w.follow('/repos/other/wt-lead');
+  const [open] = opened(w.calls);
+  assert.equal(open[2].fsPath, '/repos/other/wt-lead');
+  assert.equal(open[3].forceReuseWindow, true);
+  assert.deepEqual(revealed(w.calls), []);        // the reload brings the Explorer up on it
+  assert.deepEqual(folderChanges(w.calls), []);
+});
+
+test('window: a folder the window already has is only revealed', async () => {
+  const w = window({ folders: ['/repos/pool'], mode: 'window' });
+  await w.follow('/repos/pool/wt-lead');
+  assert.equal(revealed(w.calls).length, 1);
+  assert.deepEqual(opened(w.calls), []);
+});
+
+test('roots: an outside folder is added and then revealed', async () => {
+  const w = window({ folders: ['/repos/pool'], mode: 'roots' });
   await w.follow('/repos/other/wt-lead');
   assert.deepEqual(folderChanges(w.calls), [['updateWorkspaceFolders', 1, 0, '/repos/other/wt-lead']]);
   assert.deepEqual(w.saved.get('pengupool.explorerSessionRoot'), 'file:///repos/other/wt-lead');
@@ -75,50 +88,50 @@ test('a session folder outside the workspace is added and then revealed when tha
   assert.deepEqual(w.calls.map((call) => call[0]), ['updateWorkspaceFolders', 'executeCommand']);
 });
 
-test('the next session replaces the session root instead of piling up a second one', async () => {
+test('roots: the next session replaces the session root instead of piling up a second one', async () => {
   const w = window({
     folders: ['/repos/pool', '/repos/other/wt-lead'],
     saved: [['pengupool.explorerSessionRoot', 'file:///repos/other/wt-lead']],
-    follow: true, roots: true,
+    mode: 'roots',
   });
   await w.follow('/repos/third/wt-api');
   assert.deepEqual(folderChanges(w.calls), [['updateWorkspaceFolders', 1, 1, '/repos/third/wt-api']]);
   assert.deepEqual(w.folders.map((folder) => folder.uri.fsPath), ['/repos/pool', '/repos/third/wt-api']);
 });
 
-test('a session root the user removed is not resurrected, the new folder is appended', async () => {
+test('roots: a session root the user removed is not resurrected', async () => {
   const w = window({
     folders: ['/repos/pool'],
-    saved: [['pengupool.explorerSessionRoot', 'file:///repos/gone'] ],
-    follow: true, roots: true,
+    saved: [['pengupool.explorerSessionRoot', 'file:///repos/gone']],
+    mode: 'roots',
   });
   await w.follow('/repos/other/wt-lead');
   assert.deepEqual(folderChanges(w.calls), [['updateWorkspaceFolders', 1, 0, '/repos/other/wt-lead']]);
-  assert.equal(reveal(w.calls).length, 1);
+  assert.equal(revealed(w.calls).length, 1);
 });
 
-test('an empty window takes the session folder as its root when that is opted in', async () => {
-  const w = window({ folders: [], follow: true, roots: true });
+test('roots: an empty window takes the session folder as its root', async () => {
+  const w = window({ folders: [], mode: 'roots' });
   await w.follow('/repos/pool/wt-lead');
   assert.deepEqual(folderChanges(w.calls), [['updateWorkspaceFolders', 0, 0, '/repos/pool/wt-lead']]);
-  assert.equal(reveal(w.calls).length, 1);
+  assert.equal(revealed(w.calls).length, 1);
 });
 
-test('a refused folder is neither revealed nor remembered', async () => {
-  const w = window({ folders: ['/repos/pool'], follow: true, roots: true, refuse: true });
+test('roots: a refused folder is neither revealed nor remembered', async () => {
+  const w = window({ folders: ['/repos/pool'], mode: 'roots', refuse: true });
   await w.follow('/repos/other/wt-lead');
-  assert.deepEqual(reveal(w.calls), []);
+  assert.deepEqual(revealed(w.calls), []);
   assert.equal(w.saved.size, 0);
 });
 
-test('turning explorerFollow off leaves the Explorer alone', async () => {
-  const w = window({ folders: ['/repos/pool'], follow: false });
+test('off: the Explorer is left alone even for a folder it already has', async () => {
+  const w = window({ folders: ['/repos/pool'], mode: 'off' });
   await w.follow('/repos/pool/wt-lead');
   assert.deepEqual(w.calls, []);
 });
 
 test('a session without a folder is left alone', async () => {
-  const w = window({ folders: ['/repos/pool'], follow: true });
+  const w = window({ folders: ['/repos/pool'] });
   await w.follow('');
   assert.deepEqual(w.calls, []);
 });
@@ -138,9 +151,9 @@ function commands(order) {
     tree: { selection: [], reveal: async () => { order.push('sessions list'); } },
     explorer: { follow: async () => { order.push('explorer'); } },
   };
-  const exports = {};
+  const mod = {};
   vm.runInNewContext(transpile('commands'), {
-    exports, process,
+    exports: mod, process,
     require: (id) => {
       if (id === 'vscode') { return vscode; }
       if (id === './mapPanel') { return { MapPanel: { showIfOpen: () => undefined } }; }
@@ -148,7 +161,7 @@ function commands(order) {
       return {};
     },
   }, { filename: 'commands.ts' });
-  exports.registerCommands({ subscriptions: [], globalState: { get: () => undefined, update: async () => {} } }, deps);
+  mod.registerCommands({ subscriptions: [], globalState: { get: () => undefined, update: async () => {} } }, deps);
   return handlers;
 }
 

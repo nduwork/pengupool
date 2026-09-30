@@ -212,15 +212,17 @@
           "default": "pengupool",
           "description": "Path to the pengupool CLI. `<command> serve` streams NDJSON; `<command> ctl …` runs mutations."
         },
-        "pengupool.explorerFollow": {
-          "type": "boolean",
-          "default": true,
-          "description": "Reveal the focused session's folder in the Explorer when this window already contains it."
-        },
-        "pengupool.explorerSessionRoot": {
-          "type": "boolean",
-          "default": false,
-          "description": "Also reveal a session's folder when this window does not contain it by adding it as an extra workspace folder. VS Code turns a single-folder window into an unsaved multi-folder (\"untitled\") workspace when this happens, so it is off by default: use Open Session Folder in a New Window instead, or switch to that window instead. The next session replaces the session folder this added; folders you added yourself are never touched."
+        "pengupool.sessionFolder": {
+          "type": "string",
+          "enum": ["reveal", "window", "roots", "off"],
+          "default": "reveal",
+          "enumDescriptions": [
+            "Reveal the session's folder in the Explorer when this window already contains it.",
+            "Make the session's folder this window's own folder, so the Explorer shows it in place. The window reloads and comes back on the session you clicked.",
+            "Add the session's folder as an extra workspace folder. This turns the window into an unsaved \"UNTITLED (WORKSPACE)\" multi-folder workspace.",
+            "Leave this window's Explorer alone."
+          ],
+          "description": "What selecting a session does to this window's Explorer."
         }
       }
     }

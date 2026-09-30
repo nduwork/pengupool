@@ -17,6 +17,15 @@ test('Reveal Session Folder is contributed for the command palette', () => {
   assert.equal(command.title, 'PenguPool: Reveal Session Folder');
 });
 
+test('the Explorer follows a single mode setting, not two flags', () => {
+  const properties = manifest.contributes.configuration.properties;
+  const mode = properties['pengupool.sessionFolder'];
+  assert.deepEqual(mode.enum, ['reveal', 'window', 'roots', 'off']);
+  assert.equal(mode.default, 'reveal');
+  assert.equal(properties['pengupool.explorerFollow'], undefined);
+  assert.equal(properties['pengupool.explorerSessionRoot'], undefined);
+});
+
 test('every session command the Sessions webview runs is contributed by the manifest', () => {
   const source = fs.readFileSync(path.join(__dirname, '../src/sessionsView.ts'), 'utf8');
   const contributed = new Set(manifest.contributes.commands.map((item) => item.command));

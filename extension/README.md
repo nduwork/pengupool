@@ -44,12 +44,13 @@ Drag a session row onto another row to group it underneath, or onto empty tree s
 top level. Click a map node to select the matching sidebar row and show that session in the shared
 terminal; focused map nodes also respond to Enter and Space.
 Right-click a session row for its actions. Right-click empty space in Sessions to create a new
-session or add a previous one. Selecting a session also reveals its folder in the Explorer, as long as
-this window already contains it (`pengupool.explorerFollow` turns that off). A folder outside the
-window gets no reveal: holding one means VS Code turns a single-folder window into an unsaved,
-"UNTITLED (WORKSPACE)" multi-folder workspace, so that stays behind `pengupool.explorerSessionRoot`,
-off by default. **Open Folder in New Window** (right-click) gives a session's folder a window of its
-own instead.
+session or add a previous one. Selecting a session also makes the
+Explorer show its folder, per `pengupool.sessionFolder`: **reveal** (the default) shows it when this
+window already contains it; **window** makes the session's folder this window's own folder, so it
+lands in place — the window reloads and comes back on the session you clicked; **roots** adds it as an
+extra workspace folder, which turns the window into an unsaved "UNTITLED (WORKSPACE)" multi-folder
+workspace; **off** leaves this window's Explorer alone. **Open Folder in New Window** (right-click)
+gives a session's folder a window of its own instead.
 The list and map share state cues: `● Active`, `◷ Waiting`, `○ Stale`, and `? Approval`.
 The map marks the selected session with a separate focus outline. The top of each tree carries a `LEAD`
 tag. Sessions outside every tree have a dashed border and stack in an **Ungrouped** column on the right,

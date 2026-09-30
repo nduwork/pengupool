@@ -1,24 +1,31 @@
 import * as vscode from 'vscode';
 
-const SETTING = 'explorerFollow';
-const ROOT_SETTING = 'explorerSessionRoot';
-const ROOT_STATE_KEY = 'pengupool.explorerSessionRoot';   // what the earlier build recorded for a window
+const SETTING = 'sessionFolder';
+const ROOT_STATE_KEY = 'pengupool.explorerSessionRoot';   // what an earlier build recorded for a window
 const ROOT_SETTLE_MS = 100;
 
-/** Keeps the Explorer on the focused session's folder. Revealing a folder this window does not
- *  contain is only possible once the window stops being single-folder, and VS Code turns that into an
- *  unsaved ("UNTITLED (WORKSPACE)") multi-root workspace — so it is opt-in via `explorerSessionRoot`,
- *  it replaces one session root at a time, and the folder the window was opened on is never touched. */
+/** What selecting a session does to the Explorer, from `pengupool.sessionFolder`. VS Code shows a
+ *  folder in the Explorer only when the window contains it, so a folder the window does not contain
+ *  has exactly two ways in: make it the window's own folder (in place, and the window reloads onto it)
+ *  or add it as one extra workspace folder (which turns the window into an unsaved multi-folder one). */
+export type SessionFolderMode = 'reveal' | 'window' | 'roots' | 'off';
+
 export class ExplorerFollow {
   constructor(private readonly state: vscode.Memento) {}
 
   async follow(cwd: string): Promise<void> {
-    if (!cwd || !this.setting(SETTING, true)) { return; }
+    const mode = this.mode();
+    if (!cwd || mode === 'off') { return; }
     const uri = vscode.Uri.file(cwd);
     try {
       if (!vscode.workspace.getWorkspaceFolder(uri)) {
-        if (!this.setting(ROOT_SETTING, false)) { return; }   // leave the window's workspace alone
-        if (!(await this.addRoot(uri))) { return; }            // the window refused the folder
+        if (mode === 'reveal') { return; }                     // leave the window's workspace alone
+        if (mode === 'window') {
+          // Replaces this window's folder: the Explorer lands on the session in place.
+          await vscode.commands.executeCommand('vscode.openFolder', uri, { forceReuseWindow: true });
+          return;
+        }
+        if (!(await this.addRoot(uri))) { return; }             // the window refused the folder
         // The new root reaches the Explorer asynchronously, and a reveal before that finds nothing.
         await new Promise((resolve) => setTimeout(resolve, ROOT_SETTLE_MS));
       }
@@ -26,8 +33,9 @@ export class ExplorerFollow {
     } catch { /* the Explorer view is a convenience: a refused reveal must not interrupt the switch */ }
   }
 
-  private setting(key: string, fallback: boolean): boolean {
-    return vscode.workspace.getConfiguration('pengupool').get<boolean>(key, fallback);
+  private mode(): SessionFolderMode {
+    const value = vscode.workspace.getConfiguration('pengupool').get<string>(SETTING, 'reveal');
+    return value === 'window' || value === 'roots' || value === 'off' ? value : 'reveal';
   }
 
   /** Replaces the session root added last time, or appends this folder when there is none to replace. */
