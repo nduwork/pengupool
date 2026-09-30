@@ -5,6 +5,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-30
+
+### Added
+- right-click the map for the session menu (#65)
+
+- Editor extension: 0.5.0 (install both with `install.sh`; they ship together in this tag).
 ## [0.7.1] - 2026-09-30
 
 ### Added

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.0
+
+- right-click the map for the session menu (#65)
+
+Ships with PenguPool v0.8.0.
+
 ## 0.4.0
 
 - resume every previous session after a restart (#64)
