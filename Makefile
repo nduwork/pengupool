@@ -19,7 +19,7 @@ EDITOR_CLI ?=
 EDITOR_RUN = EDITOR_CLI="$(EDITOR_CLI)" python3 scripts/editor_cli.py
 VSIX ?= $(or $(TMPDIR),/tmp)/pengupool-local.vsix
 
-.PHONY: install uninstall check-install install-all uninstall-all install-hooks uninstall-hooks install-tracker uninstall-tracker selfcheck ext-deps ext-compile ext-package ext-install ext-uninstall
+.PHONY: install uninstall check-install install-all uninstall-all install-hooks uninstall-hooks install-tracker uninstall-tracker selfcheck test ext-deps ext-test ext-compile ext-package ext-install ext-uninstall
 
 install:
 	$(UV) tool install --force $(UV_INSTALL_FLAGS) .
@@ -75,6 +75,11 @@ selfcheck:
 	bash "$(WT)/wire_statusline.sh" --selfcheck
 	bash "$(WT)/steps.sh" --selfcheck
 
+# Both suites. A fresh clone or git worktree has no extension/node_modules, so run make ext-deps once.
+test:
+	uv run pytest -q
+	$(MAKE) ext-test
+
 # Dependency setup is explicit; routine rebuilds reuse the installed toolchain.
 ext-deps:
 	cd "$(EXT)" && npm ci
@@ -82,6 +87,12 @@ ext-deps:
 ext-compile:
 	@test -f "$(EXT)/node_modules/typescript/bin/tsc" || { echo "Run make ext-deps first." >&2; exit 1; }
 	cd "$(EXT)" && npm run compile
+
+# The tests transpile TypeScript in-process, so they need node_modules exactly like the build does.
+# Without them each file that imports the source dies as a module error, not as a test failure.
+ext-test:
+	@test -f "$(EXT)/node_modules/typescript/bin/tsc" || { echo "Run make ext-deps first." >&2; exit 1; }
+	cd "$(EXT)" && npm test
 
 ext-package: ext-compile
 	cd "$(EXT)" && npm run package -- --out "$(VSIX)"

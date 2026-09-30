@@ -148,6 +148,7 @@ From the repository root:
 
 ```sh
 make ext-deps
+make ext-test        # the suite; needs ext-deps like the build does
 make ext-compile      # then press F5 in VS Code for an Extension Development Host
 make ext-package     # builds a VSIX in the system temporary directory
 ```
