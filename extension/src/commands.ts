@@ -9,7 +9,9 @@ import { MapPanel } from './mapPanel';
 import { LogPanel } from './logPanel';
 
 const LAST_ADD_PATH_KEY = 'pengupool.lastAddPath';
-
+/** Set just before opening a session's folder in its own window: that window then reveals the pool. */
+export const FOCUS_VIEW_KEY = 'pengupool.focusViewOnOpen';
+export const FOCUS_VIEW_WINDOW_MS = 30_000;
 const HARNESS_LABEL: Record<Harness, string> = { cc: 'Claude Code', pi: 'pi' };
 
 export function lastAddDirectory(context: vscode.ExtensionContext, fallback: vscode.Uri): vscode.Uri {
@@ -73,7 +75,9 @@ export function registerCommands(context: vscode.ExtensionContext, d: Deps): voi
     const n = sel(node);
     if (!n) { return; }
     if (!n.cwd) { vscode.window.showErrorMessage(`PenguPool: "${n.name}" has no folder to open.`); return; }
-    // A window of its own: the current window keeps its folders instead of becoming a multi-root one.
+    // A window of its own: VS Code cannot replace this window's folder. The new window is told to
+    // reveal the Sessions view, so it comes up on the pool instead of an empty sidebar.
+    await context.globalState.update(FOCUS_VIEW_KEY, JSON.stringify({ cwd: n.cwd, at: Date.now() }));
     await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(n.cwd), { forceNewWindow: true });
   });
 

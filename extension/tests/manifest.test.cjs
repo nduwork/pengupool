@@ -20,7 +20,7 @@ test('Reveal Session Folder is contributed for the command palette', () => {
 test('the Explorer follows a single mode setting, not two flags', () => {
   const properties = manifest.contributes.configuration.properties;
   const mode = properties['pengupool.sessionFolder'];
-  assert.deepEqual(mode.enum, ['reveal', 'window', 'roots', 'off']);
+  assert.deepEqual(mode.enum, ['reveal', 'roots', 'off']);
   assert.equal(mode.default, 'reveal');
   assert.equal(properties['pengupool.explorerFollow'], undefined);
   assert.equal(properties['pengupool.explorerSessionRoot'], undefined);

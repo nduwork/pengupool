@@ -46,11 +46,11 @@ terminal; focused map nodes also respond to Enter and Space.
 Right-click a session row for its actions. Right-click empty space in Sessions to create a new
 session or add a previous one. Selecting a session also makes the
 Explorer show its folder, per `pengupool.sessionFolder`: **reveal** (the default) shows it when this
-window already contains it; **window** makes the session's folder this window's own folder, so it
-lands in place — the window reloads and comes back on the session you clicked; **roots** adds it as an
-extra workspace folder, which turns the window into an unsaved "UNTITLED (WORKSPACE)" multi-folder
-workspace; **off** leaves this window's Explorer alone. **Open Folder in New Window** (right-click)
-gives a session's folder a window of its own instead.
+window already contains it; **roots** adds it as an extra workspace folder, so a folder outside the
+window shows up in place — VS Code labels such a window an unsaved "UNTITLED (WORKSPACE)" multi-folder
+one, and it has no way to replace this window's own folder; **off** leaves this window's Explorer
+alone. **Open Folder in New Window** (right-click) gives a session's folder a window of its own, and
+that window comes up on the Sessions view.
 The list and map share state cues: `● Active`, `◷ Waiting`, `○ Stale`, and `? Approval`.
 The map marks the selected session with a separate focus outline. The top of each tree carries a `LEAD`
 tag. Sessions outside every tree have a dashed border and stack in an **Ungrouped** column on the right,

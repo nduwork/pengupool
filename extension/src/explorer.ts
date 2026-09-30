@@ -5,10 +5,11 @@ const ROOT_STATE_KEY = 'pengupool.explorerSessionRoot';   // what an earlier bui
 const ROOT_SETTLE_MS = 100;
 
 /** What selecting a session does to the Explorer, from `pengupool.sessionFolder`. VS Code shows a
- *  folder in the Explorer only when the window contains it, so a folder the window does not contain
- *  has exactly two ways in: make it the window's own folder (in place, and the window reloads onto it)
- *  or add it as one extra workspace folder (which turns the window into an unsaved multi-folder one). */
-export type SessionFolderMode = 'reveal' | 'window' | 'roots' | 'off';
+ *  folder in the Explorer only when the window contains it, and it has no API to replace a window's
+ *  own folder, so showing a foreign folder in place means adding it as one extra workspace folder
+ *  (which makes the window an unsaved multi-folder one) — or opening a window for it (see
+ *  `pengupool.openSessionWindow`). */
+export type SessionFolderMode = 'reveal' | 'roots' | 'off';
 
 export class ExplorerFollow {
   constructor(private readonly state: vscode.Memento) {}
@@ -20,11 +21,6 @@ export class ExplorerFollow {
     try {
       if (!vscode.workspace.getWorkspaceFolder(uri)) {
         if (mode === 'reveal') { return; }                     // leave the window's workspace alone
-        if (mode === 'window') {
-          // Replaces this window's folder: the Explorer lands on the session in place.
-          await vscode.commands.executeCommand('vscode.openFolder', uri, { forceReuseWindow: true });
-          return;
-        }
         if (!(await this.addRoot(uri))) { return; }             // the window refused the folder
         // The new root reaches the Explorer asynchronously, and a reveal before that finds nothing.
         await new Promise((resolve) => setTimeout(resolve, ROOT_SETTLE_MS));
@@ -35,7 +31,7 @@ export class ExplorerFollow {
 
   private mode(): SessionFolderMode {
     const value = vscode.workspace.getConfiguration('pengupool').get<string>(SETTING, 'reveal');
-    return value === 'window' || value === 'roots' || value === 'off' ? value : 'reveal';
+    return value === 'roots' || value === 'off' ? value : 'reveal';
   }
 
   /** Replaces the session root added last time, or appends this folder when there is none to replace. */

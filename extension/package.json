@@ -214,15 +214,14 @@
         },
         "pengupool.sessionFolder": {
           "type": "string",
-          "enum": ["reveal", "window", "roots", "off"],
+          "enum": ["reveal", "roots", "off"],
           "default": "reveal",
           "enumDescriptions": [
             "Reveal the session's folder in the Explorer when this window already contains it.",
-            "Make the session's folder this window's own folder, so the Explorer shows it in place. The window reloads and comes back on the session you clicked.",
-            "Add the session's folder as an extra workspace folder. This turns the window into an unsaved \"UNTITLED (WORKSPACE)\" multi-folder workspace.",
+            "Show the session's folder in this window's Explorer by adding it as an extra workspace folder. VS Code calls a window with an unsaved extra folder an \"UNTITLED (WORKSPACE)\" multi-folder workspace; it has no way to replace this window's own folder, so that label and the extra folder come together, and the next session replaces the folder this added.",
             "Leave this window's Explorer alone."
           ],
-          "description": "What selecting a session does to this window's Explorer."
+          "description": "What selecting a session does to this window's Explorer. Use 'PenguPool: Open Session Folder in a New Window' for the session's folder on its own."
         }
       }
     }

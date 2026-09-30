@@ -45,7 +45,6 @@ function window(options = {}) {
 
 const revealed = (calls) => calls.filter((call) => call[0] === 'executeCommand' && call[1] === 'revealInExplorer');
 const folderChanges = (calls) => calls.filter((call) => call[0] === 'updateWorkspaceFolders');
-const opened = (calls) => calls.filter((call) => call[0] === 'executeCommand' && call[1] === 'vscode.openFolder');
 
 test('reveal: a session folder inside the window is revealed without touching the workspace', async () => {
   const w = window({ folders: ['/repos/pool'] });
@@ -60,23 +59,6 @@ test('reveal: a folder outside the window is left alone — no reload, no worksp
   await w.follow('/repos/other/wt-lead');
   assert.deepEqual(w.calls, []);
   assert.equal(w.saved.size, 0);
-});
-
-test('window: an outside folder becomes this window\'s folder, in place', async () => {
-  const w = window({ folders: ['/repos/pool'], mode: 'window' });
-  await w.follow('/repos/other/wt-lead');
-  const [open] = opened(w.calls);
-  assert.equal(open[2].fsPath, '/repos/other/wt-lead');
-  assert.equal(open[3].forceReuseWindow, true);
-  assert.deepEqual(revealed(w.calls), []);        // the reload brings the Explorer up on it
-  assert.deepEqual(folderChanges(w.calls), []);
-});
-
-test('window: a folder the window already has is only revealed', async () => {
-  const w = window({ folders: ['/repos/pool'], mode: 'window' });
-  await w.follow('/repos/pool/wt-lead');
-  assert.equal(revealed(w.calls).length, 1);
-  assert.deepEqual(opened(w.calls), []);
 });
 
 test('roots: an outside folder is added and then revealed', async () => {
@@ -127,6 +109,12 @@ test('roots: a refused folder is neither revealed nor remembered', async () => {
 test('off: the Explorer is left alone even for a folder it already has', async () => {
   const w = window({ folders: ['/repos/pool'], mode: 'off' });
   await w.follow('/repos/pool/wt-lead');
+  assert.deepEqual(w.calls, []);
+});
+
+test('an unknown mode falls back to reveal instead of touching the workspace', async () => {
+  const w = window({ folders: ['/repos/pool'], mode: 'window' });   // what a build of mine once wrote
+  await w.follow('/repos/other/wt-lead');
   assert.deepEqual(w.calls, []);
 });
 
