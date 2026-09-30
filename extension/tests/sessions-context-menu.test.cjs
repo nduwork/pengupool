@@ -61,7 +61,7 @@ test('Sessions webview offers New and Add Previous from background right-click',
 
 test('Sessions webview preserves row actions, keyboard activation, and drag grouping', () => {
   const source = fs.readFileSync(path.join(__dirname, '../src/sessionsView.ts'), 'utf8');
-  for (const command of ['switch', 'reveal', 'openSessionWindow', 'group', 'rename', 'compact', 'restart', 'close']) {
+  for (const command of ['switch', 'reveal', 'group', 'rename', 'compact', 'restart', 'close']) {
     assert.match(source, new RegExp(`pengupool\\.${command}`));
   }
   assert.match(source, /addEventListener\('keydown'/);

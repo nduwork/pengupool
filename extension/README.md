@@ -30,7 +30,7 @@ Or step by step:
    make check-install
    ```
 
-3. Reload the VS Code window and open the PenguPool Activity Bar view. If `pengupool` is not on the
+3. Reload the VS Code window and open the Sessions view in the Explorer. If `pengupool` is not on the
    extension host's `PATH`, set `pengupool.command` to the absolute path of the CLI.
 
 To update the backend, pull the repository and rerun `make install`. The extension and backend
@@ -49,8 +49,7 @@ Explorer show its folder, per `pengupool.sessionFolder`: **reveal** (the default
 window already contains it; **roots** adds it as an extra workspace folder, so a folder outside the
 window shows up in place — VS Code labels such a window an unsaved "UNTITLED (WORKSPACE)" multi-folder
 one, and it has no way to replace this window's own folder; **off** leaves this window's Explorer
-alone. **Open Folder in New Window** (right-click) gives a session's folder a window of its own, and
-that window comes up on the Sessions view.
+alone. The session lists sit in the Explorer sidebar, so opening the Explorer never hides them.
 The list and map share state cues: `● Active`, `◷ Waiting`, `○ Stale`, and `? Approval`.
 The map marks the selected session with a separate focus outline. The top of each tree carries a `LEAD`
 tag. Sessions outside every tree have a dashed border and stack in an **Ungrouped** column on the right,
@@ -104,7 +103,7 @@ outside the server is taken over via `ctl adopt` (stop → resume, no fork), and
 via "Add previous". Operations, command-palette quick-switch, and the map/log webviews are wired through
 `pengupool serve` + `pengupool ctl`.
 
-On the first reveal of the PenguPool Activity Bar view, the extension opens the working layout:
+On the first reveal of the Sessions view, the extension opens the working layout:
 Sessions and Shortcuts stay in the sidebar, Map opens in the first editor group, Log opens beside
 it, and the selected session appears in the bottom terminal panel. This runs
 once per extension activation, so later manual editor and panel rearrangement is preserved.
@@ -114,7 +113,7 @@ tmux copy-mode and scrolls the session's history instead of being translated by 
 key presses, and a left-drag selects text and copies it on release. Right-click copies the word under
 the pointer; tmux's pane menu (Split, Kill, Respawn…) is not shown, because those act on a window the
 extension owns. The terminal is transient: VS Code does not restore it as a stale zsh terminal after a
-window reload; PenguPool creates a fresh client when its Activity Bar view is revealed again.
+window reload; PenguPool creates a fresh client when its view is revealed again.
 Log timestamps use the machine's local timezone and the compact `MM/DD/YYYY-HH:mm:ss` format.
 In the PenguPool Claude terminal, Shift+Enter sends Claude's multiline sequence while Enter submits. To
 copy terminal text on selection, enable VS Code's `terminal.integrated.copyOnSelection` setting.

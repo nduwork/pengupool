@@ -30,7 +30,7 @@ make install-all    # backend + extension (EDITOR_CLI=code|cursor to choose)
 
 ## Use
 
-Open the PenguPool view (penguin icon in the Activity Bar). The Sessions tree lists Claude Code sessions, and a pi Sessions tree appears when pi is installed. Select a session to show it in the PenguPool terminal; the Map and Log panels show the selected tree.
+The **Claude Sessions** and **Pi Sessions** lists live in the Explorer sidebar, next to **Session Files** (which browses the selected session's folder); the PenguPool Activity Bar icon holds the shortcuts cheat sheet. Select a session to show it in the PenguPool terminal; the Map and Log panels show the selected tree.
 
 | Key | Action |
 | --- | --- |

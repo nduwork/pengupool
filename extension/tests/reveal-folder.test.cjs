@@ -25,18 +25,14 @@ function harness(options = {}) {
     exports, process,
     require: (id) => id === 'vscode' ? vscode : id === './util' ? {} : {},
   }, { filename });
-  const context = { subscriptions: [], globalState: {
-    updates: [],
-    get: () => undefined,
-    update: async (key, value) => { context.globalState.updates.push([key, value]); },
-  } };
+  const context = { subscriptions: [], globalState: { get: () => undefined, update: async () => {} } };
   exports.registerCommands(context, {
     provider: { find: options.find ?? (() => undefined) },
     terminals: {},
     tree: { selection: [] },
     explorer: { follow: async () => {} },
   });
-  return { handlers, opened, errors, vscode, updates: context.globalState.updates };
+  return { handlers, opened, errors, vscode };
 }
 
 const node = { id: 's1', name: 'lead', cwd: '/repos/app/wt-lead' };
@@ -67,27 +63,6 @@ test('Reveal surfaces a file manager that refuses the path', async () => {
   await h.handlers['pengupool.reveal'](node);
   assert.match(h.errors.at(-1), /cannot open \/repos\/app\/wt-lead/);
   assert.match(h.errors.at(-1), /no such folder/);
-});
-
-test('Open in New Window hands the session folder to a window of its own', async () => {
-  const h = harness();
-  await h.handlers['pengupool.openSessionWindow'](node);
-  const [opened] = h.opened;   // primitives only: the vm realm's objects are not reference-equal to ours
-  assert.equal(opened[0], 'vscode.openFolder');
-  assert.equal(opened[1].fsPath, '/repos/app/wt-lead');
-  assert.equal(opened[2].forceNewWindow, true);
-  assert.deepEqual(h.errors, []);
-  // the new window is told to reveal the pool, so it does not come up as an empty sidebar
-  const [key, value] = h.updates[0];
-  assert.equal(key, 'pengupool.focusViewOnOpen');
-  assert.equal(JSON.parse(value).cwd, '/repos/app/wt-lead');
-});
-
-test('Open in New Window reports a session that has no folder', async () => {
-  const h = harness();
-  await h.handlers['pengupool.openSessionWindow']({ id: 's1', name: 'lead', cwd: '' });
-  assert.deepEqual(h.opened, []);
-  assert.match(h.errors.at(-1), /"lead" has no folder to open/);
 });
 
 test('Reveal with no session selected does nothing', async () => {

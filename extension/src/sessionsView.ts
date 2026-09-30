@@ -93,8 +93,7 @@ export class SessionsView implements vscode.WebviewViewProvider, vscode.Disposab
     if (message?.type !== 'command' || typeof message.command !== 'string') { return; }
     const global = new Set(['pengupool.new', 'pengupool.add']);
     const perSession = new Set([
-      'pengupool.switch', 'pengupool.reveal', 'pengupool.openSessionWindow', 'pengupool.group', 'pengupool.rename',
-      'pengupool.describe',
+      'pengupool.switch', 'pengupool.reveal', 'pengupool.group', 'pengupool.rename', 'pengupool.describe',
       'pengupool.compact', 'pengupool.restart', 'pengupool.close',
     ]);
     if (global.has(message.command)) {
@@ -190,7 +189,6 @@ export function sessionsHtml(): string {
       menu.appendChild(document.createElement('hr'));
       addMenuItem('Open / Focus Session', 'pengupool.switch');
       addMenuItem(revealLabel, 'pengupool.reveal');
-      addMenuItem('Open Folder in New Window', 'pengupool.openSessionWindow');
       addMenuItem('Group Under…', 'pengupool.group');
       addMenuItem('Rename', 'pengupool.rename');
       addMenuItem('Describe Role…', 'pengupool.describe');

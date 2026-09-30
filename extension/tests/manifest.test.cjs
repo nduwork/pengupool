@@ -48,17 +48,19 @@ test('extension package carries the repository MIT license', () => {
 });
 
 test('Sessions uses a webview so its background can own a context menu', () => {
-  const view = manifest.contributes.views.pengupool.find((item) => item.id === 'pengupoolSessions');
+  const view = manifest.contributes.views.explorer.find((item) => item.id === 'pengupoolSessions');
   assert.equal(view.type, 'webview');
 });
 
-test('pi Sessions view sits between Sessions and Shortcuts, only while both harnesses run', () => {
-  const views = manifest.contributes.views.pengupool;
-  assert.deepEqual(views.map((item) => item.id), ['pengupoolSessions', 'pengupoolPiSessions', 'pengupoolHints']);
-  const pi = views[1];
+test('the session lists live in the Explorer, so opening it never hides the pool', () => {
+  const views = manifest.contributes.views;
+  assert.deepEqual(views.explorer.map((item) => item.id), ['pengupoolSessions', 'pengupoolPiSessions']);
+  assert.deepEqual(views.pengupool.map((item) => item.id), ['pengupoolHints']);
+  const pi = views.explorer[1];
   assert.equal(pi.name, 'Pi Sessions');
   assert.equal(pi.type, 'webview');
   assert.equal(pi.when, 'pengupool.bothHarnesses');
+  assert.equal(views.explorer[0].visibility, 'visible');
 });
 
 test('Sessions title actions and shortcuts also apply to the pi Sessions view', () => {

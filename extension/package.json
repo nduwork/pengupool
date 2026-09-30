@@ -40,18 +40,22 @@
       ]
     },
     "views": {
-      "pengupool": [
+      "explorer": [
         {
           "id": "pengupoolSessions",
           "name": "Claude Sessions",
-          "type": "webview"
+          "type": "webview",
+          "visibility": "visible"
         },
         {
           "id": "pengupoolPiSessions",
           "name": "Pi Sessions",
           "type": "webview",
-          "when": "pengupool.bothHarnesses"
-        },
+          "when": "pengupool.bothHarnesses",
+          "visibility": "collapsed"
+        }
+      ],
+      "pengupool": [
         {
           "id": "pengupoolHints",
           "name": "Shortcuts"
@@ -66,10 +70,6 @@
       {
         "command": "pengupool.reveal",
         "title": "PenguPool: Reveal Session Folder"
-      },
-      {
-        "command": "pengupool.openSessionWindow",
-        "title": "PenguPool: Open Session Folder in a New Window"
       },
       {
         "command": "pengupool.quickSwitch",

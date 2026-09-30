@@ -5,7 +5,7 @@ import { HintsProvider } from './hintsView';
 import { TerminalManager } from './terminals';
 import { MapPanel } from './mapPanel';
 import { LogPanel } from './logPanel';
-import { registerCommands, FOCUS_VIEW_KEY, FOCUS_VIEW_WINDOW_MS } from './commands';
+import { registerCommands } from './commands';
 import { DefaultLayout } from './defaultLayout';
 import { SessionsView } from './sessionsView';
 import { ExplorerFollow } from './explorer';
@@ -62,16 +62,6 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   client.start();
-
-  // A window PenguPool just opened for a session comes up on the Sessions view, not an empty sidebar.
-  try {
-    const { cwd, at } = JSON.parse(context.globalState.get<string>(FOCUS_VIEW_KEY, '') || '{}');
-    const here = typeof cwd === 'string' && vscode.workspace.workspaceFolders?.some((f) => f.uri.fsPath === cwd);
-    if (here && typeof at === 'number' && Date.now() - at < FOCUS_VIEW_WINDOW_MS) {
-      void context.globalState.update(FOCUS_VIEW_KEY, '');
-      void vscode.commands.executeCommand('pengupoolSessions.focus');
-    }
-  } catch { /* no marker, or one an older build left malformed */ }
 }
 
 export function deactivate(): void { /* subscriptions dispose the client + terminals */ }
