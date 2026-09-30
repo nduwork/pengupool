@@ -17,8 +17,9 @@ Notes for agent sessions. The contributor-facing rules are in
 - **One PR per theme.** When a test run or a sandbox turns up a series of related failures, sweep that
   area and ship one PR with a test for each fix. A string of ten-line PRs costs a review round each and
   reads worse.
-- Run the checks the change needs before pushing: `uv run pytest -q`, and for `extension/` changes
-  `cd extension && npm test && npm run compile`.
+- Run the checks the change needs before pushing: `make test` runs both suites (`uv run pytest -q`, and
+  `make ext-test` for `extension/`). A fresh clone or git worktree has no `extension/node_modules`, so run
+  `make ext-deps` once first, or the extension tests fail with `Cannot find module 'typescript'`.
 - Leave unrelated edits out of the diff, so a reviewer sees one intent.
 
 ## Reviews
