@@ -64,6 +64,10 @@
         "title": "PenguPool: Open / Focus Session"
       },
       {
+        "command": "pengupool.reveal",
+        "title": "PenguPool: Reveal Session Folder"
+      },
+      {
         "command": "pengupool.quickSwitch",
         "title": "PenguPool: Quick Switch Session…"
       },
@@ -203,6 +207,11 @@
           "type": "string",
           "default": "pengupool",
           "description": "Path to the pengupool CLI. `<command> serve` streams NDJSON; `<command> ctl …` runs mutations."
+        },
+        "pengupool.explorerFollow": {
+          "type": "boolean",
+          "default": true,
+          "description": "Reveal the focused session's folder in the Explorer when this window already contains it. A folder outside this window's workspace is left alone: PenguPool never adds folders to your workspace."
         }
       }
     }

@@ -34,12 +34,12 @@ Open the PenguPool view (penguin icon in the Activity Bar). The Sessions tree li
 
 | Key | Action |
 | --- | --- |
-| `Enter` / click | Open a session in the terminal |
+| `Enter` / click | Open a session in the terminal; its folder is revealed in the Explorer when this window has it |
 | `n`, `a` | Start a session (in the folder or a new worktree) or add a previous one |
 | `g` / drag | Group under another session |
 | `r`, `x`, `c` | Rename, close, or compact a session |
 | `Shift+R` | Restart & resume, e.g. after a Claude Code or pi update |
-| right-click | All session actions, including Describe Role |
+| right-click | All session actions, including Reveal in Finder and Describe Role |
 
 See the [guide](docs/guide.md) for how to brief a pool and keep work routed well.
 

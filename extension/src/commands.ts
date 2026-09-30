@@ -2,13 +2,13 @@ import * as vscode from 'vscode';
 import { Harness, SessionNode } from './serveClient';
 import { SessionsProvider } from './sessionsTree';
 import { TerminalManager } from './terminals';
+import { ExplorerFollow } from './explorer';
 import { runCtl } from './util';
 import { SessionsView } from './sessionsView';
 import { MapPanel } from './mapPanel';
 import { LogPanel } from './logPanel';
 
 const LAST_ADD_PATH_KEY = 'pengupool.lastAddPath';
-
 const HARNESS_LABEL: Record<Harness, string> = { cc: 'Claude Code', pi: 'pi' };
 
 export function lastAddDirectory(context: vscode.ExtensionContext, fallback: vscode.Uri): vscode.Uri {
@@ -24,6 +24,7 @@ interface Deps {
   provider: SessionsProvider;
   terminals: TerminalManager;
   tree: SessionsView;
+  explorer: ExplorerFollow;
 }
 
 function descendants(node: SessionNode): Set<string> {
@@ -42,13 +43,28 @@ export function registerCommands(context: vscode.ExtensionContext, d: Deps): voi
   const reg = (id: string, fn: (...a: any[]) => any) =>
     context.subscriptions.push(vscode.commands.registerCommand(id, fn));
 
-  reg('pengupool.switch', (node?: SessionNode | string) => {
+  reg('pengupool.switch', async (node?: SessionNode | string) => {
     const n = sel(node);
     if (n) {
       void d.tree.reveal(n, { select: true, focus: false, expand: true });
       MapPanel.showIfOpen()?.select(n.id);
       LogPanel.showIfOpen()?.select(n.id);
+      // Before the terminal takes focus, so revealing the folder never pulls typing out of the session.
+      await d.explorer.follow(n.cwd);
       void d.terminals.switchTo(n);
+    }
+  });
+
+  reg('pengupool.reveal', async (node?: SessionNode | string) => {
+    const n = sel(node);
+    if (!n) { return; }
+    if (!n.cwd) { vscode.window.showErrorMessage(`PenguPool: "${n.name}" has no folder to reveal.`); return; }
+    // The OS file manager is how you inspect a session's folder by hand; VS Code's Explorer shows
+    // the same action as "Reveal in Finder" / "Open Containing Folder".
+    try {
+      await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(n.cwd));
+    } catch (err) {
+      vscode.window.showErrorMessage(`PenguPool: cannot open ${n.cwd} (${String((err as Error)?.message ?? err)})`);
     }
   });
 

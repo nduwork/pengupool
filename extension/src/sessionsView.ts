@@ -6,6 +6,10 @@ import { bothHarnesses, findNode, splitByHarness } from './harness';
 
 type VisibilityEvent = { visible: boolean };
 
+/** The OS file manager, named the way VS Code names it: Finder on macOS, the containing folder elsewhere. */
+const REVEAL_LABEL =
+  typeof process !== 'undefined' && process.platform !== 'darwin' ? 'Open Containing Folder' : 'Reveal in Finder';
+
 /** Webview-backed Sessions list. VS Code's native TreeView discards context-menu events whose
  * target is empty space, so the view owns its background menu while preserving tree interactions.
  * One instance per harness view: while both harnesses run each lists only its own harness; otherwise
@@ -89,7 +93,7 @@ export class SessionsView implements vscode.WebviewViewProvider, vscode.Disposab
     if (message?.type !== 'command' || typeof message.command !== 'string') { return; }
     const global = new Set(['pengupool.new', 'pengupool.add']);
     const perSession = new Set([
-      'pengupool.switch', 'pengupool.group', 'pengupool.rename', 'pengupool.describe',
+      'pengupool.switch', 'pengupool.reveal', 'pengupool.group', 'pengupool.rename', 'pengupool.describe',
       'pengupool.compact', 'pengupool.restart', 'pengupool.close',
     ]);
     if (global.has(message.command)) {
@@ -159,6 +163,7 @@ export function sessionsHtml(): string {
   const tree = document.getElementById('tree');
   const menu = document.getElementById('menu');
   const states = ${JSON.stringify(SESSION_STATES)};
+  const revealLabel = ${JSON.stringify(REVEAL_LABEL)};
   ${CTX_LEVEL_JS}
   let selected = '', dragged = '', menuId = '';
   const collapsed = new Set();
@@ -183,6 +188,7 @@ export function sessionsHtml(): string {
     if(id){
       menu.appendChild(document.createElement('hr'));
       addMenuItem('Open / Focus Session', 'pengupool.switch');
+      addMenuItem(revealLabel, 'pengupool.reveal');
       addMenuItem('Group Under…', 'pengupool.group');
       addMenuItem('Rename', 'pengupool.rename');
       addMenuItem('Describe Role…', 'pengupool.describe');
