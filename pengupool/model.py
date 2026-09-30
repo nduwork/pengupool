@@ -255,6 +255,8 @@ def load_agent_state(sid: str) -> dict:
 
 
 _CHAIN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
+# a session id becomes a directory name under `.step-status/sessions/` — same charset as steps.sh
+_SESSION_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
 # A real steps.sh mutation echoes its chain as the tool result: `[name] step ● → next ○`. That echo is
 # the only trustworthy attribution signal — command text can contain the words inside heredocs or
 # strings, and the tracker's hook injects the *directory's* chain into prompts (exactly the confusion
@@ -336,12 +338,9 @@ def status_dir(cwd: str) -> Path:
 DONE_TTL = int(re.sub(r"\D", "", os.environ.get("STEP_STATUS_DONE_TTL", ""))[:9] or 60)
 
 
-def read_status(cwd: str, chain: str | None = None) -> str:
-    """Render the workflow-tracker chain like steps.sh render (without ↻ loop brackets).
-    `chain` selects a specific chain (the one this session uses); None follows the directory's `current`."""
-    # ponytail: re-implements render_file's TSV walk to avoid a bash spawn per node per second;
-    # loop brackets omitted — shell out to steps.sh if they matter.
-    d = status_dir(cwd)
+def _render_state(d: Path, chain: str | None) -> str:
+    """Render one tracker directory's chain like steps.sh render (without ↻ loop brackets).
+    `chain` selects a chain by name; None follows that directory's `current`."""
     cur = d / "current"
     try:
         if chain is None:
@@ -372,6 +371,21 @@ def read_status(cwd: str, chain: str | None = None) -> str:
         except OSError:
             return ""
     return f"[{chain}] " + " → ".join(segs) if segs else ""
+
+
+def read_status(cwd: str, chain: str | None = None, session: str | None = None) -> str:
+    """Render the workflow-tracker chain like steps.sh render (without ↻ loop brackets).
+    `session` reads that session's own tracker, which is where a 0.7.0+ harness writes (its id keys
+    the state), so two sessions in one directory never render each other's chain; a session with no
+    tracker of its own renders nothing rather than somebody else's. `chain` selects a specific chain
+    within whichever tracker is read (None follows its `current`). Without `session`, the directory's
+    shared tracker is read: what a keyless caller and a pre-0.7.0 session write."""
+    # ponytail: re-implements render_file's TSV walk to avoid a bash spawn per node per second;
+    # loop brackets omitted — shell out to steps.sh if they matter.
+    d = status_dir(cwd)
+    if session:
+        return _render_state(d / "sessions" / session, chain) if _SESSION_RE.fullmatch(session) else ""
+    return _render_state(d, chain)
 
 
 def message_edges(name: str, status_line: str) -> list[Edge]:
@@ -478,15 +492,24 @@ def snapshot(light: bool = False) -> tuple[list[Node], list[Edge], list["Msg"]]:
     sessions = load_sessions()
     msgs = [] if light else TRANSCRIPTS.scan(sessions)
     groups = load_groups()
-    per_cwd: dict[str, int] = {}
+    # Count sessions per tracker, not per cwd. A worktree shares its repo's .step-status, so a session
+    # there is not alone just because no other session uses that directory; treating it as alone would
+    # hand it the repo's `current`, which is some other session's chain.
+    per_repo: dict[str, int] = {}
     for s in sessions:
-        per_cwd[s["cwd"]] = per_cwd.get(s["cwd"], 0) + 1
+        key = str(status_dir(s["cwd"]))
+        per_repo[key] = per_repo.get(key, 0) + 1
     for s in sessions:
-        # the tracker keys state by directory; attribute chains to the session that switched to them so a
-        # parent and a child in the same repo do not show each other's progress
+        # the tracker keys state by session (0.7.0+), so read this session's own tracker first: a
+        # parent and a child in the same repo then never show each other's progress. Failing that, a
+        # repo with a single session follows its `current`, and one with several falls back to the
+        # chain that session last switched to — the only signal a pre-0.7.0 tracker gives us.
         chain = TRANSCRIPTS.chains.get(s["sessionId"])
-        if per_cwd[s["cwd"]] == 1:
-            s["status_line"] = read_status(s["cwd"])            # sole session: follow current (no stale pin)
+        own = read_status(s["cwd"], session=s["sessionId"]) if s.get("sessionId") else ""
+        if own:
+            s["status_line"] = own
+        elif per_repo[str(status_dir(s["cwd"]))] == 1:
+            s["status_line"] = read_status(s["cwd"])            # sole session in this repo: follow current
         elif chain:
             s["status_line"] = read_status(s["cwd"], chain)     # shared cwd: this session's own chain
         else:
