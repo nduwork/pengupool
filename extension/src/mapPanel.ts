@@ -1,7 +1,9 @@
 import * as vscode from 'vscode';
 import { Snapshot } from './serveClient';
 import { CTX_LEVEL_CSS, CTX_LEVEL_JS, SESSION_STATES, SESSION_STATE_CSS } from './sessionState';
-import { HarnessTabs, HARNESS_TABS_CSS, HARNESS_TABS_HTML, HARNESS_TABS_JS } from './harness';
+import { findNode, HarnessTabs, HARNESS_TABS_CSS, HARNESS_TABS_HTML, HARNESS_TABS_JS } from './harness';
+import { MENU_CSS, MENU_HTML, MENU_JS, runMenuCommand } from './webviewMenu';
+import { REVEAL_LABEL } from './util';
 
 /**
  * Live map as an editor-area webview (an editor tab, so it can be moved into a new/floating window or
@@ -54,6 +56,11 @@ export class MapPanel {
       }
       if (message?.type === 'select' && typeof message.id === 'string') {
         void vscode.commands.executeCommand('pengupool.switch', message.id);
+      }
+      // Right-click menu: the same actions as the Sessions list, run through the shared allowlist so the
+      // webview can ask for those commands and no others.
+      if (message?.type === 'command') {
+        void runMenuCommand(message.command, message.id, (id) => findNode(this.last?.roots ?? [], id), (id) => this.select(id));
       }
       // Refresh: redraw from the last snapshot now, and restart `pengupool serve` so a fresh process
       // rebuilds the whole model from disk (sessions, transcripts, roles, chains) and sends it in full.
@@ -133,6 +140,7 @@ function html(webview: vscode.Webview, dagreUri: vscode.Uri): string {
   #tools button:hover { background:var(--vscode-button-secondaryHoverBackground); }
   #empty { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
            color: var(--vscode-descriptionForeground); }
+  ${MENU_CSS}
   ${HARNESS_TABS_CSS}
   #tabs { position:absolute; top:0; left:0; right:0; z-index:1; height:28px; box-sizing:border-box; }
   body.tabbed #wrap, body.tabbed #empty { top:28px; }
@@ -157,6 +165,7 @@ ${HARNESS_TABS_HTML}
   <span><svg width="18" height="8"><path d="M0,4 H18" class="edge hot-up"/></svg>reply</span>
   <span><svg width="14" height="10"><rect x="1" y="1" width="12" height="8" rx="2" class="box" style="stroke:var(--vscode-descriptionForeground); stroke-dasharray:3,2"/></svg>ungrouped</span>
 </div>
+${MENU_HTML}
 <script nonce="${nonce}" src="${dagreUri}"></script>
 <script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
@@ -166,7 +175,9 @@ ${HARNESS_TABS_HTML}
   const SVGNS = 'http://www.w3.org/2000/svg';
   const HTMLNS = 'http://www.w3.org/1999/xhtml';
   const states = ${JSON.stringify(SESSION_STATES)};
+  const revealLabel = ${JSON.stringify(REVEAL_LABEL)};
   ${CTX_LEVEL_JS}
+  ${MENU_JS}
   let topo = null, sizes = '', last = null;
   let selected = '';
   const nodeEls = new Map(), edgeEls = new Map();   // edges keyed parent>child
@@ -285,6 +296,12 @@ ${HARNESS_TABS_HTML}
       content.appendChild(state); content.appendChild(nm); content.appendChild(meta); content.appendChild(chain); body.appendChild(content);
       const select=()=>vscode.postMessage({type:'select', id:n.id});
       grp.addEventListener('click', select);
+      // Right-click opens the shared menu; the card highlights as if selected, without switching to it.
+      grp.addEventListener('contextmenu', event => {
+        selected = n.id;
+        nodeEls.forEach((e, id) => e.grp.classList.toggle('selected', id === n.id));
+        showMenu(event, n.id, revealLabel);
+      });
       grp.addEventListener('keydown', ev=>{ if(ev.key==='Enter'||ev.key===' '){ ev.preventDefault(); select(); } });
       grp.appendChild(ring); grp.appendChild(rect); grp.appendChild(title); grp.appendChild(body); scene.appendChild(grp);
       nodeEls.set(n.id, {grp, title, state, nm, meta, harness, ctx, repo, chain, lone: lone.has(n.id)});
@@ -350,6 +367,9 @@ ${HARNESS_TABS_HTML}
   document.getElementById('spacing').addEventListener('click', () => setOpt('spacing', opts.spacing==='compact' ? 'roomy' : 'compact'));
   showOpts();
   document.getElementById('refresh').addEventListener('click', () => { fresh = true; redraw(); vscode.postMessage({type:'refresh'}); });
+  // Empty canvas: the pool actions, exactly as a right-click on the list's background.
+  document.getElementById('wrap').addEventListener('contextmenu', event => {
+    if(!event.target.closest('.node')) showMenu(event, null, revealLabel); });
   // snapshots arrive only when something changes, so a quiet pool still needs its lit lines to go out
   window.setInterval?.(() => { if(last) restyleEdges(last, Date.now()); }, 5000);
   document.fonts?.ready.then(redraw);   // sizes measured before the editor font loaded are wrong

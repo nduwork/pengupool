@@ -25,6 +25,8 @@ function harness() {
         if (id === 'vscode') return vscode;
         if (id === './harness') return load('harness');
         if (id === './serveClient') return {};
+        if (id === './util') return { REVEAL_LABEL: 'Reveal in Finder' };
+        if (id === './webviewMenu') return load('webviewMenu');
         if (id === './sessionState') return { SESSION_STATES: {}, SESSION_STATE_CSS: '' };
         throw new Error('Unexpected dependency: ' + id);
       },

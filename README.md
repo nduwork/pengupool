@@ -39,7 +39,7 @@ Open the PenguPool view (penguin icon in the Activity Bar). The Sessions tree li
 | `g` / drag | Group under another session |
 | `r`, `x`, `c` | Rename, close, or compact a session |
 | `Shift+R` | Restart & resume, e.g. after a Claude Code or pi update |
-| right-click | All session actions, including Reveal in Finder and Describe Role |
+| right-click | All session actions, including Reveal in Finder and Describe Role; the map offers the same menu on its nodes |
 
 After a reboot, or any time the tmux server is gone, **Resume Previous Sessions…** (the run-all button
 in the Sessions title, or right-click → the same) rebuilds the pool: it lists every session PenguPool

@@ -40,6 +40,7 @@ function harness() {
       if (id === 'vscode') return vscode;
       if (id === './util') return ctl;
       if (id === './serveClient') return {};
+      if (id === './webviewMenu') return { MENU_CSS: '', MENU_HTML: '', MENU_JS: '', runMenuCommand: async () => true };
       if (id === './sessionState') return { SESSION_STATES: {} };
       throw new Error('Unexpected dependency: ' + id);
     },
