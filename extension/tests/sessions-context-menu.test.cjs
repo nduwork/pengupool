@@ -51,12 +51,14 @@ test('an initially visible Sessions view announces visibility to the layout', ()
   assert.equal(events.at(-1), true);
 });
 
-test('Sessions webview offers New and Add Previous from background right-click', () => {
+test('Sessions webview offers New, Add Previous and Resume Previous from background right-click', () => {
   const source = fs.readFileSync(path.join(__dirname, '../src/sessionsView.ts'), 'utf8');
   assert.match(source, /addEventListener\('contextmenu'/);
   assert.match(source, /showMenu\(event, null\)/);
   assert.match(source, /pengupool\.new/);
   assert.match(source, /pengupool\.add/);
+  assert.match(source, /addMenuItem\('Resume Previous Sessions…', 'pengupool\.resumePrevious'\)/);
+  assert.match(source, /new Set\(\['pengupool\.new', 'pengupool\.add', 'pengupool\.resumePrevious'\]\)/);
 });
 
 test('Sessions webview preserves row actions, keyboard activation, and drag grouping', () => {

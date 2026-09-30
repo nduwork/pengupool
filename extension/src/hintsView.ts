@@ -8,6 +8,7 @@ const HINTS: Hint[] = [
     { label: '⏎ / click', description: 'open · focus work session' },
     { label: 'n', description: 'folder or new worktree · Claude Code or pi' },
     { label: 'a', description: 'add previous Claude Code or pi session' },
+    { label: 'run-all', description: 'resume every previous session after a restart', icon: 'run-all' },
     { label: 'g / drag', description: 'group under session · empty = top level' },
     { label: 'r / x', description: 'rename · close session' },
     { label: 'right-click', description: 'all session actions' },

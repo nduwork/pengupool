@@ -593,6 +593,83 @@ def past_sessions(cwd: str, limit: int = 20) -> list[tuple[str, str, str]]:
     return out
 
 
+def _mtime(p: Path | None) -> float:
+    try:
+        return p.stat().st_mtime if p else 0.0
+    except OSError:
+        return 0.0
+
+
+def _transcript_cwd(d: Path, h: str) -> str:
+    """A transcript carries its own cwd; the directory slug (`--Users-a-repo--`) cannot be turned
+    back into one, so read the newest file's head. Claude writes cwd on every line, pi on the header."""
+    for f in sorted(d.glob("*.jsonl"), key=_mtime, reverse=True)[:1]:
+        try:
+            with f.open() as fh:
+                for i, line in enumerate(fh):
+                    if i > 20:
+                        break
+                    row = json.loads(line)
+                    cwd = row.get("cwd") if isinstance(row, dict) else None
+                    if isinstance(cwd, str) and cwd:
+                        return cwd
+        except Exception:  # a hostile or half-written transcript must not break the restore list
+            continue
+    return ""
+
+
+def _transcript_dirs(window: float) -> list[tuple[str, str]]:
+    """(cwd, harness) for every transcript directory touched inside the window, newest first."""
+    found = []
+    dirs = [(d, "pi") for d in (harness.PI / "sessions").glob("*")] + \
+           [(d, "cc") for d in (CLAUDE / "projects").glob("*")]
+    for d, h in dirs:
+        if not d.is_dir() or time.time() - max((_mtime(f) for f in d.glob("*.jsonl")), default=0.0) > window:
+            continue
+        cwd = _transcript_cwd(d, h)
+        if cwd:
+            found.append((cwd, h))
+    return found
+
+
+PAST_WINDOW_S = 24 * 3600   # what a restart is expected to have interrupted: the last day's work
+PAST_PER_DIR = 2
+
+
+def past_sessions_all(limit: int = 50, window: float = PAST_WINDOW_S) -> list[tuple[str, str, str, str, int]]:
+    """(session_id, title, harness, cwd, updated_ms) for every session the pool can put back, newest
+    first: not running, resumable, its folder still there, touched inside the window. A harness that
+    exits cleanly deletes the pool's own record — which a restart does — so the records are the exact
+    names while the transcripts are the durable source. A session that was restarted leaves its older
+    record behind, so the newest record per id wins."""
+    live = {s["sessionId"] for s in load_sessions()}
+    now = time.time()
+    rows: dict[str, tuple[str, str, str, str, int]] = {}
+
+    def add(sid: str, title: str, h: str, cwd: str, updated: int) -> None:
+        # A vanished folder (a removed worktree) cannot be resumed, so it is not offered.
+        if sid in live or not cwd or not os.path.isdir(cwd) or not updated or now - updated / 1000 > window:
+            return
+        if not resumable_transcript(sid, cwd, h):
+            return
+        if sid not in rows or rows[sid][4] < updated:
+            rows[sid] = (sid, title or sid[:8], h, cwd, updated)
+
+    for p, h in [(p, "cc") for p in (CLAUDE / "sessions").glob("*.json")] + \
+                [(p, "pi") for p in PI_LIVE.glob("*.json")]:
+        d = _json(p)
+        if not _session_file(d):
+            continue
+        cwd = d.get("cwd") if isinstance(d.get("cwd"), str) else ""
+        add(d["sessionId"], d.get("name"), h, cwd, int(d.get("updatedAt") or 0) or int(_mtime(p) * 1000))
+    for cwd, h in _transcript_dirs(window):
+        for sid, title, hh in past_sessions(cwd, limit=PAST_PER_DIR):
+            if sid in rows:
+                continue   # the pool's own record for this session carries its exact name
+            add(sid, title, hh, cwd, int(_mtime(transcript(sid, cwd, hh)) * 1000))
+    return sorted(rows.values(), key=lambda row: row[4], reverse=True)[:limit]
+
+
 def _content_text(c) -> str:
     if isinstance(c, str):
         return c

@@ -24,6 +24,16 @@ test('the Explorer follow is one boolean, and nothing else is configurable', () 
   assert.deepEqual(Object.keys(properties).sort(), ['pengupool.command', 'pengupool.explorerFollow']);
 });
 
+test('Resume Previous Sessions is a contributed title action next to Add Previous', () => {
+  const command = manifest.contributes.commands.find((item) => item.command === 'pengupool.resumePrevious');
+  assert.equal(command.title, 'PenguPool: Resume Previous Sessions…');
+  assert.equal(command.icon, '$(run-all)');
+  const title = manifest.contributes.menus['view/title'];
+  const groups = ['navigation@1', 'navigation@2', 'navigation@3', 'navigation@4', 'navigation@5', 'navigation@6'];
+  assert.deepEqual(title.map((item) => item.group), groups);
+  assert.equal(title[2].command, 'pengupool.resumePrevious');
+});
+
 test('every session command the Sessions webview runs is contributed by the manifest', () => {
   const source = fs.readFileSync(path.join(__dirname, '../src/sessionsView.ts'), 'utf8');
   const contributed = new Set(manifest.contributes.commands.map((item) => item.command));
