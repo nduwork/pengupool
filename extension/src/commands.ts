@@ -69,6 +69,14 @@ export function registerCommands(context: vscode.ExtensionContext, d: Deps): voi
     }
   });
 
+  reg('pengupool.openSessionWindow', async (node?: SessionNode | string) => {
+    const n = sel(node);
+    if (!n) { return; }
+    if (!n.cwd) { vscode.window.showErrorMessage(`PenguPool: "${n.name}" has no folder to open.`); return; }
+    // A window of its own: the current window keeps its folders instead of becoming a multi-root one.
+    await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(n.cwd), { forceNewWindow: true });
+  });
+
   reg('pengupool.quickSwitch', async () => {
     const items = d.provider.all.map((n) => ({ label: n.name, description: `${n.repo} · ${n.state}`, node: n }));
     const pick = await vscode.window.showQuickPick(items, { placeHolder: 'Switch to session…' });

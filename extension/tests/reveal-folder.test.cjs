@@ -65,6 +65,23 @@ test('Reveal surfaces a file manager that refuses the path', async () => {
   assert.match(h.errors.at(-1), /no such folder/);
 });
 
+test('Open in New Window hands the session folder to a window of its own', async () => {
+  const h = harness();
+  await h.handlers['pengupool.openSessionWindow'](node);
+  const [opened] = h.opened;   // primitives only: the vm realm's objects are not reference-equal to ours
+  assert.equal(opened[0], 'vscode.openFolder');
+  assert.equal(opened[1].fsPath, '/repos/app/wt-lead');
+  assert.equal(opened[2].forceNewWindow, true);
+  assert.deepEqual(h.errors, []);
+});
+
+test('Open in New Window reports a session that has no folder', async () => {
+  const h = harness();
+  await h.handlers['pengupool.openSessionWindow']({ id: 's1', name: 'lead', cwd: '' });
+  assert.deepEqual(h.opened, []);
+  assert.match(h.errors.at(-1), /"lead" has no folder to open/);
+});
+
 test('Reveal with no session selected does nothing', async () => {
   const h = harness();
   await h.handlers['pengupool.reveal'](undefined);

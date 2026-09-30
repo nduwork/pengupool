@@ -68,6 +68,10 @@
         "title": "PenguPool: Reveal Session Folder"
       },
       {
+        "command": "pengupool.openSessionWindow",
+        "title": "PenguPool: Open Session Folder in a New Window"
+      },
+      {
         "command": "pengupool.quickSwitch",
         "title": "PenguPool: Quick Switch Session…"
       },
@@ -211,7 +215,12 @@
         "pengupool.explorerFollow": {
           "type": "boolean",
           "default": true,
-          "description": "Reveal the focused session's folder in the Explorer. When that folder is outside this window's workspace, PenguPool adds it as an extra workspace folder and replaces the previous session folder on the next switch."
+          "description": "Reveal the focused session's folder in the Explorer when this window already contains it."
+        },
+        "pengupool.explorerSessionRoot": {
+          "type": "boolean",
+          "default": false,
+          "description": "Also reveal a session's folder when this window does not contain it by adding it as an extra workspace folder. VS Code turns a single-folder window into an unsaved multi-folder (\"untitled\") workspace when this happens, so it is off by default: use Open Session Folder in a New Window instead, or switch to that window instead. The next session replaces the session folder this added; folders you added yourself are never touched."
         }
       }
     }

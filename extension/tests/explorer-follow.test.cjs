@@ -23,7 +23,8 @@ function window(options = {}) {
     commands: { executeCommand: async (...args) => { calls.push(['executeCommand', ...args]); } },
     workspace: {
       get configuration() { return undefined; },   // replaced below
-      getConfiguration: () => ({ get: (_key, fallback) => options.follow ?? fallback }),
+      getConfiguration: () => ({ get: (key, fallback) => key === 'explorerSessionRoot'
+        ? (options.roots ?? false) : (options.follow ?? fallback) }),
       get workspaceFolders() { return folders.length ? folders : undefined; },
       getWorkspaceFolder: (uri) => folders.find((folder) => uri.fsPath === folder.uri.fsPath
         || uri.fsPath.startsWith(folder.uri.fsPath + '/')),
@@ -58,8 +59,15 @@ test('a session folder inside the window is revealed without touching the worksp
   assert.equal(w.saved.size, 0);
 });
 
-test('a session folder outside the workspace is added and then revealed', async () => {
+test('a folder outside the window is left alone unless the window may take an extra root', async () => {
   const w = window({ folders: ['/repos/pool'], follow: true });
+  await w.follow('/repos/other/wt-lead');
+  assert.deepEqual(w.calls, []);            // no reveal, and above all no "UNTITLED (WORKSPACE)" window
+  assert.equal(w.saved.size, 0);
+});
+
+test('a session folder outside the workspace is added and then revealed when that is opted in', async () => {
+  const w = window({ folders: ['/repos/pool'], follow: true, roots: true });
   await w.follow('/repos/other/wt-lead');
   assert.deepEqual(folderChanges(w.calls), [['updateWorkspaceFolders', 1, 0, '/repos/other/wt-lead']]);
   assert.deepEqual(w.saved.get('pengupool.explorerSessionRoot'), 'file:///repos/other/wt-lead');
@@ -71,7 +79,7 @@ test('the next session replaces the session root instead of piling up a second o
   const w = window({
     folders: ['/repos/pool', '/repos/other/wt-lead'],
     saved: [['pengupool.explorerSessionRoot', 'file:///repos/other/wt-lead']],
-    follow: true,
+    follow: true, roots: true,
   });
   await w.follow('/repos/third/wt-api');
   assert.deepEqual(folderChanges(w.calls), [['updateWorkspaceFolders', 1, 1, '/repos/third/wt-api']]);
@@ -82,22 +90,22 @@ test('a session root the user removed is not resurrected, the new folder is appe
   const w = window({
     folders: ['/repos/pool'],
     saved: [['pengupool.explorerSessionRoot', 'file:///repos/gone'] ],
-    follow: true,
+    follow: true, roots: true,
   });
   await w.follow('/repos/other/wt-lead');
   assert.deepEqual(folderChanges(w.calls), [['updateWorkspaceFolders', 1, 0, '/repos/other/wt-lead']]);
   assert.equal(reveal(w.calls).length, 1);
 });
 
-test('an empty window takes the session folder as its root', async () => {
-  const w = window({ folders: [], follow: true });
+test('an empty window takes the session folder as its root when that is opted in', async () => {
+  const w = window({ folders: [], follow: true, roots: true });
   await w.follow('/repos/pool/wt-lead');
   assert.deepEqual(folderChanges(w.calls), [['updateWorkspaceFolders', 0, 0, '/repos/pool/wt-lead']]);
   assert.equal(reveal(w.calls).length, 1);
 });
 
 test('a refused folder is neither revealed nor remembered', async () => {
-  const w = window({ folders: ['/repos/pool'], follow: true, refuse: true });
+  const w = window({ folders: ['/repos/pool'], follow: true, roots: true, refuse: true });
   await w.follow('/repos/other/wt-lead');
   assert.deepEqual(reveal(w.calls), []);
   assert.equal(w.saved.size, 0);
