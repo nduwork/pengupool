@@ -138,6 +138,7 @@ function commands(order) {
     terminals: { switchTo: async () => { order.push('terminal'); return true; } },
     tree: { selection: [], reveal: async () => { order.push('sessions list'); } },
     explorer: { follow: async () => { order.push('explorer'); } },
+    files: { refresh: () => {} },
   };
   const mod = {};
   vm.runInNewContext(transpile('commands'), {

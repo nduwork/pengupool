@@ -49,7 +49,9 @@ Explorer show its folder, per `pengupool.sessionFolder`: **reveal** (the default
 window already contains it; **roots** adds it as an extra workspace folder, so a folder outside the
 window shows up in place — VS Code labels such a window an unsaved "UNTITLED (WORKSPACE)" multi-folder
 one, and it has no way to replace this window's own folder; **off** leaves this window's Explorer
-alone. The session lists sit in the Explorer sidebar, so opening the Explorer never hides them.
+alone. The session lists and **Session Files** sit in the Explorer sidebar, so opening the Explorer
+never hides them; Session Files browses the selected session's folder — folders expand, and clicking a
+file opens it in an editor tab with nothing added to this window's workspace.
 The list and map share state cues: `● Active`, `◷ Waiting`, `○ Stale`, and `? Approval`.
 The map marks the selected session with a separate focus outline. The top of each tree carries a `LEAD`
 tag. Sessions outside every tree have a dashed border and stack in an **Ungrouped** column on the right,

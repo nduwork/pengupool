@@ -53,6 +53,10 @@
           "type": "webview",
           "when": "pengupool.bothHarnesses",
           "visibility": "collapsed"
+        },
+        {
+          "id": "pengupoolFiles",
+          "name": "Session Files"
         }
       ],
       "pengupool": [
@@ -62,6 +66,12 @@
         }
       ]
     },
+    "viewsWelcome": [
+      {
+        "view": "pengupoolFiles",
+        "contents": "Select a session to browse its folder."
+      }
+    ],
     "commands": [
       {
         "command": "pengupool.switch",

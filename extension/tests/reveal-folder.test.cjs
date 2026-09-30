@@ -31,6 +31,7 @@ function harness(options = {}) {
     terminals: {},
     tree: { selection: [] },
     explorer: { follow: async () => {} },
+    files: { refresh: () => {} },
   });
   return { handlers, opened, errors, vscode };
 }

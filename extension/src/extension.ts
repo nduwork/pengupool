@@ -9,6 +9,7 @@ import { registerCommands } from './commands';
 import { DefaultLayout } from './defaultLayout';
 import { SessionsView } from './sessionsView';
 import { ExplorerFollow } from './explorer';
+import { SessionFilesProvider } from './sessionFiles';
 import { bothHarnessesContext } from './harness';
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -19,9 +20,11 @@ export function activate(context: vscode.ExtensionContext): void {
   const client = new ServeClient(output);
   let setupNoticeShown = false;
   const tree = new SessionsView(provider);
+  const files = new SessionFilesProvider(() => tree.selection[0]);
   const piTree = new SessionsView(provider, 'pi');   // shown only while both harnesses run
   const webviewOptions = { webviewOptions: { retainContextWhenHidden: true } };
   const sessions = vscode.window.registerWebviewViewProvider('pengupoolSessions', tree, webviewOptions);
+  const fileTree = vscode.window.registerTreeDataProvider('pengupoolFiles', files);
   const piSessions = vscode.window.registerWebviewViewProvider('pengupoolPiSessions', piTree, webviewOptions);
   const syncBoth = bothHarnessesContext();
   const hints = vscode.window.registerTreeDataProvider('pengupoolHints', new HintsProvider());
@@ -32,6 +35,7 @@ export function activate(context: vscode.ExtensionContext): void {
     syncBoth(snap.roots);
     tree.update(snap);
     piTree.update(snap);
+    files.refresh();
     terminals.reconcile(snap.roots);        // bind freshly launched terminals to their sessionId
     layout.update(snap);
     MapPanel.showIfOpen()?.update(snap);
@@ -52,10 +56,10 @@ export function activate(context: vscode.ExtensionContext): void {
     });
   }));
 
-  registerCommands(context, { provider, terminals, tree, explorer });
+  registerCommands(context, { provider, terminals, tree, explorer, files });
 
   context.subscriptions.push(
-    output, tree, piTree, sessions, piSessions, hints, terminals, client, layout,
+    output, tree, piTree, sessions, piSessions, hints, terminals, client, layout, files, fileTree,
     vscode.commands.registerCommand('pengupool.showMap', () => MapPanel.toggle(context, client.lastSnapshot)),
     vscode.commands.registerCommand('pengupool.showLog', () => LogPanel.toggle(client.lastSnapshot)),
     vscode.commands.registerCommand('pengupool.refresh', () => client.restart()),

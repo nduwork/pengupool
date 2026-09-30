@@ -54,13 +54,20 @@ test('Sessions uses a webview so its background can own a context menu', () => {
 
 test('the session lists live in the Explorer, so opening it never hides the pool', () => {
   const views = manifest.contributes.views;
-  assert.deepEqual(views.explorer.map((item) => item.id), ['pengupoolSessions', 'pengupoolPiSessions']);
+  assert.deepEqual(views.explorer.map((item) => item.id),
+                   ['pengupoolSessions', 'pengupoolPiSessions', 'pengupoolFiles']);
   assert.deepEqual(views.pengupool.map((item) => item.id), ['pengupoolHints']);
   const pi = views.explorer[1];
   assert.equal(pi.name, 'Pi Sessions');
   assert.equal(pi.type, 'webview');
   assert.equal(pi.when, 'pengupool.bothHarnesses');
   assert.equal(views.explorer[0].visibility, 'visible');
+});
+
+test('Session Files is a plain tree view beside the sessions', () => {
+  const view = manifest.contributes.views.explorer.find((item) => item.id === 'pengupoolFiles');
+  assert.equal(view.name, 'Session Files');
+  assert.equal(view.type, undefined);      // VS Code's default: a tree, not a webview
 });
 
 test('Sessions title actions and shortcuts also apply to the pi Sessions view', () => {

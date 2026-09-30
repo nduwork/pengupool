@@ -41,6 +41,10 @@ The **Claude Sessions** and **Pi Sessions** lists live in the Explorer sidebar, 
 | `Shift+R` | Restart & resume, e.g. after a Claude Code or pi update |
 | right-click | All session actions, including Reveal in Finder and Describe Role |
 
+**Session Files** in the PenguPool sidebar shows the selected session's folder: folders expand, and
+clicking a file opens it in an editor tab — the same action a terminal path link uses — with nothing
+added to this window's workspace.
+
 See the [guide](docs/guide.md) for how to brief a pool and keep work routed well.
 
 Grouped sessions receive a short `<pengupool>` block with their tree, parent, children and role. Routing is enforced: a grouped session may message only its parent or direct children (Claude Code through a `PreToolUse` guard, pi through the bundled extension and pi-intercom), and `pengupool ctl route <id> <target>` names the next hop. Tag a session in your prompt (`@reviewer …`) to let the session you typed into message it directly until your next prompt.

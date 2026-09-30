@@ -3,6 +3,7 @@ import { Harness, SessionNode } from './serveClient';
 import { SessionsProvider } from './sessionsTree';
 import { TerminalManager } from './terminals';
 import { ExplorerFollow } from './explorer';
+import { SessionFilesProvider } from './sessionFiles';
 import { runCtl } from './util';
 import { SessionsView } from './sessionsView';
 import { MapPanel } from './mapPanel';
@@ -25,6 +26,7 @@ interface Deps {
   terminals: TerminalManager;
   tree: SessionsView;
   explorer: ExplorerFollow;
+  files: SessionFilesProvider;
 }
 
 function descendants(node: SessionNode): Set<string> {
@@ -51,6 +53,7 @@ export function registerCommands(context: vscode.ExtensionContext, d: Deps): voi
       LogPanel.showIfOpen()?.select(n.id);
       // Before the terminal takes focus, so revealing the folder never pulls typing out of the session.
       await d.explorer.follow(n.cwd);
+      d.files.refresh();                    // the Session Files view follows the selection
       void d.terminals.switchTo(n);
     }
   });
