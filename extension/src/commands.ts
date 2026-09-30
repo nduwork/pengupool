@@ -11,6 +11,17 @@ import { LogPanel } from './logPanel';
 const LAST_ADD_PATH_KEY = 'pengupool.lastAddPath';
 const HARNESS_LABEL: Record<Harness, string> = { cc: 'Claude Code', pi: 'pi' };
 
+/** "3 h ago" for a session's last update, so the restore list reads as a timeline. */
+export function ago(at: number): string {
+  const minutes = (Date.now() - at) / 60_000;
+  if (minutes < 1) { return 'just now'; }
+  if (minutes < 60) { return `${Math.floor(minutes)} min ago`; }
+  const hours = minutes / 60;
+  if (hours < 24) { return `${Math.floor(hours)} h ago`; }
+  const days = hours / 24;
+  return days < 30 ? `${Math.floor(days)} d ago` : `${Math.floor(days / 30)} mo ago`;
+}
+
 export function lastAddDirectory(context: vscode.ExtensionContext, fallback: vscode.Uri): vscode.Uri {
   const saved = context.globalState.get<string>(LAST_ADD_PATH_KEY);
   return saved ? vscode.Uri.file(saved) : fallback;
@@ -34,6 +45,8 @@ function descendants(node: SessionNode): Set<string> {
   return ids;
 }
 
+/** Rebuild the pool after a reboot: the backend lists every session it can still resume, and the
+ *  editor puts the ticked ones back on the tmux server (windows first, then one to look at). */
 export function registerCommands(context: vscode.ExtensionContext, d: Deps): void {
   const sel = (node?: SessionNode | string): SessionNode | undefined =>
     typeof node === 'string' ? d.provider.find(node) : node ?? d.tree.selection[0];
@@ -117,6 +130,52 @@ export function registerCommands(context: vscode.ExtensionContext, d: Deps): voi
     const name = await vscode.window.showInputBox({ prompt: 'Session name', value: pick.label.slice(0, 40) });
     if (!name) { return; }
     await d.terminals.resume(dir[0].fsPath, name, pick.id, pick.harness);
+  });
+
+  reg('pengupool.resumePrevious', async () => {
+    const listed = await runCtl(['past-all']);
+    if (listed.code !== 0) {
+      vscode.window.showErrorMessage(`PenguPool: ${listed.stderr || 'could not list previous sessions'}`);
+      return;
+    }
+    let past: [string, string, Harness, string, number][] = [];
+    try { past = JSON.parse(listed.stdout || '[]'); } catch { /* no history */ }
+    if (!past.length) {
+      vscode.window.showInformationMessage('PenguPool: no previous sessions to resume.');
+      return;
+    }
+    const items = past.map(([id, title, harness, cwd, updated]) => ({
+      label: title,
+      description: `${HARNESS_LABEL[harness] ?? harness} · ${cwd} · ${ago(updated)}`,
+      picked: true, id, name: title, harness, cwd,
+    }));
+    const pick = await vscode.window.showQuickPick(items, {
+      canPickMany: true,
+      placeHolder: `${items.length} session${items.length === 1 ? '' : 's'} can be resumed — untick what you don't want`,
+    });
+    if (!pick?.length) { return; }
+    const failed: string[] = [];
+    let first: typeof pick[number] | undefined;
+    await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: 'PenguPool: resuming sessions…' },
+      async (progress) => {
+        for (const [index, item] of pick.entries()) {
+          progress.report({ message: `${index + 1}/${pick.length} · ${item.label}`, increment: 100 / pick.length });
+          const resumed = await runCtl(['resume', item.cwd, item.name, item.id]);
+          if (resumed.code === 0) { first = first ?? item; } else { failed.push(`${item.label}: ${resumed.stderr || 'failed'}`); }
+        }
+        // Bind this window's terminal last, so the bulk of the work never moves it.
+        if (first) { await d.terminals.resume(first.cwd, first.name, first.id, first.harness); }
+      });
+    const resumed = pick.length - failed.length;
+    if (failed.length) {
+      vscode.window.showWarningMessage(
+        `PenguPool: resumed ${resumed} of ${pick.length} — ${failed.slice(0, 2).join('; ')}`,
+        'Show log',
+      ).then((choice) => { if (choice === 'Show log') { void vscode.commands.executeCommand('pengupool.showLog'); } });
+    } else {
+      vscode.window.showInformationMessage(`PenguPool: resumed ${resumed} session${resumed === 1 ? '' : 's'}.`);
+    }
   });
 
   reg('pengupool.group', async (node?: SessionNode) => {

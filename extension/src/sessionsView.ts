@@ -91,7 +91,7 @@ export class SessionsView implements vscode.WebviewViewProvider, vscode.Disposab
       return;
     }
     if (message?.type !== 'command' || typeof message.command !== 'string') { return; }
-    const global = new Set(['pengupool.new', 'pengupool.add']);
+    const global = new Set(['pengupool.new', 'pengupool.add', 'pengupool.resumePrevious']);
     const perSession = new Set([
       'pengupool.switch', 'pengupool.reveal', 'pengupool.group', 'pengupool.rename', 'pengupool.describe',
       'pengupool.compact', 'pengupool.restart', 'pengupool.close',
@@ -185,6 +185,7 @@ export function sessionsHtml(): string {
     hideMenu();
     addMenuItem('New Session', 'pengupool.new');
     addMenuItem('Add Previous Session…', 'pengupool.add');
+    addMenuItem('Resume Previous Sessions…', 'pengupool.resumePrevious');
     if(id){
       menu.appendChild(document.createElement('hr'));
       addMenuItem('Open / Focus Session', 'pengupool.switch');

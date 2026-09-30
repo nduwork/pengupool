@@ -82,6 +82,11 @@
         "icon": "$(history)"
       },
       {
+        "command": "pengupool.resumePrevious",
+        "title": "PenguPool: Resume Previous Sessions…",
+        "icon": "$(run-all)"
+      },
+      {
         "command": "pengupool.group",
         "title": "PenguPool: Group Under…"
       },
@@ -134,19 +139,24 @@
           "group": "navigation@2"
         },
         {
-          "command": "pengupool.showMap",
+          "command": "pengupool.resumePrevious",
           "when": "view == pengupoolSessions || view == pengupoolPiSessions",
           "group": "navigation@3"
         },
         {
-          "command": "pengupool.showLog",
+          "command": "pengupool.showMap",
           "when": "view == pengupoolSessions || view == pengupoolPiSessions",
           "group": "navigation@4"
         },
         {
-          "command": "pengupool.refresh",
+          "command": "pengupool.showLog",
           "when": "view == pengupoolSessions || view == pengupoolPiSessions",
           "group": "navigation@5"
+        },
+        {
+          "command": "pengupool.refresh",
+          "when": "view == pengupoolSessions || view == pengupoolPiSessions",
+          "group": "navigation@6"
         }
       ]
     },

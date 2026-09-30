@@ -3,6 +3,7 @@ past sessions. Harnesses never share a tree."""
 import json
 import os
 import time
+from pathlib import Path
 
 from pengupool import harness, model
 
@@ -63,6 +64,46 @@ def test_past_sessions_cover_both_harnesses(tmp_path, monkeypatch):
     assert got == [(SID, "pi worker", "pi"), ("cc-id", "fix the bug", "cc")]
     assert model.harness_of_past(SID, "/r") == "pi"
     assert model.harness_of_past("abcdef12-0000", "/r") == "cc"
+
+
+def test_past_sessions_all_offers_dead_sessions_once_and_never_ghosts(tmp_path, monkeypatch):
+    """After a reboot this list is the pool's memory, so it has to come from the transcripts too: the
+    harness deletes its own record on a clean exit. Never a running session, never a ghost."""
+    monkeypatch.setattr(model, "CLAUDE", tmp_path / "claude")
+    now = int(time.time() * 1000)
+    cwd, vanished = str(tmp_path / "wt-lead"), str(tmp_path / "gone")
+    ghost = "0192f7a1-3333-7000-8000-000000000003"
+
+    def record(pid, sid, cwd_, name, updated):
+        model.write_json(model.PI_LIVE / f"{pid}.json",
+                         {"sessionId": sid, "pid": pid, "cwd": cwd_, "name": name, "status": "idle",
+                          "kind": "interactive", "updatedAt": updated, "startedAt": updated})
+
+    def transcript_for(cwd_, sid):
+        d = harness.pi_dir(cwd_)
+        d.mkdir(parents=True, exist_ok=True)
+        (d / f"2026-09-22T10-00-00-000Z_{sid}.jsonl").write_text(
+            j({"type": "session", "id": sid, "cwd": cwd_}) + "\n")
+
+    Path(cwd).mkdir()
+    record(999001, SID, cwd, "old name", now - 90_000)     # the older record of a resume
+    record(999002, SID, cwd, "new name", now - 1_000)
+    record(999003, ghost, cwd, "ghost", now - 5_000)       # recorded, but the harness wrote no transcript
+    transcript_for(cwd, SID)
+    # a session the pool has no record of, because a clean exit deleted it: only the transcript is left
+    orphan = "0192f7a1-5555-7000-8000-000000000005"
+    transcript_for(cwd, orphan)
+    # and one whose folder is gone cannot be resumed
+    record(999004, "0192f7a1-6666-7000-8000-000000000006", vanished, "moved", now - 2_000)
+    transcript_for(vanished, "0192f7a1-6666-7000-8000-000000000006")
+
+    rows = model.past_sessions_all()
+    assert [row[:2] for row in rows] == [(orphan, orphan[:8]), (SID, "new name")]
+    assert all(row[3] == cwd and row[2] == "pi" for row in rows)
+    # a session that is still running is never offered
+    record(os.getpid(), "0192f7a1-4444-7000-8000-000000000004", cwd, "alive", now)
+    transcript_for(cwd, "0192f7a1-4444-7000-8000-000000000004")
+    assert [row[0] for row in model.past_sessions_all()] == [orphan, SID]
 
 
 def test_trees_never_mix_harnesses():

@@ -20,6 +20,8 @@ Verbs:
     group <childSid> <parentSid|"">   move a session under a parent of the same harness, or "" for top level
     worktree-add <dir> <name>     git worktree for a session; print the path (or <dir>)
     past <dir>                    JSON [[sessionId, title, harness], …] of resumable past sessions
+    past-all                      JSON [[sessionId, title, harness, cwd, updated], …] of every resumable
+                                  session the pool knows, newest first (a reboot leaves them here)
     context <sid> [--prompt-stdin | --keyed-prompt-stdin]  print the session-tree context block for a
                                   session (used by the pi extension); the prompt's @session tags open a
                                   direct line only when the pi extension's key leads stdin
@@ -246,6 +248,11 @@ def _past(directory: str) -> int:
     return 0
 
 
+def _past_all() -> int:
+    print(json.dumps(model.past_sessions_all()))
+    return 0
+
+
 def _slash(sid: str, what: str, name: str = "") -> int:
     """Compact or rename a session by typing its slash command into its own pane. User-only: a session
     that could type into another session's pane would bypass the routing rule entirely."""
@@ -367,7 +374,7 @@ def main(argv: list[str] | None = None) -> int:
     if json_output:
         argv.pop(0)
     if not argv:
-        print("usage: pengupool ctl new|resume|restart|adopt|attach|close|group|worktree-add|past|context|describe|profile|tree|route|authorize|clear-logs …", file=sys.stderr)
+        print("usage: pengupool ctl new|resume|restart|adopt|attach|close|group|worktree-add|past|past-all|context|describe|profile|tree|route|authorize|clear-logs …", file=sys.stderr)
         return 2
     verb, a = argv[0], argv[1:]
     if verb == "describe" and a:
@@ -390,6 +397,7 @@ def main(argv: list[str] | None = None) -> int:
         ("group", 2): lambda: _group(a[0], a[1]),
         ("worktree-add", 2): lambda: _worktree_add(a[0], a[1]),
         ("past", 1): lambda: _past(a[0]),
+        ("past-all", 0): _past_all,
         ("context", 1): lambda: _context(a[0]),
         ("context", 2): lambda: _context(a[0], a[1]),
         ("slash", 2): lambda: _slash(a[0], a[1]),

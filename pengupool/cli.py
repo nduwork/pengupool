@@ -9,7 +9,7 @@ HELP = """usage: pengupool [command]
 
   serve [--once]            stream NDJSON session snapshots (used by the editor extension)
   ctl <verb> …              session control: new, resume, restart, adopt, attach, select, close,
-                            group, past, context, describe, profile, tree, route, authorize, register
+                            group, past, past-all, context, describe, profile, tree, route, authorize, register
   setup [auto|cc|pi|both]   check prerequisites and wire each harness (--check to only report)
   teardown [auto|cc|pi|both]
   install-hook              register the Claude Code lifecycle hooks
