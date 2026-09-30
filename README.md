@@ -41,6 +41,10 @@ Open the PenguPool view (penguin icon in the Activity Bar). The Sessions tree li
 | `Shift+R` | Restart & resume, e.g. after a Claude Code or pi update |
 | right-click | All session actions, including Reveal in Finder and Describe Role |
 
+After a reboot, or any time the tmux server is gone, **Resume Previous Sessions…** (the run-all button
+in the Sessions title, or right-click → the same) rebuilds the pool: it lists every session PenguPool
+can still resume with its folder and last activity, and puts the ticked ones back on the server.
+
 See the [guide](docs/guide.md) for how to brief a pool and keep work routed well.
 
 Grouped sessions receive a short `<pengupool>` block with their tree, parent, children and role. Routing is enforced: a grouped session may message only its parent or direct children (Claude Code through a `PreToolUse` guard, pi through the bundled extension and pi-intercom), and `pengupool ctl route <id> <target>` names the next hop. Tag a session in your prompt (`@reviewer …`) to let the session you typed into message it directly until your next prompt.

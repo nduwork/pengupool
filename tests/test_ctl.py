@@ -49,6 +49,13 @@ def test_past_emits_json(tmp_path, monkeypatch, capsys):
     assert json.loads(capsys.readouterr().out) == [["id1", "a title", "cc"], ["id2", "b", "pi"]]
 
 
+def test_past_all_emits_json(monkeypatch, capsys):
+    columns = ["id1", "a title", "pi", "/r/pool-wt-x", 1712345678901]
+    monkeypatch.setattr(model, "past_sessions_all", lambda: [columns])
+    assert ctl.main(["past-all"]) == 0
+    assert json.loads(capsys.readouterr().out) == [columns]
+
+
 def test_attach_missing_returns_2(monkeypatch):
     monkeypatch.setattr(model, "load_registry", lambda: {})
     monkeypatch.setattr(model, "load_sessions", lambda: [])
