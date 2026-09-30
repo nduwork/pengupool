@@ -207,6 +207,11 @@
           "type": "string",
           "default": "pengupool",
           "description": "Path to the pengupool CLI. `<command> serve` streams NDJSON; `<command> ctl …` runs mutations."
+        },
+        "pengupool.explorerFollow": {
+          "type": "boolean",
+          "default": true,
+          "description": "Reveal the focused session's folder in the Explorer. When that folder is outside this window's workspace, PenguPool adds it as an extra workspace folder and replaces the previous session folder on the next switch."
         }
       }
     }

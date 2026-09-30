@@ -30,6 +30,7 @@ function harness(options = {}) {
     provider: { find: options.find ?? (() => undefined) },
     terminals: {},
     tree: { selection: [] },
+    explorer: { follow: async () => {} },
   });
   return { handlers, opened, errors, vscode };
 }

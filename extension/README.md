@@ -44,7 +44,9 @@ Drag a session row onto another row to group it underneath, or onto empty tree s
 top level. Click a map node to select the matching sidebar row and show that session in the shared
 terminal; focused map nodes also respond to Enter and Space.
 Right-click a session row for its actions. Right-click empty space in Sessions to create a new
-session or add a previous one.
+session or add a previous one. Selecting a session also reveals its folder in the Explorer: when that
+folder sits outside this window's workspace, PenguPool adds it as one extra workspace folder and
+replaces it on the next switch. The `pengupool.explorerFollow` setting turns the reveal off.
 The list and map share state cues: `● Active`, `◷ Waiting`, `○ Stale`, and `? Approval`.
 The map marks the selected session with a separate focus outline. The top of each tree carries a `LEAD`
 tag. Sessions outside every tree have a dashed border and stack in an **Ungrouped** column on the right,

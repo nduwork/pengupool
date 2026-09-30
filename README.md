@@ -34,7 +34,7 @@ Open the PenguPool view (penguin icon in the Activity Bar). The Sessions tree li
 
 | Key | Action |
 | --- | --- |
-| `Enter` / click | Open a session in the terminal |
+| `Enter` / click | Open a session in the terminal and reveal its folder in the Explorer |
 | `n`, `a` | Start a session (in the folder or a new worktree) or add a previous one |
 | `g` / drag | Group under another session |
 | `r`, `x`, `c` | Rename, close, or compact a session |

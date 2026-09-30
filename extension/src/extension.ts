@@ -8,12 +8,14 @@ import { LogPanel } from './logPanel';
 import { registerCommands } from './commands';
 import { DefaultLayout } from './defaultLayout';
 import { SessionsView } from './sessionsView';
+import { ExplorerFollow } from './explorer';
 import { bothHarnessesContext } from './harness';
 
 export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel('PenguPool');
   const provider = new SessionsProvider();
   const terminals = new TerminalManager(context);
+  const explorer = new ExplorerFollow(context.workspaceState);
   const client = new ServeClient(output);
   let setupNoticeShown = false;
   const tree = new SessionsView(provider);
@@ -50,7 +52,7 @@ export function activate(context: vscode.ExtensionContext): void {
     });
   }));
 
-  registerCommands(context, { provider, terminals, tree });
+  registerCommands(context, { provider, terminals, tree, explorer });
 
   context.subscriptions.push(
     output, tree, piTree, sessions, piSessions, hints, terminals, client, layout,
