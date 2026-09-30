@@ -52,6 +52,19 @@ export function registerCommands(context: vscode.ExtensionContext, d: Deps): voi
     }
   });
 
+  reg('pengupool.reveal', async (node?: SessionNode | string) => {
+    const n = sel(node);
+    if (!n) { return; }
+    if (!n.cwd) { vscode.window.showErrorMessage(`PenguPool: "${n.name}" has no folder to reveal.`); return; }
+    // The OS file manager is how you inspect a session's folder by hand; VS Code's Explorer shows
+    // the same action as "Reveal in Finder" / "Open Containing Folder".
+    try {
+      await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(n.cwd));
+    } catch (err) {
+      vscode.window.showErrorMessage(`PenguPool: cannot open ${n.cwd} (${String((err as Error)?.message ?? err)})`);
+    }
+  });
+
   reg('pengupool.quickSwitch', async () => {
     const items = d.provider.all.map((n) => ({ label: n.name, description: `${n.repo} · ${n.state}`, node: n }));
     const pick = await vscode.window.showQuickPick(items, { placeHolder: 'Switch to session…' });

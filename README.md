@@ -39,7 +39,7 @@ Open the PenguPool view (penguin icon in the Activity Bar). The Sessions tree li
 | `g` / drag | Group under another session |
 | `r`, `x`, `c` | Rename, close, or compact a session |
 | `Shift+R` | Restart & resume, e.g. after a Claude Code or pi update |
-| right-click | All session actions, including Describe Role |
+| right-click | All session actions, including Reveal in Finder and Describe Role |
 
 See the [guide](docs/guide.md) for how to brief a pool and keep work routed well.
 

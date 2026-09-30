@@ -12,6 +12,19 @@ test('Shift+Enter uses Claude terminal setup sequence', () => {
   assert.equal(binding.when, 'terminalFocus && pengupool.claudeTerminal');
 });
 
+test('Reveal Session Folder is contributed for the command palette', () => {
+  const command = manifest.contributes.commands.find((item) => item.command === 'pengupool.reveal');
+  assert.equal(command.title, 'PenguPool: Reveal Session Folder');
+});
+
+test('every session command the Sessions webview runs is contributed by the manifest', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../src/sessionsView.ts'), 'utf8');
+  const contributed = new Set(manifest.contributes.commands.map((item) => item.command));
+  const named = [...source.matchAll(/'(pengupool\.[A-Za-z]+)'/g)].map((match) => match[1]);
+  assert.ok(named.includes('pengupool.reveal'), 'the reveal row action is missing from the webview');
+  for (const name of named) { assert.ok(contributed.has(name), `${name} is not contributed by package.json`); }
+});
+
 test('terminal shortcuts and settings do not change unrelated terminals', () => {
   assert.equal(manifest.contributes.configurationDefaults, undefined);
   const terminals = fs.readFileSync(path.join(__dirname, '../src/terminals.ts'), 'utf8');

@@ -64,6 +64,10 @@
         "title": "PenguPool: Open / Focus Session"
       },
       {
+        "command": "pengupool.reveal",
+        "title": "PenguPool: Reveal Session Folder"
+      },
+      {
         "command": "pengupool.quickSwitch",
         "title": "PenguPool: Quick Switch Session…"
       },
