@@ -30,11 +30,11 @@ make install-all    # backend + extension (EDITOR_CLI=code|cursor to choose)
 
 ## Use
 
-The **Claude Sessions** and **Pi Sessions** lists live in the Explorer sidebar, next to **Session Files** (which browses the selected session's folder); the PenguPool Activity Bar icon holds the shortcuts cheat sheet. Select a session to show it in the PenguPool terminal; the Map and Log panels show the selected tree.
+The **Claude Sessions** and **Pi Sessions** lists live in the Explorer sidebar; the PenguPool Activity Bar icon holds the shortcuts cheat sheet. Select a session to show it in the PenguPool terminal; the Map and Log panels show the selected tree.
 
 | Key | Action |
 | --- | --- |
-| `Enter` / click | Open a session in the terminal; the Explorer follows per `pengupool.sessionFolder` |
+| `Enter` / click | Open a session in the terminal; its folder is revealed in the Explorer when this window has it |
 | `n`, `a` | Start a session (in the folder or a new worktree) or add a previous one |
 | `g` / drag | Group under another session |
 | `r`, `x`, `c` | Rename, close, or compact a session |

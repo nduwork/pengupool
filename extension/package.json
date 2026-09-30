@@ -212,16 +212,10 @@
           "default": "pengupool",
           "description": "Path to the pengupool CLI. `<command> serve` streams NDJSON; `<command> ctl …` runs mutations."
         },
-        "pengupool.sessionFolder": {
-          "type": "string",
-          "enum": ["reveal", "roots", "off"],
-          "default": "reveal",
-          "enumDescriptions": [
-            "Reveal the session's folder in the Explorer when this window already contains it.",
-            "Show the session's folder in this window's Explorer by adding it as an extra workspace folder. VS Code calls a window with an unsaved extra folder an \"UNTITLED (WORKSPACE)\" multi-folder workspace; it has no way to replace this window's own folder, so that label and the extra folder come together, and the next session replaces the folder this added.",
-            "Leave this window's Explorer alone."
-          ],
-          "description": "What selecting a session does to this window's Explorer. Use 'PenguPool: Open Session Folder in a New Window' for the session's folder on its own."
+        "pengupool.explorerFollow": {
+          "type": "boolean",
+          "default": true,
+          "description": "Reveal the focused session's folder in the Explorer when this window already contains it. A folder outside this window's workspace is left alone: PenguPool never adds folders to your workspace."
         }
       }
     }

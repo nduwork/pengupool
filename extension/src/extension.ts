@@ -15,7 +15,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel('PenguPool');
   const provider = new SessionsProvider();
   const terminals = new TerminalManager(context);
-  const explorer = new ExplorerFollow(context.workspaceState);
+  const explorer = new ExplorerFollow();
   const client = new ServeClient(output);
   let setupNoticeShown = false;
   const tree = new SessionsView(provider);

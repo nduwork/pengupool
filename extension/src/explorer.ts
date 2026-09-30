@@ -1,47 +1,18 @@
 import * as vscode from 'vscode';
 
-const SETTING = 'sessionFolder';
-const ROOT_STATE_KEY = 'pengupool.explorerSessionRoot';   // what an earlier build recorded for a window
-const ROOT_SETTLE_MS = 100;
+const SETTING = 'explorerFollow';
 
-/** What selecting a session does to the Explorer, from `pengupool.sessionFolder`. VS Code shows a
- *  folder in the Explorer only when the window contains it, and it has no API to replace a window's
- *  own folder, so showing a foreign folder in place means adding it as one extra workspace folder
- *  (which makes the window an unsaved multi-folder one) — or opening a window for it (see
- *  `pengupool.openSessionWindow`). */
-export type SessionFolderMode = 'reveal' | 'roots' | 'off';
-
+/** Keeps the Explorer on the focused session's folder, when this window already contains it. VS Code
+ *  lists only workspace folders, and it has no API to replace a window's own folder, so a folder the
+ *  window does not contain is left alone: this never adds a folder, never reloads, never opens a
+ *  window. `pengupool.explorerFollow: false` turns the reveal off. */
 export class ExplorerFollow {
-  constructor(private readonly state: vscode.Memento) {}
-
   async follow(cwd: string): Promise<void> {
-    const mode = this.mode();
-    if (!cwd || mode === 'off') { return; }
+    if (!cwd || !vscode.workspace.getConfiguration('pengupool').get<boolean>(SETTING, true)) { return; }
     const uri = vscode.Uri.file(cwd);
+    if (!vscode.workspace.getWorkspaceFolder(uri)) { return; }
     try {
-      if (!vscode.workspace.getWorkspaceFolder(uri)) {
-        if (mode === 'reveal') { return; }                     // leave the window's workspace alone
-        if (!(await this.addRoot(uri))) { return; }             // the window refused the folder
-        // The new root reaches the Explorer asynchronously, and a reveal before that finds nothing.
-        await new Promise((resolve) => setTimeout(resolve, ROOT_SETTLE_MS));
-      }
       await vscode.commands.executeCommand('revealInExplorer', uri);
     } catch { /* the Explorer view is a convenience: a refused reveal must not interrupt the switch */ }
-  }
-
-  private mode(): SessionFolderMode {
-    const value = vscode.workspace.getConfiguration('pengupool').get<string>(SETTING, 'reveal');
-    return value === 'roots' || value === 'off' ? value : 'reveal';
-  }
-
-  /** Replaces the session root added last time, or appends this folder when there is none to replace. */
-  private async addRoot(uri: vscode.Uri): Promise<boolean> {
-    const folders = vscode.workspace.workspaceFolders ?? [];
-    const previous = this.state.get<string>(ROOT_STATE_KEY);
-    const index = previous ? folders.findIndex((folder) => folder.uri.toString() === previous) : -1;
-    const at = index >= 0 ? index : folders.length;
-    const accepted = await vscode.workspace.updateWorkspaceFolders(at, index >= 0 ? 1 : 0, { uri });
-    if (accepted) { await this.state.update(ROOT_STATE_KEY, uri.toString()); }
-    return accepted;
   }
 }
