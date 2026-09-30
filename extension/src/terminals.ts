@@ -4,6 +4,8 @@ import { runCtl } from './util';
 
 const LEGACY_STATE_KEY = 'pengupool.attachedTerminals';
 
+const LAST_SESSION_KEY = 'pengupool.lastSession';   // the session this window last opened
+
 function flatten(roots: SessionNode[]): SessionNode[] {
   const out: SessionNode[] = [];
   const walk = (n: SessionNode) => { out.push(n); n.children.forEach(walk); };
@@ -157,6 +159,7 @@ export class TerminalManager implements vscode.Disposable {
 
   /** Switch the harness's extension terminal to a session without restarting that session. */
   async switchTo(node: SessionNode, offerAdopt = true): Promise<boolean> {
+    void this.ctx.workspaceState.update(LAST_SESSION_KEY, node.id);
     const slot = this.slot(node.harness);
     if (this.usable(slot) && slot.currentId === node.id) {
       slot.term!.show();
@@ -204,7 +207,10 @@ export class TerminalManager implements vscode.Disposable {
     const nodes = flatten(roots);
     const ids = new Set([...this.slots.values()].map((slot) => slot.currentId));
     const current = nodes.find((candidate) => ids.has(candidate.id));
-    const node = current ?? selected ?? nodes[0];
+    // A window that reloads onto a session's folder has no terminal yet: come back on the session
+    // this window was last on, not on whatever happens to be first in the tree.
+    const last = nodes.find((candidate) => candidate.id === this.ctx.workspaceState.get(LAST_SESSION_KEY));
+    const node = current ?? selected ?? last ?? nodes[0];
     return node ? this.switchTo(node, false) : false;
   }
 

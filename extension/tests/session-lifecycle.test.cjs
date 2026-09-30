@@ -8,7 +8,7 @@ const { PassThrough } = require('node:stream');
 const ts = require('typescript');
 
 // Exercise the real TypeScript classes with only VS Code, subprocesses and time replaced.
-function harness() {
+function harness(options = {}) {
   const terminals = [], requests = [], errors = [], prompts = [], children = [], timers = new Map(), contexts = [];
   let timerId = 0, activeChange;
   const vscode = {
@@ -70,7 +70,9 @@ function harness() {
     return exports;
   }
   const { TerminalManager } = load('terminals');
-  const manager = new TerminalManager({ workspaceState: { get: () => ({}), update: async () => {} } });
+  const manager = new TerminalManager({ workspaceState: {
+    get: (key) => (key === 'pengupool.lastSession' ? options.lastSession : {}), update: async () => {},
+  } });
   const { ServeClient } = load('serveClient');
   const client = new ServeClient({ append() {}, appendLine() {} });
   function tick() {
@@ -85,6 +87,15 @@ function harness() {
 }
 
 const node = { id: 'sid', name: 'normalized-worker', cwd: '/repo-wt-worker', tmux_pane: '%9', children: [] };
+
+test('a window that reloads comes back on the session it was last on', async () => {
+  const h = harness({ lastSession: 'b' });   // what selecting a session recorded before the reload
+  const roots = [{ id: 'a', name: 'a', cwd: '/r/a', tmux_pane: '', children: [] },
+                 { id: 'b', name: 'b', cwd: '/r/b', tmux_pane: '', children: [] }];
+  await h.manager.showDefault(roots);
+  assert.ok(h.requests.every((args) => !args.includes('a')), 'never falls back to the first session');
+  assert.ok(h.requests.some((args) => args.includes('b')));
+});
 
 test('Claude terminal shortcut context follows the active terminal', async () => {
   const h = harness();

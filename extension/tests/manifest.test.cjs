@@ -12,6 +12,26 @@ test('Shift+Enter uses Claude terminal setup sequence', () => {
   assert.equal(binding.when, 'terminalFocus && pengupool.claudeTerminal');
 });
 
+test('Reveal Session Folder is contributed for the command palette', () => {
+  const command = manifest.contributes.commands.find((item) => item.command === 'pengupool.reveal');
+  assert.equal(command.title, 'PenguPool: Reveal Session Folder');
+});
+
+test('the Explorer follow is one boolean, and nothing else is configurable', () => {
+  const properties = manifest.contributes.configuration.properties;
+  assert.equal(properties['pengupool.explorerFollow'].type, 'boolean');
+  assert.equal(properties['pengupool.explorerFollow'].default, true);
+  assert.deepEqual(Object.keys(properties).sort(), ['pengupool.command', 'pengupool.explorerFollow']);
+});
+
+test('every session command the Sessions webview runs is contributed by the manifest', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../src/sessionsView.ts'), 'utf8');
+  const contributed = new Set(manifest.contributes.commands.map((item) => item.command));
+  const named = [...source.matchAll(/'(pengupool\.[A-Za-z]+)'/g)].map((match) => match[1]);
+  assert.ok(named.includes('pengupool.reveal'), 'the reveal row action is missing from the webview');
+  for (const name of named) { assert.ok(contributed.has(name), `${name} is not contributed by package.json`); }
+});
+
 test('terminal shortcuts and settings do not change unrelated terminals', () => {
   assert.equal(manifest.contributes.configurationDefaults, undefined);
   const terminals = fs.readFileSync(path.join(__dirname, '../src/terminals.ts'), 'utf8');
@@ -30,7 +50,7 @@ test('Sessions uses a webview so its background can own a context menu', () => {
   assert.equal(view.type, 'webview');
 });
 
-test('pi Sessions view sits between Sessions and Shortcuts, only while both harnesses run', () => {
+test('the session lists stay in the PenguPool container, as shipped in 0.7.0', () => {
   const views = manifest.contributes.views.pengupool;
   assert.deepEqual(views.map((item) => item.id), ['pengupoolSessions', 'pengupoolPiSessions', 'pengupoolHints']);
   const pi = views[1];

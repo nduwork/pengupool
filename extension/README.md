@@ -44,7 +44,11 @@ Drag a session row onto another row to group it underneath, or onto empty tree s
 top level. Click a map node to select the matching sidebar row and show that session in the shared
 terminal; focused map nodes also respond to Enter and Space.
 Right-click a session row for its actions. Right-click empty space in Sessions to create a new
-session or add a previous one.
+session or add a previous one. Selecting a session also reveals its folder in the Explorer, when this
+window already contains it (`pengupool.explorerFollow: false` turns that off); a folder outside this
+window's workspace is left alone, because VS Code has no way to show one in place without adding it to
+your workspace. To keep the pool visible next to the Explorer, drag the PenguPool container to the
+Secondary Side Bar instead.
 The list and map share state cues: `● Active`, `◷ Waiting`, `○ Stale`, and `? Approval`.
 The map marks the selected session with a separate focus outline. The top of each tree carries a `LEAD`
 tag. Sessions outside every tree have a dashed border and stack in an **Ungrouped** column on the right,
