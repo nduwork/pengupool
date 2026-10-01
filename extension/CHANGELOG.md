@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.0
+
+- regrouping review in the map, single-click apply (#66)
+
+Ships with PenguPool v0.9.0.
+
 ## 0.5.0
 
 - right-click the map for the session menu (#65)

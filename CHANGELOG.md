@@ -5,6 +5,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-01
+
+### Added
+- regrouping review in the map, single-click apply (#66)
+
+- Editor extension: 0.6.0 (install both with `install.sh`; they ship together in this tag).
 ## [0.8.0] - 2026-09-30
 
 ### Added
