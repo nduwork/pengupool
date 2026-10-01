@@ -37,7 +37,7 @@ def test_groups_lists_the_parent_each_session_is_under(pool, capsys):
     assert ctl.main(["groups"]) == 0
     out = capsys.readouterr().out
     assert "kid  parent: lead" in out
-    assert "docs  parent: \u2014" in out          # ungrouped reads as a dash, not an empty field
+    assert "docs  parent: top level" in out       # ungrouped says so, rather than an empty field
     assert "pending proposal: none" in out
     assert ctl.main(["--json", "groups"]) == 0
     data = json.loads(capsys.readouterr().out)
@@ -98,7 +98,7 @@ def test_a_stale_plan_is_refused_and_kept_for_the_user_to_dismiss(pool, monkeypa
     live = [{"sessionId": A, "pid": 1, "cwd": "/x", "name": "lead", "harness": "cc"}]   # B went away
     monkeypatch.setattr(model, "load_sessions", lambda *a: live)
     assert ctl.main(["group-apply"]) == 2
-    assert "the plan is stale" in capsys.readouterr().err
+    assert "The plan is stale" in capsys.readouterr().err
     assert model.load_groups() == {}
     assert model.load_plan()
 

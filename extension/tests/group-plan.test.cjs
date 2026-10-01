@@ -5,15 +5,13 @@ const path = require('node:path');
 const vm = require('node:vm');
 const ts = require('typescript');
 
-// Exercise the real watcher with only VS Code and the CLI replaced. `confirm` is what the modal returns,
-// `pick` is what the notification's buttons return.
+// Exercise the real watcher with only VS Code and the CLI replaced.
 function harness(options = {}) {
-  const context = [], notices = [], errors = [], ctl = [], warns = [];
+  const context = [], notices = [], errors = [], ctl = [];
   const vscode = {
     commands: { executeCommand: async (...args) => { context.push(args); } },
     window: {
-      showInformationMessage: async (message, ...buttons) => { notices.push({ message, buttons }); return options.pick; },
-      showWarningMessage: async (message, opts, ...buttons) => { warns.push({ message, opts, buttons }); return options.confirm; },
+      showInformationMessage: async (message, ...buttons) => { notices.push({ message, buttons }); },
       showErrorMessage: (message) => errors.push(message),
     },
   };
@@ -31,7 +29,7 @@ function harness(options = {}) {
       },
     } : {},
   }, { filename });
-  return { exports, context, notices, errors, ctl, warns };
+  return { exports, context, notices, errors, ctl };
 }
 
 const plan = {
@@ -48,41 +46,30 @@ test('a waiting proposal shows the button and is announced exactly once', () => 
   watcher.update(plan);              // the same plan every snapshot tick: one announcement, not sixty
   assert.deepEqual(h.context, [['setContext', 'pengupool.groupPlanPending', true]]);
   assert.equal(h.notices.length, 1);
-  assert.deepEqual(h.notices[0].buttons, ['Review', 'Discard']);
+  assert.deepEqual(h.notices[0].buttons, ['Apply', 'Discard']);
   assert.match(h.notices[0].message, /2 moves/);
-  assert.match(h.notices[0].message, /Nothing moves until you approve it/);
+  assert.match(h.notices[0].message, /kid under lead/);
+  assert.match(h.notices[0].message, /docs to top level/);
+  assert.match(h.notices[0].message, /Why: same repo, one lead/);
   watcher.update(undefined);
   assert.deepEqual(h.context[1], ['setContext', 'pengupool.groupPlanPending', false]);
   watcher.update(null);
   assert.equal(h.context.length, 2); // already false: the key is not written again
 });
 
-test('Review shows every move, the reason and the routing cost, and applies on Apply', async () => {
-  const h = harness({ confirm: 'Apply' });
+test('Apply runs the regrouping directly; the notification carries the moves', async () => {
+  const h = harness();
   const watcher = new h.exports.GroupPlanWatcher();
   watcher.update(plan);
-  await watcher.review();
-  assert.equal(h.warns.length, 1);
-  assert.match(h.warns[0].message, /Apply this regrouping\? 2 moves/);
-  assert.equal(h.warns[0].opts.modal, true);
-  assert.match(h.warns[0].opts.detail, /• kid under lead/);
-  assert.match(h.warns[0].opts.detail, /• docs to top level/);
-  assert.match(h.warns[0].opts.detail, /Why: same repo, one lead/);
-  assert.match(h.warns[0].opts.detail, /who may message whom/);
+  // The notification lists every move so a single click is enough to approve.
+  assert.match(h.notices[0].message, /kid under lead/);
+  assert.match(h.notices[0].message, /docs to top level/);
+  assert.match(h.notices[0].message, /Why: same repo, one lead/);
+  await watcher.apply();
   assert.deepEqual(h.ctl, [['group-apply']]);
   assert.match(h.notices.at(-1).message, /applied 2 move\(s\)/);
   assert.equal(h.errors.length, 0);
   assert.deepEqual(h.context.at(-1), ['setContext', 'pengupool.groupPlanPending', false]);
-});
-
-test('dismissing the modal moves nothing', async () => {
-  const h = harness({});
-  const watcher = new h.exports.GroupPlanWatcher();
-  watcher.update(plan);
-  await watcher.review();
-  assert.equal(h.warns.length, 1);
-  assert.deepEqual(h.ctl, []);
-  assert.match(h.context.at(-1)[1], /groupPlanPending/);
 });
 
 test('Discard drops the proposal without applying it', async () => {
@@ -96,30 +83,31 @@ test('Discard drops the proposal without applying it', async () => {
 });
 
 test('a refused apply is reported, never announced as done', async () => {
-  const h = harness({ confirm: 'Apply', result: { code: 2, stdout: '', stderr: 'the plan is stale; propose it again' } });
+  const h = harness({ result: { code: 2, stdout: '', stderr: 'The plan is stale, so propose it again' } });
   const watcher = new h.exports.GroupPlanWatcher();
   watcher.update(plan);
-  await watcher.review();
+  await watcher.apply();
   assert.equal(h.errors.length, 1);
-  assert.match(h.errors[0], /the plan is stale/);
+  assert.match(h.errors[0], /The plan is stale/);
   assert.ok(!h.notices.some((n) => /applied/.test(n.message)));
 });
 
 test('the button is inert while nothing is waiting', async () => {
   const h = harness();
   const watcher = new h.exports.GroupPlanWatcher();
-  await watcher.review();
+  await watcher.apply();
   assert.match(h.notices[0].message, /no regrouping is waiting/);
   assert.deepEqual(h.ctl, []);
-  assert.equal(h.warns.length, 0);
 });
 
 test('the manifest, the snapshot and the extension are wired for the proposal', () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
   const command = manifest.contributes.commands.find((item) => item.command === 'pengupool.groupPlan');
   assert.ok(command, 'pengupool.groupPlan is not contributed');
-  const menu = manifest.contributes.menus['view/title'].find((item) => item.command === 'pengupool.groupPlan');
-  assert.ok(menu, 'the review button is not in the view/title menu');
+  // The apply button lives on the map's editor title bar, not the Sessions view's.
+  const menu = manifest.contributes.menus['webview/editor/title'].find((item) => item.command === 'pengupool.groupPlan');
+  assert.ok(menu, 'the apply button is not in the webview/editor/title menu');
+  assert.match(menu.when, /webview == pengupoolMap/);
   assert.match(menu.when, /pengupool\.groupPlanPending/);   // hidden until a session proposes one
   const serve = fs.readFileSync(path.join(__dirname, '../src/serveClient.ts'), 'utf8');
   assert.match(serve, /group_plan\?: GroupPlan \| null/);

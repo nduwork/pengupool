@@ -965,9 +965,9 @@ def group_error(child: str, parent: str, sessions: list[dict], groups: dict[str,
 
 # ---- a proposed regrouping, waiting for the user --------------------------------------------------
 #
-# A skill may propose: `ctl group-plan` takes a plan and stores it, and that is all it does. Applying it
+# A skill may propose. `ctl group-plan` takes a plan and stores it, and that is all it does. Applying it
 # is `ctl group-apply`, which is user-only, so a proposal can never approve itself and a session that
-# wants the tree changed has to ask. The plan is inert data: the group tree is still written only by
+# wants the tree changed has to ask. The plan is inert data. The group tree is still written only by
 # `groups.json`.
 
 GROUP_PLAN = PENGU / "group-plan.json"

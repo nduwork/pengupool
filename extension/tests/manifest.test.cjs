@@ -29,10 +29,15 @@ test('Resume Previous Sessions is a contributed title action next to Add Previou
   assert.equal(command.title, 'PenguPool: Resume Previous Sessions…');
   assert.equal(command.icon, '$(run-all)');
   const title = manifest.contributes.menus['view/title'];
-  const groups = ['navigation@1', 'navigation@2', 'navigation@3', 'navigation@4', 'navigation@5', 'navigation@6',
-                  'navigation@7'];   // @7 is the regrouping review button, hidden unless one waits
+  const groups = ['navigation@1', 'navigation@2', 'navigation@3', 'navigation@4', 'navigation@5', 'navigation@6'];
   assert.deepEqual(title.map((item) => item.group), groups);
   assert.equal(title[2].command, 'pengupool.resumePrevious');
+// The regrouping review button moved to the map's editor title bar.
+  const wet = manifest.contributes.menus['webview/editor/title'];
+  assert.equal(wet[0].command, 'pengupool.groupPlan');
+  assert.equal(wet[0].group, 'navigation@1');
+  assert.match(wet[0].when, /webview == pengupoolMap/);
+  assert.match(wet[0].when, /pengupool\.groupPlanPending/);
 });
 
 test('every session command the Sessions webview runs is contributed by the manifest', () => {

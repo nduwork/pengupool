@@ -108,7 +108,8 @@
       },
       {
         "command": "pengupool.groupPlan",
-        "title": "PenguPool: Review Regrouping"
+        "title": "PenguPool: Apply Regrouping",
+        "icon": "$(list-unordered)"
       },
       {
         "command": "pengupool.restart",
@@ -161,11 +162,13 @@
           "command": "pengupool.refresh",
           "when": "view == pengupoolSessions || view == pengupoolPiSessions",
           "group": "navigation@6"
-        },
+        }
+      ],
+      "webview/editor/title": [
         {
           "command": "pengupool.groupPlan",
-          "when": "(view == pengupoolSessions || view == pengupoolPiSessions) && pengupool.groupPlanPending",
-          "group": "navigation@7"
+          "when": "webview == pengupoolMap && pengupool.groupPlanPending",
+          "group": "navigation@1"
         }
       ]
     },

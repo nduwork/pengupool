@@ -62,7 +62,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('pengupool.showMap', () => MapPanel.toggle(context, client.lastSnapshot)),
     vscode.commands.registerCommand('pengupool.showLog', () => LogPanel.toggle(client.lastSnapshot)),
     vscode.commands.registerCommand('pengupool.refresh', () => client.restart()),
-    vscode.commands.registerCommand('pengupool.groupPlan', () => groupPlan.review()),
+    vscode.commands.registerCommand('pengupool.groupPlan', () => groupPlan.apply()),
   );
 
   client.start();

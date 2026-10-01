@@ -219,6 +219,14 @@ def _close(sid: str) -> int:
     return 0 if ok else 1
 
 
+def _place(groups: dict[str, str], child: str, parent: str) -> None:
+    """Put one session under `parent`, or at the top level when `parent` is empty."""
+    if parent:
+        groups[child] = parent
+    else:
+        groups.pop(child, None)
+
+
 def _group(child: str, parent: str) -> int:
     # Grouping decides who may message whom, so only the user (the editor, or a terminal outside any
     # session) regroups: a session that could re-parent itself or others would lift the routing rule.
@@ -235,10 +243,7 @@ def _group(child: str, parent: str) -> int:
         if err:
             print(err, file=sys.stderr)
             return 2
-        if parent:
-            groups[child] = parent
-        else:
-            groups.pop(child, None)          # "" = top level: forget any manual parent
+        _place(groups, child, parent)        # "" = top level: forget any manual parent
         model.save_groups(groups)
     return 0
 
@@ -257,15 +262,15 @@ def _groups(json_output: bool = False) -> int:
         print(json.dumps({"sessions": rows, "plan": plan or None}, indent=2))
         return 0
     for r in rows:
-        parent = r["parentName"] or (r["parent"][:8] if r["parent"] else "—")
+        parent = r["parentName"] or (r["parent"][:8] if r["parent"] else "top level")
         print(f"{r['name']}  parent: {parent}  {r['harness']}  {r['id'][:8]}")
     print(f"pending proposal: {len(plan.get('moves', []))} move(s)" if plan else "pending proposal: none")
     return 0
 
 
 def _group_plan() -> int:
-    """Store a proposed regrouping for the user to review. Any session may propose: the plan is inert
-    until `group-apply` runs, and that one is user-only."""
+    """Store a proposed regrouping for the user to review. Any session may propose one, and the plan stays
+    inert until `group-apply` runs, which is user-only."""
     raw = sys.stdin.read()
     try:
         plan = json.loads(raw) if raw.strip() else {}
@@ -277,12 +282,12 @@ def _group_plan() -> int:
         print('usage: pengupool ctl group-plan reads {"moves": [{"child": "<sid>", "parent": "<sid>"}]} on '
               'stdin (parent "" = top level)', file=sys.stderr)
         return 2
-    sessions = list(_index()[1].values())
-    err = model.plan_error(moves, sessions, model.load_groups())
+    _, live = _index()
+    err = model.plan_error(moves, list(live.values()), model.load_groups())
     if err:
         print(err, file=sys.stderr)
         return 2
-    names = {s["sessionId"]: s["name"] for s in sessions}
+    names = {sid: s["name"] for sid, s in live.items()}
     labelled = []
     for m in moves:
         child, parent = str(m.get("child") or ""), str(m.get("parent") or "")
@@ -294,8 +299,8 @@ def _group_plan() -> int:
 
 
 def _group_apply(mode: str = "") -> int:
-    """Apply (or drop) the pending proposal. User-only, for the same reason `group` is: a session that
-    could apply its own proposal would regroup the pool without anyone approving the tree."""
+    """Apply (or drop) the pending proposal. It is user-only for the same reason `group` is, because a
+    session that could apply its own proposal would regroup the pool without anyone approving the tree."""
     if mode not in ("", "--discard"):
         print("usage: pengupool ctl group-apply [--discard]", file=sys.stderr)
         return 2
@@ -314,17 +319,14 @@ def _group_apply(mode: str = "") -> int:
         model.clear_plan()
         print(f"discarded {len(plan['moves'])} proposed move(s)")
         return 0
-    with model.locked(model.GROUPS):  # one read-modify-write at a time: concurrent regroups both land
+    with model.locked(model.GROUPS):  # one read-modify-write at a time, so concurrent regroups land
         groups = model.load_groups()
         err = model.plan_error(plan["moves"], model.load_sessions(), groups)
         if err:
-            print(f"{err} — the plan is stale; propose it again", file=sys.stderr)
+            print(f"{err}. The plan is stale, so propose it again", file=sys.stderr)
             return 2
         for m in plan["moves"]:
-            if m["parent"]:
-                groups[m["child"]] = m["parent"]
-            else:
-                groups.pop(m["child"], None)
+            _place(groups, m["child"], m["parent"])
         model.save_groups(groups)
     model.clear_plan()
     print(f"applied {len(plan['moves'])} move(s)")
