@@ -31,6 +31,14 @@ export interface Snapshot {
   roots: SessionNode[];
   cross: [string, string, string][];
   msgs: [string, string, string, string, boolean][];
+  group_plan?: GroupPlan | null;   // a regrouping a session proposed, waiting for the user
+}
+
+/** A regrouping `ctl group-plan` stored. Applying it is `ctl group-apply`, which is the user's side. */
+export interface GroupPlan {
+  created: number;
+  note: string;
+  moves: { child: string; parent: string; label: string }[];
 }
 
 /**

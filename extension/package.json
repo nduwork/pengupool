@@ -107,6 +107,10 @@
         "title": "PenguPool: Compact (/compact)"
       },
       {
+        "command": "pengupool.groupPlan",
+        "title": "PenguPool: Review Regrouping"
+      },
+      {
         "command": "pengupool.restart",
         "title": "PenguPool: Restart & Resume"
       },
@@ -157,6 +161,11 @@
           "command": "pengupool.refresh",
           "when": "view == pengupoolSessions || view == pengupoolPiSessions",
           "group": "navigation@6"
+        },
+        {
+          "command": "pengupool.groupPlan",
+          "when": "(view == pengupoolSessions || view == pengupoolPiSessions) && pengupool.groupPlanPending",
+          "group": "navigation@7"
         }
       ]
     },
