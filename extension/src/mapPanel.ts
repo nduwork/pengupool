@@ -66,6 +66,10 @@ export class MapPanel {
       // rebuilds the whole model from disk (sessions, transcripts, roles, chains) and sends it in full.
       if (message?.type === 'refresh') { this.render(); void vscode.commands.executeCommand('pengupool.refresh'); }
       if (message?.type === 'tab' && this.tabs.pick(message.harness)) { this.render(); }
+      // The in-map banner posts apply and discard. Grouping decides who may message whom, so a
+      // session may propose a regroup but never apply one.
+      if (message?.type === 'applyGroupPlan') { void vscode.commands.executeCommand('pengupool.groupPlan'); }
+      if (message?.type === 'discardGroupPlan') { void vscode.commands.executeCommand('pengupool.groupPlan.discard'); }
     });
     this.panel.onDidDispose(() => { if (MapPanel.current === this) { MapPanel.current = undefined; } });
   }
@@ -140,6 +144,18 @@ function html(webview: vscode.Webview, dagreUri: vscode.Uri): string {
   #tools button:hover { background:var(--vscode-button-secondaryHoverBackground); }
   #empty { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
            color: var(--vscode-descriptionForeground); }
+  /* Regrouping banner: a one-click apply / discard strip the user cannot miss. */
+  #regroupBanner { display:none; position:absolute; top:8px; left:50%; transform:translateX(-50%);
+    z-index:5; max-width:calc(100% - 32px); padding:6px 10px; gap:8px; align-items:center;
+    background:var(--vscode-editorWidget-background); border:1px solid var(--vscode-panel-border);
+    border-radius:4px; box-shadow:0 2px 8px rgba(0,0,0,.25); font-size:11px; }
+  #regroupBanner.shown { display:flex; }
+  #regroupBanner .label { font-weight:600; }
+  #regroupBanner .moves { color:var(--vscode-descriptionForeground); margin-left:4px; }
+  #regroupBanner button { cursor:pointer; padding:2px 10px; border-radius:3px; font:inherit; font-size:11px;
+    border:1px solid var(--vscode-button-border, transparent); }
+  #regroupBanner button.apply { background:var(--vscode-button-background); color:var(--vscode-button-foreground); }
+  #regroupBanner button.discard { background:var(--vscode-button-secondaryBackground); color:var(--vscode-button-secondaryForeground); }
   ${MENU_CSS}
   ${HARNESS_TABS_CSS}
   #tabs { position:absolute; top:0; left:0; right:0; z-index:1; height:28px; box-sizing:border-box; }
@@ -152,6 +168,12 @@ function html(webview: vscode.Webview, dagreUri: vscode.Uri): string {
   #svg { margin-top:28px; }   /* below the toolbar */
 </style></head><body>
 ${HARNESS_TABS_HTML}
+<div id="regroupBanner">
+  <span class="label">Regrouping (<span id="rgCount"></span>)</span>
+  <span class="moves" id="rgMoves"></span>
+  <button class="apply" id="rgApply">Apply</button>
+  <button class="discard" id="rgDiscard">Discard</button>
+</div>
 <div id="tools">
   <button id="dir" title="Lay the map out top-down or left-right"></button>
   <button id="spacing" title="Space the cards compactly or roomily"></button>
@@ -322,6 +344,14 @@ ${MENU_HTML}
       if(k && !(hot[k] && hot[k].t > t)) hot[k] = { t, dir: k === a+'>'+b ? 'hot-down' : 'hot-up' }; });
     edgeEls.forEach((path, k) => path.setAttribute('class', 'edge' + (hot[k] ? ' '+hot[k].dir : '')));
   }
+  function renderRegroupBanner(snap){
+    const banner = document.getElementById('regroupBanner');
+    const p = snap.group_plan;
+    if (!p || !p.moves || !p.moves.length) { banner.classList.remove('shown'); return; }
+    document.getElementById('rgCount').textContent = p.moves.length === 1 ? '1 move' : p.moves.length + ' moves';
+    document.getElementById('rgMoves').textContent = p.moves.map((m) => m.label).join(' · ');
+    banner.classList.add('shown');
+  }
   function restyle(snap, now = Date.now()){
     restyleEdges(snap, now);
     flat(snap.roots).forEach(n => {
@@ -353,6 +383,7 @@ ${MENU_HTML}
     const key = sizeKey(snap.roots);
     if(snap.topo_hash !== topo || key !== sizes || fresh){ fresh = false; topo = snap.topo_hash; sizes = key; relayout(snap); }
     restyle(snap);
+    renderRegroupBanner(snap);
   });
   // Refresh: forget the cached layout and redraw now, then reload everything from the backend and
   // lay the map out again from that fresh snapshot, even when its structure did not change.
@@ -367,6 +398,8 @@ ${MENU_HTML}
   document.getElementById('spacing').addEventListener('click', () => setOpt('spacing', opts.spacing==='compact' ? 'roomy' : 'compact'));
   showOpts();
   document.getElementById('refresh').addEventListener('click', () => { fresh = true; redraw(); vscode.postMessage({type:'refresh'}); });
+  document.getElementById('rgApply').addEventListener('click', () => vscode.postMessage({type:'applyGroupPlan'}));
+  document.getElementById('rgDiscard').addEventListener('click', () => vscode.postMessage({type:'discardGroupPlan'}));
   // Empty canvas: the pool actions, exactly as a right-click on the list's background.
   document.getElementById('wrap').addEventListener('contextmenu', event => {
     if(!event.target.closest('.node')) showMenu(event, null, revealLabel); });

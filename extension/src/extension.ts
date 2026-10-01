@@ -10,6 +10,7 @@ import { DefaultLayout } from './defaultLayout';
 import { SessionsView } from './sessionsView';
 import { ExplorerFollow } from './explorer';
 import { bothHarnessesContext } from './harness';
+import { GroupPlanWatcher } from './groupPlan';
 
 export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel('PenguPool');
@@ -26,6 +27,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const syncBoth = bothHarnessesContext();
   const hints = vscode.window.registerTreeDataProvider('pengupoolHints', new HintsProvider());
   const layout = new DefaultLayout(context, tree, terminals);
+  const groupPlan = new GroupPlanWatcher();
 
   client.onSnapshot((snap) => {
     provider.update(snap);
@@ -34,6 +36,7 @@ export function activate(context: vscode.ExtensionContext): void {
     piTree.update(snap);
     terminals.reconcile(snap.roots);        // bind freshly launched terminals to their sessionId
     layout.update(snap);
+    groupPlan.update(snap.group_plan);
     MapPanel.showIfOpen()?.update(snap);
     LogPanel.showIfOpen()?.update(snap);
   });
@@ -59,6 +62,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('pengupool.showMap', () => MapPanel.toggle(context, client.lastSnapshot)),
     vscode.commands.registerCommand('pengupool.showLog', () => LogPanel.toggle(client.lastSnapshot)),
     vscode.commands.registerCommand('pengupool.refresh', () => client.restart()),
+    vscode.commands.registerCommand('pengupool.groupPlan', () => groupPlan.apply()),
   );
 
   client.start();

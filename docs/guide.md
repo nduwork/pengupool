@@ -113,6 +113,10 @@ Worktrees are created next to the repo as `<repo>-wt-<name>` on a `pengupool/<na
 - After a Claude Code or pi update, press `Shift+R` (or right-click → **Restart & Resume**). The session
   stops and resumes in the same terminal with the new version, keeping its id, group and role.
 - To reorganise, drag rows. Dropping a row on empty space moves it to the top level.
+- To reorganise by asking, say so in a session ("group these sessions") and the
+  [pool-groups skill](../pool-groups/SKILL.md) proposes the moves, shows them to you and stores them only
+  if you agree. Nothing moves until you approve it in the editor, because a session may propose a regroup
+  but never apply one.
 
 ## How routing works
 

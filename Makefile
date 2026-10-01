@@ -19,12 +19,13 @@ EDITOR_CLI ?=
 EDITOR_RUN = EDITOR_CLI="$(EDITOR_CLI)" python3 scripts/editor_cli.py
 VSIX ?= $(or $(TMPDIR),/tmp)/pengupool-local.vsix
 
-.PHONY: install uninstall check-install install-all uninstall-all install-hooks uninstall-hooks install-tracker uninstall-tracker selfcheck test ext-deps ext-test ext-compile ext-package ext-install ext-uninstall
+.PHONY: install uninstall check-install install-all uninstall-all install-hooks uninstall-hooks install-tracker uninstall-tracker install-pool-groups uninstall-pool-groups selfcheck test ext-deps ext-test ext-compile ext-package ext-install ext-uninstall
 
 install:
 	$(UV) tool install --force $(UV_INSTALL_FLAGS) .
 	CLAUDE_SETTINGS="$(CLAUDE_SETTINGS)" "$(PENGUPOOL)" setup $(HARNESS)
 	$(MAKE) install-tracker
+	$(MAKE) install-pool-groups
 
 check-install:
 	CLAUDE_SETTINGS="$(CLAUDE_SETTINGS)" "$(PENGUPOOL)" setup --check $(HARNESS)
@@ -59,6 +60,16 @@ install-tracker:
 	$(if $(TRACKER_PI),ln -sfn "$(BIN)" "$(PI_AGENT)/skills/workflow-tracker/scripts")
 	$(if $(TRACKER_PI),@echo "workflow-tracker: pi extension + skill → $(PI_AGENT) (restart pi sessions to load)")
 
+# The pool-groups skill is instructions only: the single write it makes (`ctl group-plan`) belongs to the
+# backend, and applying a proposal stays the user's step.
+install-pool-groups:
+	$(if $(TRACKER_PI),mkdir -p "$(PI_AGENT)/skills/pool-groups")
+	$(if $(TRACKER_PI),cp pool-groups/SKILL.md "$(PI_AGENT)/skills/pool-groups/SKILL.md")
+	$(if $(TRACKER_PI),@echo "pool-groups: skill → $(PI_AGENT) (restart pi sessions to load; ask for it by name)")
+
+uninstall-pool-groups:
+	rm -rf "$(PI_AGENT)/skills/pool-groups"
+
 # Unwires both harnesses whatever HARNESS is: removing only our own files and settings entries is safe.
 uninstall-tracker:
 	@if [ -f "$(BIN)/wire_statusline.sh" ]; then $(WIRE_ENV) bash "$(BIN)/wire_statusline.sh" --unwire; fi
@@ -68,6 +79,7 @@ uninstall-tracker:
 
 uninstall:
 	$(MAKE) uninstall-tracker
+	$(MAKE) uninstall-pool-groups
 	CLAUDE_SETTINGS="$(CLAUDE_SETTINGS)" "$(PENGUPOOL)" teardown both
 	$(UV) tool uninstall pengupool
 

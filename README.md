@@ -52,6 +52,8 @@ Grouped sessions receive a short `<pengupool>` block with their tree, parent, ch
 Triage gets a hint from code. When a prompt matches a child's routing keywords (`pengupool ctl describe <id> --keywords "lexer, parser"`), name, workspace or role, the session is told `ROUTE CHECK` with the words that matched, and decides whether to route. A session with no role is told `ROLE REQUIRED`. Messages from other sessions, idle notices and subagent reports never trigger the check. Each grouped reply starts with a `Triage:` line, and "do it yourself" in a prompt turns the check off for that prompt.
 
 PenguPool reads local Claude Code and pi session files and keeps its own state under `~/.pengupool/`. It does not need a cloud account or hosted service. The bundled [workflow tracker](workflow-tracker/SKILL.md) shows each session's current work phase under its map card.
+The [pool-groups](pool-groups/SKILL.md) skill proposes a change to the session tree when you ask for one, and
+waits for your approval before anything moves.
 
 ## Develop
 

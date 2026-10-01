@@ -107,6 +107,11 @@
         "title": "PenguPool: Compact (/compact)"
       },
       {
+        "command": "pengupool.groupPlan",
+        "title": "PenguPool: Apply Regrouping",
+        "icon": "$(list-unordered)"
+      },
+      {
         "command": "pengupool.restart",
         "title": "PenguPool: Restart & Resume"
       },
@@ -157,6 +162,13 @@
           "command": "pengupool.refresh",
           "when": "view == pengupoolSessions || view == pengupoolPiSessions",
           "group": "navigation@6"
+        }
+      ],
+      "webview/editor/title": [
+        {
+          "command": "pengupool.groupPlan",
+          "when": "webview == pengupoolMap && pengupool.groupPlanPending",
+          "group": "navigation@1"
         }
       ]
     },

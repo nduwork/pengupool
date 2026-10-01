@@ -8,7 +8,8 @@ Wire format (one JSON object per line):
     {"rev": 7, "ts": 1732., "topo_hash": "ab12…",
      "roots": [ {id,name,cwd,repo,pid,state,status,label,ctx_pct,started,children:[…]} ],
      "cross": [ [src_name, dst_name, label] ],
-     "msgs":  [ [ts, src, dst, label, incoming] ]}
+     "msgs":  [ [ts, src, dst, label, incoming] ],
+     "group_plan": {"created": ts, "note": "", "moves": [{"child", "parent", "label"}]} | null}
 
 `topo_hash` covers structure only (ids + parent/child + cross edges), NOT status — so a client can
 relayout its graph only when the hash changes and otherwise just restyle nodes in place (colour,
@@ -50,7 +51,8 @@ def build() -> dict:
     return {"topo_hash": _topo(roots, cross),
             "roots": [_node(r) for r in roots],
             "cross": [list(e) for e in cross],
-            "msgs": [[m.ts, m.src, m.dst, m.label, m.incoming] for m in msgs[-60:]]}
+            "msgs": [[m.ts, m.src, m.dst, m.label, m.incoming] for m in msgs[-60:]],
+            "group_plan": model.load_plan() or None}
 
 
 def _poll_interval() -> float:

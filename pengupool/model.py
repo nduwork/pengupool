@@ -960,3 +960,54 @@ def group_error(child: str, parent: str, sessions: list[dict], groups: dict[str,
         return (f"cannot group a {harness.LABEL[harness.of(by_id[child])]} session under a "
                 f"{harness.LABEL[harness.of(by_id[parent])]} session: harnesses never share a tree")
     return ""
+
+
+
+# ---- a proposed regrouping, waiting for the user --------------------------------------------------
+#
+# A skill may propose. `ctl group-plan` takes a plan and stores it, and that is all it does. Applying it
+# is `ctl group-apply`, which is user-only, so a proposal can never approve itself and a session that
+# wants the tree changed has to ask. The plan is inert data. The group tree is still written only by
+# `groups.json`.
+
+GROUP_PLAN = PENGU / "group-plan.json"
+
+
+def load_plan() -> dict:
+    """The pending proposal: {"created": ts, "note": str, "moves": [{"child", "parent", "label"}]}."""
+    plan = _json(GROUP_PLAN)
+    return plan if isinstance(plan, dict) and isinstance(plan.get("moves"), list) else {}
+
+
+def save_plan(plan: dict) -> None:
+    write_json(GROUP_PLAN, plan)
+
+
+def clear_plan() -> None:
+    try:
+        GROUP_PLAN.unlink()
+    except OSError:
+        pass
+
+
+def plan_error(moves: list, sessions: list[dict], groups: dict[str, str] | None = None) -> str:
+    """Why a whole proposal is invalid ('' = allowed). Each move is folded in as it is checked, so a loop
+    that only the later moves close is still caught."""
+    if not moves:
+        return "the plan has no moves"
+    trial, seen = dict(groups or {}), set()
+    for move in moves:
+        if not isinstance(move, dict):
+            return "every move needs a session and a parent"
+        child, parent = str(move.get("child") or ""), str(move.get("parent") or "")
+        if child in seen:
+            return f"the plan moves {child} twice"
+        seen.add(child)
+        err = group_error(child, parent, sessions, trial)
+        if err:
+            return err
+        if parent:
+            trial[child] = parent
+        else:
+            trial.pop(child, None)
+    return ""
