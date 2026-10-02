@@ -116,6 +116,36 @@ def test_trees_never_mix_harnesses():
     assert model.group_error("q", "p", sessions) == ""
 
 
+def test_a_shared_name_never_pulls_a_pi_child_under_claude():
+    # each harness names its own sessions, so a Claude and a pi session can both be "notes"
+    s = {"cwd": "", "state": "waiting"}
+    sessions = [{**s, "sessionId": "c", "name": "notes", "harness": "cc", "pid": 1},
+                {**s, "sessionId": "p", "name": "notes", "harness": "pi", "pid": 2},
+                {**s, "sessionId": "k", "name": "kid", "harness": "pi", "pid": 3}]
+    roots, _ = model.build_trees(sessions, model.apply_groups(sessions, [], {"k": "p"}))
+    kids = {r.session_id: [c.session_id for c in r.children] for r in roots}
+    assert kids == {"c": [], "p": ["k"]}
+
+
+def test_a_pi_message_names_the_pi_session_not_its_claude_namesake(tmp_path, monkeypatch):
+    # pi-intercom calls the pi parent "notes"; the tree (and so the pi tab's log) calls it "notes~2"
+    for k, v in {"CLAUDE": tmp_path, "PENGU": tmp_path, "GROUPS": tmp_path / "g.json",
+                 "CLEARED": tmp_path / "cleared.json"}.items():
+        monkeypatch.setattr(model, k, v)
+    model.save_groups({"k": "p"})
+    sent = tmp_path / "kid.jsonl"
+    sent.write_text(j({"type": "custom", "customType": "intercom_sent", "timestamp": "2026-01-01T00:00:01Z",
+                       "data": {"to": "notes", "message": {"text": "done"}}}) + "\n")
+    s = {"cwd": str(tmp_path), "state": "waiting"}
+    sessions = [{**s, "sessionId": "c", "name": "notes", "harness": "cc", "pid": 1},
+                {**s, "sessionId": "p", "name": "notes", "harness": "pi", "pid": 2},
+                {**s, "sessionId": "k", "name": "kid", "harness": "pi", "pid": 3, "sessionFile": str(sent)}]
+    monkeypatch.setattr(model, "load_sessions", lambda *a, **k: [dict(x) for x in sessions])
+    monkeypatch.setattr(model, "TRANSCRIPTS", model.Transcripts())
+    _, _, msgs = model.snapshot()
+    assert [(m.src, m.dst) for m in msgs] == [("kid", "notes~2")]
+
+
 def test_a_long_busy_turn_is_never_stale(tmp_path, monkeypatch):
     # updatedAt moves only on status changes, so a resumed session's long "continue" turn is old but working
     monkeypatch.setattr(model, "CLAUDE", tmp_path / "claude")
