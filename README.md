@@ -1,10 +1,6 @@
 <p align="center">
-  <img src="docs/assets/pengupool.webp" alt="A lifeguard penguin with a headset and whistle watches over penguin agents swimming in their own lanes" width="360">
+  <img src="docs/assets/pengupool.webp" alt="PenguPool, the lifeguard for your pool of agents: a penguin lifeguard with a headset sends messages to penguin agents working in their own pool lanes">
 </p>
-
-<h1 align="center">PenguPool</h1>
-
-<p align="center"><b>The lifeguard for your pool of agents.</b></p>
 
 Your agents are the pengus: Claude Code and pi sessions, each swimming its own lane in its own repo or
 worktree, passing work to one another and working together in sync. PenguPool is the tool that manages
