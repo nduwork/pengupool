@@ -1,6 +1,20 @@
-# PenguPool
+<p align="center">
+  <img src="docs/assets/pengupool.webp" alt="A lifeguard penguin with a headset and whistle watches over penguin agents swimming in their own lanes" width="360">
+</p>
 
-**See your agent sessions in one place.** PenguPool manages collaborating Claude Code and pi sessions from VS Code/Cursor, backed by a local Python CLI. It shows the session tree, a live map of who is talking to whom, recent messages, and a tmux-backed terminal per harness. Sessions run in tmux and keep running when you close the front end.
+<h1 align="center">PenguPool</h1>
+
+<p align="center"><b>The lifeguard for your pool of agents.</b></p>
+
+Your agents are the pengus: Claude Code and pi sessions, each swimming its own lane in its own repo or
+worktree, passing work to one another and working together in sync. PenguPool is the tool that manages
+the pool. It watches every lane from VS Code/Cursor, backed by a local Python CLI: the session tree, a
+live map of who is talking to whom, recent messages, and a tmux-backed terminal per harness. It also
+keeps the lanes in order: a grouped session messages only its parent or its direct children, so work
+moves down the tree and results come back up. Sessions run in tmux and keep swimming when you close
+the front end.
+
+![PenguPool in Cursor: the lead session routes "Add token refresh to login" to its api and web children, shown in the Sessions tree, the Map, the Log and the terminal](docs/assets/tutorial/3-ask-the-top.gif)
 
 ## Tutorial
 
