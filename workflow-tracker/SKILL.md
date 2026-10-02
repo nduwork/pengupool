@@ -48,6 +48,9 @@ lives in `./.step-status/` (self-ignoring; each session gets a tracker of its ow
    STEPS done loop                          # ✓ loop, auto-activates summary
    STEPS fail summary                       # ✗ if a step blows up
    ```
+   Progress moves **only** through `done`/`start`/`fail`. Never re-run `set` to record it: `set`
+   restarts the chain, and it refuses status-looking step names such as `init:done` or `loop ✓`.
+   There is no `advance` or `next` command. `done <step>` already activates the next step.
 3. **At the end**: post the finished chain as the last progress line. There's no need to clear it.
    A chain is finished when no step is active: all `✓`, stopped at a `✗`, or the last step done past a
    skipped `○`. A minute after its last update (`STEP_STATUS_DONE_TTL`, in seconds), it stops rendering
