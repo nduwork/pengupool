@@ -1,6 +1,16 @@
-# PenguPool
+<p align="center">
+  <img src="docs/assets/pengupool.webp" alt="PenguPool, the lifeguard for your pool of agents: a penguin lifeguard with a headset sends messages to penguin agents working in their own pool lanes">
+</p>
 
-**See your agent sessions in one place.** PenguPool manages collaborating Claude Code and pi sessions from VS Code/Cursor, backed by a local Python CLI. It shows the session tree, a live map of who is talking to whom, recent messages, and a tmux-backed terminal per harness. Sessions run in tmux and keep running when you close the front end.
+Your agents are the pengus: Claude Code and pi sessions, each swimming its own lane in its own repo or
+worktree, passing work to one another and working together in sync. PenguPool is the tool that manages
+the pool. It watches every lane from VS Code/Cursor, backed by a local Python CLI: the session tree, a
+live map of who is talking to whom, recent messages, and a tmux-backed terminal per harness. It also
+keeps the lanes in order: a grouped session messages only its parent or its direct children, so work
+moves down the tree and results come back up. Sessions run in tmux and keep swimming when you close
+the front end.
+
+![PenguPool in Cursor: the lead session routes "Add token refresh to login" to its api and web children, shown in the Sessions tree, the Map, the Log and the terminal](docs/assets/tutorial/3-ask-the-top.gif)
 
 ## Tutorial
 
@@ -30,15 +40,17 @@ make install-all    # backend + extension (EDITOR_CLI=code|cursor to choose)
 
 ## Use
 
-Open the PenguPool view (penguin icon in the Activity Bar). The Sessions tree lists Claude Code sessions, and a pi Sessions tree appears when pi is installed. Select a session to show it in the PenguPool terminal; the Map and Log panels show the selected tree.
+Open the PenguPool view (penguin icon in the Activity Bar). Claude Sessions lists your Claude Code sessions. A Pi Sessions view appears while both Claude Code and pi sessions are running, and the Map and Log then get a Claude Code | pi tab each. Select a session to show it in the PenguPool terminal; the Map and Log panels show the selected tree. The Shortcuts panel under the sessions is a cheat sheet of the keys below.
 
 | Key | Action |
 | --- | --- |
-| `Enter` / click | Open a session in the terminal; its folder is revealed in the Explorer when this window has it |
+| `Enter` / click | Open a session in the terminal; its folder is revealed in the Explorer when this window has it (`pengupool.explorerFollow` turns that off) |
 | `n`, `a` | Start a session (in the folder or a new worktree) or add a previous one |
 | `g` / drag | Group under another session |
-| `r`, `x`, `c` | Rename, close, or compact a session |
+| `r`, `d` | Rename a session, or describe its role |
+| `x`, `c` | Close or compact a session |
 | `Shift+R` | Restart & resume, e.g. after a Claude Code or pi update |
+| `Shift+Enter` | New line in a Claude Code prompt, in the PenguPool terminal |
 | right-click | All session actions, including Reveal in Finder and Describe Role; the map offers the same menu on its nodes |
 
 After a reboot, or any time the tmux server is gone, **Resume Previous Sessions…** (the run-all button
@@ -51,16 +63,17 @@ Grouped sessions receive a short `<pengupool>` block with their tree, parent, ch
 
 Triage gets a hint from code. When a prompt matches a child's routing keywords (`pengupool ctl describe <id> --keywords "lexer, parser"`), name, workspace or role, the session is told `ROUTE CHECK` with the words that matched, and decides whether to route. A session with no role is told `ROLE REQUIRED`. Messages from other sessions, idle notices and subagent reports never trigger the check. Each grouped reply starts with a `Triage:` line, and "do it yourself" in a prompt turns the check off for that prompt.
 
-PenguPool reads local Claude Code and pi session files and keeps its own state under `~/.pengupool/`. It does not need a cloud account or hosted service. The bundled [workflow tracker](workflow-tracker/SKILL.md) shows each session's current work phase under its map card.
-The [pool-groups](pool-groups/SKILL.md) skill proposes a change to the session tree when you ask for one, and
-waits for your approval before anything moves.
+PenguPool reads local Claude Code and pi session files and keeps its own state under `~/.pengupool/`. It does not need a cloud account or hosted service. The bundled [workflow tracker](workflow-tracker/SKILL.md) keeps one workflow chain per session and shows its current phase under the session's map card.
+The [pool-groups](pool-groups/SKILL.md) skill proposes a change to the session tree when you ask for one. Nothing
+moves until you apply it: the proposal shows as a banner on the map and a notification, each with Apply and
+Discard, and a session can never apply one itself.
 
 ## Develop
 
 ```sh
-uv sync --group dev
-uv run pytest -q
-cd extension && npm ci && npm test && npm run compile
+make ext-deps       # once per clone or worktree: installs extension/node_modules
+make test           # uv run pytest -q, then the extension tests
+make ext-compile    # build the extension
 ```
 
 `pengupool` with no arguments lists the commands. `pengupool serve` streams NDJSON snapshots for the extension (`--once` prints one). `pengupool ctl` lists the control verbs the editor and pi extensions call. To propose a change, use a fork and pull request; see [CONTRIBUTING.md](.github/CONTRIBUTING.md).
@@ -71,4 +84,4 @@ A release is a tag. `scripts/release.sh` bumps `pyproject.toml` from conventiona
 
 ## Limits
 
-PenguPool supports macOS/Linux and requires tmux. Adopting a running session from outside PenguPool stops that process and resumes it from its transcript, so wait for the current turn to finish. Context percentages appear only when the agent reports them. The message guard applies to supported agent messaging tools, not every possible external communication channel. pi gets the triage directive but not the end-of-turn check yet.
+PenguPool supports macOS/Linux and requires tmux. Adopting a running session from outside PenguPool stops that process and resumes it from its transcript, so wait for the current turn to finish. Context percentages appear only when the agent reports them. The message guard applies to supported agent messaging tools, not every possible external communication channel.
