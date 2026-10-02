@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.1
+
+- tidy the Shortcuts panel and the right-click menu (#67)
+
+Ships with PenguPool v0.9.1.
+
 ## 0.6.0
 
 - regrouping review in the map, single-click apply (#66)

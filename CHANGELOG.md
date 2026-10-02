@@ -5,6 +5,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-10-01
+
+### Fixed
+- refuse status-looking step names and point at done/start (#68)
+- tidy the Shortcuts panel and the right-click menu (#67)
+
+- Editor extension: 0.6.1 (install both with `install.sh`; they ship together in this tag).
 ## [0.9.0] - 2026-10-01
 
 ### Added
