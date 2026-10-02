@@ -93,6 +93,18 @@ test('shortcuts avoid a Terminal section and describe PenguPool-specific behavio
   assert.match(hints, /map cards refresh phase chain · context use/);
 });
 
+test('run-all is listed under Views, not among the session keys', () => {
+  const hints = fs.readFileSync(path.join(__dirname, '../src/hintsView.ts'), 'utf8');
+  const views = hints.slice(hints.indexOf("label: 'Views'"));
+  const keys = hints.slice(hints.indexOf("label: 'Keys'"), hints.indexOf("label: 'Views'"));
+  assert.match(views, /icon: 'run-all',\s*command: 'pengupool.resumePrevious'/);
+  assert.doesNotMatch(keys, /run-all/);
+  // every Sessions keybinding has a row in Keys
+  for (const key of ['n', 'a', 'g', 'r', 'd', 'x', 'c', '⇧R']) {
+    assert.match(keys, new RegExp(`label: '${key}'`));
+  }
+});
+
 test('new session picks a harness instead of a free-text launch command', () => {
   const commands = fs.readFileSync(path.join(__dirname, '../src/commands.ts'), 'utf8');
   assert.doesNotMatch(commands, /launchCommand/);
