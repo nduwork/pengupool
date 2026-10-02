@@ -5,6 +5,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-10-02
+
+### Fixed
+- same-named Claude and pi sessions no longer share a tree or log (#72)
 ## [0.9.1] - 2026-10-01
 
 ### Fixed
