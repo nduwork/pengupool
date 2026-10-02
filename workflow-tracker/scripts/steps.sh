@@ -6,6 +6,8 @@
 #                                     names the ticker (the [bracket] label); default: "default"
 #   steps.sh start <name> [detail]    mark a step in progress (detail shows as name|detail)
 #   steps.sh done <name>              mark done; activates the next planned step if none is active
+#                                     (the only way to mark progress: `set` restarts the chain and
+#                                     refuses status-looking names like `init:done`)
 #   steps.sh fail <name>              mark failed
 #   steps.sh assert <name>            ordering gate: exit 2 unless every earlier step is done
 #   steps.sh cycle <step>...          loops: re-arm a segment (the named steps) for its next
@@ -302,8 +304,29 @@ check_steps() {
   for n in "$@"; do
     valid_name "$n" || return 2
     [[ "$seen" == *$'\n'"$n"$'\n'* ]] && { echo "steps.sh: duplicate step name '$n'" >&2; return 2; }
+    status_like "$n" && { echo "steps.sh: step name '$n' carries a status — step names are plain, and progress is marked with: steps.sh done|start|fail <step> (e.g. steps.sh done ${n%%[:= ]*})" >&2; return 2; }
     seen+="$n"$'\n'
   done
+}
+# status_like <name> — a step name that spells a status (`explore:done`, `test=ok`, `build ✓`) is an
+# attempt to mark progress through `set`, which would record a step literally named that, render it ○,
+# and leave the view out of step with the work. Refused so the agent reaches for `done`/`start`.
+status_like() {
+  local n lower; n="$1"; lower="$(printf '%s' "$n" | tr '[:upper:]' '[:lower:]')"
+  [[ "$n" == *✓* || "$n" == *●* || "$n" == *○* || "$n" == *✗* ]] && return 0
+  [[ "$lower" =~ [:=]\ *(done|active|started|failed|fail|ok|complete|completed|finished|pending|planned|todo|wip|skip|skipped)$ ]]
+}
+# progress_note — before `set` replaces a live chain that has progress, say so on stderr: re-running
+# `set` restarts the chain, so it is the wrong way to mark a step finished.
+progress_note() {
+  [[ -f "$STATE" && ! -L "$STATE" ]] || return 0
+  expired "$STATE" && return 0
+  local st name detail n=0
+  while IFS=$'\t' read -r st name detail || [[ -n "${name-}" ]]; do
+    [[ "$st" == done || "$st" == failed ]] && n=$((n+1))
+  done < "$STATE"
+  (( n > 0 )) || return 0
+  echo "steps.sh: note: set restarted [$CHAIN], discarding $n finished step(s) — to mark progress use steps.sh done|start <step>, not set" >&2
 }
 # prune_sessions — drop the OTHER sessions' trackers that nothing in them has been touched for
 # SESSION_TTL days. Called on `set`: a new workflow is the natural moment, it never touches this
@@ -328,6 +351,7 @@ set_chain() {
   check_steps "$@" || return $?
   ensure_dir || return 1
   prune_sessions
+  progress_note
   rm -f "$DIR/$CHAIN.cycle"   # a fresh set is pass 1 — drop any stale ↻ counter
   { printf 'active\t%s\t\n' "$1"; shift; for n in "$@"; do printf 'planned\t%s\t\n' "$n"; done; } | write_state
 }
@@ -444,6 +468,17 @@ selfcheck() {
   bash "$s" set a a b 2>/dev/null && fail duplicate-accepted
   bash "$s" set $'a\tb' 2>/dev/null && fail tab-name-accepted
   bash "$s" set "" b 2>/dev/null && fail empty-name-accepted
+  # progress goes through done/start, never through status-looking step names in `set`
+  for bad in explore:done "test: ok" build=DONE "lint ✓" "pr ●" review:wip; do
+    bash "$s" set a "$bad" 2>/dev/null && fail "status-name-accepted: $bad"
+  done
+  [[ "$(bash "$s" set explore:done b 2>&1)" == *"steps.sh done explore"* ]] || fail status-name-hint
+  [[ "$(r)" == "[default] a ○ → b ●" ]] || fail "status-name-left-chain: $(r)"
+  bash "$s" set "loop|check status" "ship: v2" >/dev/null || fail plain-colon-name-refused
+  bash "$s" done "loop|check status" >/dev/null
+  [[ "$(bash "$s" set a b 2>&1 >/dev/null)" == *"discarding 1 finished step"* ]] || fail reset-progress-note
+  [[ -z "$(bash "$s" set a b 2>&1 >/dev/null)" ]] || fail reset-without-progress-quiet
+  [[ "$(bash "$s" advance 2>&1)" == *"steps.sh done <step>"* ]] || fail advance-hint
   out="$(bash "$s" start 2>&1)"; [[ $? -ne 0 && "$out" != *unbound* ]] || fail start-no-arg
   bash "$s" done zzz 2>/dev/null && fail unknown-step-accepted
   bash "$s" --bogus 2>/dev/null && fail unknown-cmd-accepted
@@ -643,8 +678,11 @@ main() {
     list)  list_chains "${1-}" ;;
     note)  note_chain "$@" ;;
     --selfcheck) selfcheck ;;
-    -h|--help) sed -n '2,23p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' ;;
-    *) echo "steps.sh: unknown command '$cmd'" >&2; return 2 ;;
+    -h|--help) sed -n '2,25p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' ;;
+    *) echo "steps.sh: unknown command '$cmd' — commands: set start done fail assert cycle msg render clear use list note (-h for help)" >&2
+       case "$cmd" in advance|next|finish|complete|completed|ok|mark|check|tick|step)
+         echo "steps.sh: to mark a step finished: steps.sh done <step> (the next planned step becomes active)" >&2 ;; esac
+       return 2 ;;
   esac
 }
 main "$@"
