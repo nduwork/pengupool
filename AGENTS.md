@@ -5,8 +5,8 @@ Notes for agent sessions. The contributor-facing rules are in
 
 ## Merging
 
-- **Merge only with approval.** Open the PR, let the checks and review-guide run, and stop there. Green
-  checks are not a go-ahead, and `gh pr merge --admin` does not happen on your own initiative.
+- **Merge only with approval.** Open the PR, let the checks run, and stop there. Green checks are not a
+  go-ahead, and `gh pr merge --admin` does not happen on your own initiative.
 - Squash-and-merge is the policy, so the PR title becomes the commit subject. Keep it Conventional
   Commit style.
 - A merge does not cut a release. Run `scripts/release.sh` only when asked.
@@ -21,10 +21,3 @@ Notes for agent sessions. The contributor-facing rules are in
   `make ext-test` for `extension/`). A fresh clone or git worktree has no `extension/node_modules`, so run
   `make ext-deps` once first, or the extension tests fail with `Cannot find module 'typescript'`.
 - Leave unrelated edits out of the diff, so a reviewer sees one intent.
-
-## Reviews
-
-- **Review before merging.** review-guide runs when a PR is created or pushed to; on a merged PR its
-  preflight answers `SKIP: PR is MERGED`, so a review that arrives after the merge can do nothing.
-- The self-check edits the working tree only. Commit those edits only with the maintainer's approval,
-  never on their own.
