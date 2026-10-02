@@ -8,7 +8,7 @@ import os
 import re
 import subprocess
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 
@@ -406,6 +406,8 @@ def message_edges(name: str, status_line: str) -> list[Edge]:
 
 
 def team_edges(sessions: list[dict]) -> list[Edge]:
+    # ponytail: bare names, so a lead or member sharing its name with an earlier Claude session attaches to
+    # that one (Claude sessions load first, so never to pi's); map ids through tree_names if it matters.
     by_id = {s["sessionId"]: s["name"] for s in sessions}
     by_cwd: dict[str, list[str]] = {}
     for s in sessions:
@@ -443,16 +445,22 @@ def load_registry() -> dict[str, str]:
     return reg
 
 
+def tree_names(sessions: list[dict]) -> list[str]:
+    """Each session's node name, in order. A name can repeat (each harness names its own sessions, and a
+    session can be resumed twice), so a repeat gets `~pid`. Map a session id through this, never through
+    its bare name, which may be another harness's session."""
+    out: list[str] = []
+    for s in sessions:
+        out.append(f"{s['name']}~{s['pid']}" if s["name"] in out else s["name"])
+    return out
+
+
 def build_trees(sessions: list[dict], edges: list[Edge], registry: dict[str, str] | None = None
                 ) -> tuple[list[Node], list[Edge]]:
     """Return (roots, cross_edges). Edge labels from later edges overwrite earlier ones."""
     registry = registry or {}
     nodes: dict[str, Node] = {}
-    for s in sessions:
-        name = s["name"]
-        if name in nodes:  # same name twice (often the same session id resumed twice): show every process
-            # ponytail: edges still reference the bare name, so they attach to the first one.
-            name = f"{name}~{s['pid']}"
+    for s, name in zip(sessions, tree_names(sessions)):
         nodes[name] = Node(s["sessionId"], name, s["cwd"], int(s.get("pid", 0)), s["state"],
                            s.get("status_line", ""), tmux_pane=registry.get(s["sessionId"], ""),
                            started=float(s.get("startedAt", 0) or 0) / 1000, ctx_pct=s.get("ctx_pct"),
@@ -517,6 +525,12 @@ def snapshot(light: bool = False) -> tuple[list[Node], list[Edge], list["Msg"]]:
         s["ctx_pct"] = load_context_pct(s["sessionId"])
         s["summary"] = profiles.load(s["sessionId"]).get("summary", "")
     roots, cross = build_trees(sessions, apply_groups(sessions, team_edges(sessions), groups), load_registry())
+    # a message names sessions the way its harness does; show it with the names the tree uses
+    node: dict[tuple[str, str], str] = {}
+    for s, n in zip(sessions, tree_names(sessions)):
+        node.setdefault((harness.of(s), s["name"]), n)
+    msgs = [replace(m, src=node.get((m.harness, m.src), m.src), dst=node.get((m.harness, m.dst), m.dst))
+            for m in msgs]
     return roots, cross, msgs
 
 
@@ -529,6 +543,7 @@ class Msg:
     dst: str
     label: str
     incoming: bool = False  # parsed from the receiver's transcript (envelope), not the sender's tool call
+    harness: str = "cc"  # whose transcript recorded it; a message never crosses harnesses
 
 
 def slug(cwd: str) -> str:
@@ -870,7 +885,7 @@ class Transcripts:
                 if ch:
                     self.chains[s["sessionId"]] = ch
                 for m in parse_transcript_line(line, s["name"]):
-                    m.src = by_sock.get(m.src, m.src)
+                    m.src, m.harness = by_sock.get(m.src, m.src), harness.of(s)
                     if m.incoming and m.src in live:
                         continue  # the sender's own transcript already records this send, with its summary
                     key = (m.ts, m.src, m.dst, m.label)
@@ -929,13 +944,16 @@ def save_groups(groups: dict[str, str]) -> None:
 
 def apply_groups(sessions: list[dict], edges: list[Edge], groups: dict[str, str]) -> list[Edge]:
     """Manual parents win: drop every derived edge into a grouped child, then prepend the manual edge."""
-    by_id = {s["sessionId"]: s["name"] for s in sessions}
+    names = tree_names(sessions)
+    by_id: dict[str, str] = {}
+    for s, n in zip(sessions, names):
+        by_id.setdefault(s["sessionId"], n)  # a session resumed twice: its first process stands for it
     h_of = {s["sessionId"]: harness.of(s) for s in sessions}
     # a parent of another harness is ignored (the child stays top level): harnesses never share a tree
     pinned = {by_id[c]: (by_id.get(p, "") if h_of.get(p) == h_of[c] else "") for c, p in groups.items() if c in by_id}
     kept = [e for e in edges if e[1] not in pinned]
     manual = [(p, c, "") for c, p in pinned.items() if p]
-    h_by_name = {s["name"]: harness.of(s) for s in sessions}
+    h_by_name = {n: harness.of(s) for s, n in zip(sessions, names)}
     return [e for e in manual + kept if h_by_name.get(e[0]) == h_by_name.get(e[1])]
 
 
