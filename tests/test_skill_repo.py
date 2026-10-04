@@ -1,6 +1,7 @@
 """The skill-repo skill scaffolds a one-task repo: skill file, logs and owner memory."""
 import pathlib
 import re
+import shutil
 import subprocess
 import sys
 
@@ -69,6 +70,18 @@ def test_install_copies_the_whole_skill_for_both_harnesses(tmp_path):
         assert (home / "template" / "AGENTS.md").is_file()
     subprocess.run(["make", "-s", "-C", str(ROOT), "uninstall-skill-repo", *env], check=True, capture_output=True)
     assert not any(tmp_path.rglob("skill-repo"))
+
+
+def test_scaffold_skips_finder_dotfiles(tmp_path, monkeypatch):
+    template = tmp_path / "template"
+    shutil.copytree(SKILL / "template", template)
+    (template / ".DS_Store").write_bytes(b"\xff\x00bud1")
+    monkeypatch.syspath_prepend(str(SKILL / "scripts"))
+    import scaffold
+    monkeypatch.setattr(scaffold, "TEMPLATE", str(template))
+    out = tmp_path / "out"
+    written = scaffold.render(str(out), {"task": "t", "repo": "r", "description": "d"})
+    assert ".DS_Store" not in written and (out / "AGENTS.md").is_file()
 
 
 def test_install_and_uninstall_leave_a_users_own_skill_repo_alone(tmp_path):

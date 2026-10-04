@@ -171,6 +171,8 @@ def build(current: str, proposal: dict) -> str:
                 raise ValueError(f"update {ident!r}: must be a '- [{ident}] …' entry line")
             text = _replace_entry(text, str(ident), new_line)
     decision = str(proposal.get("decision") or "").strip()
+    if ENTRY_ID_RE.match("- " + decision.lstrip("- ")):
+        raise ValueError("decision must not start with an entry id like [P2]: it would read as an entry")
     if decision:
         text = _insert(text, DECISION_HEAD, ["- " + decision.lstrip("- ")])
     return text
@@ -197,7 +199,7 @@ def _atomic_write(path: str, text: str) -> None:
 
 @contextlib.contextmanager
 def _locked(path: str):
-    with open(path + ".lock", "w", encoding="utf-8") as fh:
+    with open(os.path.realpath(path) + ".lock", "w", encoding="utf-8") as fh:  # one lock per real file
         fcntl.flock(fh, fcntl.LOCK_EX)
         yield
 

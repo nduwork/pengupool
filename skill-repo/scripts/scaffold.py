@@ -23,8 +23,8 @@ NAME_OK = re.compile(r"[a-z0-9][a-z0-9-]{0,63}")
 def render(target: str, values: dict[str, str]) -> list[str]:
     written = []
     for root, dirs, files in os.walk(TEMPLATE):
-        dirs[:] = [d for d in dirs if d != "__pycache__"]  # a test run inside template/ must not leak bytecode
-        for name in files:
+        dirs[:] = [d for d in dirs if d != "__pycache__" and not d.startswith(".")]  # no bytecode from a test run
+        for name in (f for f in files if not f.startswith(".")):  # .DS_Store and friends are not templates
             src = os.path.join(root, name)
             rel = os.path.relpath(src, TEMPLATE).replace("__task__", values["task"])
             rel = ".gitignore" if rel == "gitignore" else rel

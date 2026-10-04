@@ -14,6 +14,6 @@ TODO: the method. Keep it to the steps an agent cannot guess.
 
 1. Read `MEMORY.md` (repo root) if present and apply it.
 2. Do the task. TODO: steps.
-3. Log it by subject (`AGENTS.md` rule 5): append a dated entry to the subject's log in `logs/INDEX.md`, or
-   start `logs/<subject>.md` only for a new subject.
+3. Log it by subject (`AGENTS.md` rule 5): find the subject in `logs/INDEX.md`, append a dated entry to its
+   `logs/<subject>.md` and update its *Last updated*; start a new log and row only for a new subject.
 4. Run the memory ritual (`docs/memory.md`) and reply with the outcome and the log path.

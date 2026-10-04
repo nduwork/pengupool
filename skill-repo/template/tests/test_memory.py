@@ -72,6 +72,11 @@ class MemoryTest(unittest.TestCase):
         with open(deep, encoding="utf-8") as fh:
             self.assertIn("[P3]", fh.read())
 
+    def test_a_decision_cannot_masquerade_as_an_entry(self):
+        self.assertEqual(self.apply({"owner": "jane.doe", "preferences": [P1]}).returncode, 0)
+        self.assertEqual(self.apply({"decision": "[P2] noted"}).returncode, 2)
+        self.assertEqual(self.apply({"decision": "2026-01-01 added P1 user"}).returncode, 0)
+
 
 if __name__ == "__main__":
     unittest.main()
