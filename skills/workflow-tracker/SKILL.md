@@ -221,15 +221,15 @@ It auto-detects an existing status line command and wraps it, or installs standa
 refuses to touch a settings.json it cannot parse, and saves the original `statusLine` so
 `--unwire` restores it exactly. Plugin installs live in a versioned cache dir, so the scripts
 are copied to `~/.claude/step-status/bin` and settings point there: re-run setup after a
-plugin update. Tell the user to restart Claude Code afterwards. `install.sh` (symlink install) runs this
-for you. Hook manifest for reference: `hooks/hooks.json`.
+plugin update. Tell the user to restart Claude Code afterwards. `make install-tracker` runs this
+for you.
 
 ## Checks
 
 ```bash
-bash workflow-tracker/scripts/steps.sh --selfcheck
-bash workflow-tracker/scripts/wire_statusline.sh --selfcheck   # settings.json wrap/unwire round trip
-for s in workflow-tracker/scripts/*.sh; do bash -n "$s"; done
+bash skills/workflow-tracker/scripts/steps.sh --selfcheck
+bash skills/workflow-tracker/scripts/wire_statusline.sh --selfcheck   # settings.json wrap/unwire round trip
+for s in skills/workflow-tracker/scripts/*.sh; do bash -n "$s"; done
 ```
 
 ## Gotchas
