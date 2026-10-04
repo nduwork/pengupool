@@ -30,7 +30,7 @@ const HINTS: Hint[] = [
   ] },
   { label: 'Mouse', icon: 'inspect', children: [
     { label: 'click', description: 'open · focus work session', icon: 'go-to-file' },
-    { label: 'drag', description: 'group under session · drop on empty = top level', icon: 'gripper' },
+    { label: 'drag', description: 'row or map card · group under session · drop on empty = top level', icon: 'gripper' },
     { label: 'right-click', description: 'all session actions', icon: 'menu' },
   ] },
   { label: 'Views', description: 'title-bar buttons · click to run', icon: 'layout', children: [

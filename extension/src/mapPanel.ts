@@ -3,7 +3,7 @@ import { Snapshot } from './serveClient';
 import { CTX_LEVEL_CSS, CTX_LEVEL_JS, SESSION_STATES, SESSION_STATE_CSS } from './sessionState';
 import { findNode, HarnessTabs, HARNESS_TABS_CSS, HARNESS_TABS_HTML, HARNESS_TABS_JS } from './harness';
 import { MENU_CSS, MENU_HTML, MENU_JS, runMenuCommand } from './webviewMenu';
-import { REVEAL_LABEL } from './util';
+import { REVEAL_LABEL, runCtl } from './util';
 
 /**
  * Live map as an editor-area webview (an editor tab, so it can be moved into a new/floating window or
@@ -66,6 +66,13 @@ export class MapPanel {
       // rebuilds the whole model from disk (sessions, transcripts, roles, chains) and sends it in full.
       if (message?.type === 'refresh') { this.render(); void vscode.commands.executeCommand('pengupool.refresh'); }
       if (message?.type === 'tab' && this.tabs.pick(message.harness)) { this.render(); }
+      // Drag a card onto another to group it there, or onto empty canvas for the top level, as in the
+      // Sessions list. ctl refuses a loop or a cross-harness group; its reason is shown as-is.
+      if (message?.type === 'group' && typeof message.source === 'string' && typeof message.target === 'string') {
+        void runCtl(['group', message.source, message.target]).then((r) => {
+          if (r.code !== 0) { void vscode.window.showErrorMessage(`PenguPool: ${r.stderr || 'group failed'}`); }
+        });
+      }
       // The in-map banner posts apply and discard. Grouping decides who may message whom, so a
       // session may propose a regroup but never apply one.
       if (message?.type === 'applyGroupPlan') { void vscode.commands.executeCommand('pengupool.groupPlan'); }
@@ -121,6 +128,10 @@ function html(webview: vscode.Webview, dagreUri: vscode.Uri): string {
   .node:hover .box, .node:focus .box { stroke-width:2.5; }
   .node:focus .selection { stroke:var(--vscode-focusBorder); }
   .node:focus { outline:none; }
+  .node { user-select:none; touch-action:none; }
+  body.dragging, body.dragging .node { cursor:grabbing; }
+  .node.dragsrc { opacity:.5; }
+  .node.drop .box { stroke:var(--vscode-focusBorder); stroke-width:3; stroke-dasharray:none; }
   .state { color:var(--state-color); font-size:10px; line-height:14px; font-weight:600; }
   ${SESSION_STATE_CSS}
   ${CTX_LEVEL_CSS}
@@ -304,7 +315,7 @@ ${MENU_HTML}
       const tip=el('title',{}); tip.textContent=l; t.appendChild(tip); });
     nodes.forEach(n => {
       const nd=boxes[n.id]; const gx=nd.x-nd.width/2, gy=nd.y-nd.height/2;
-      const grp=el('g',{class:'node state-'+n.state+(lone.has(n.id)?' lone':''), transform:'translate('+gx+','+gy+')', tabindex:'0', role:'button', 'aria-label':'Open '+n.name});
+      const grp=el('g',{class:'node state-'+n.state+(lone.has(n.id)?' lone':''), transform:'translate('+gx+','+gy+')', tabindex:'0', role:'button', 'aria-label':'Open '+n.name, 'data-id':n.id});
       const ring=el('rect',{class:'selection', x:-3, y:-3, width:nd.width+6, height:nd.height+6, rx:8});
       const rect=el('rect',{class:'box', width:nd.width, height:nd.height, rx:6});
       const title=el('title',{}); title.textContent=n.name;
@@ -357,7 +368,7 @@ ${MENU_HTML}
     flat(snap.roots).forEach(n => {
       const e = nodeEls.get(n.id); if(!e) return;
       const visual=states[n.state]||{symbol:'·',label:n.state};
-      e.grp.setAttribute('class', 'node state-'+n.state+(e.lone?' lone':'')+(selected===n.id?' selected':''));
+      e.grp.setAttribute('class', 'node state-'+n.state+(e.lone?' lone':'')+(selected===n.id?' selected':'')+dragClass(n.id));
       e.grp.setAttribute('aria-label','Open '+n.name+', '+visual.label);
       e.state.textContent=visual.symbol+' '+visual.label;
       e.nm.textContent = n.name;
@@ -400,6 +411,30 @@ ${MENU_HTML}
   document.getElementById('refresh').addEventListener('click', () => { fresh = true; redraw(); vscode.postMessage({type:'refresh'}); });
   document.getElementById('rgApply').addEventListener('click', () => vscode.postMessage({type:'applyGroupPlan'}));
   document.getElementById('rgDiscard').addEventListener('click', () => vscode.postMessage({type:'discardGroupPlan'}));
+  // Drag to regroup: pointer events, since SVG cards take no HTML5 drag. Past 6px a press is a drag, not a
+  // click; the drop goes to the card under the pointer, or to the top level on empty canvas.
+  let drag = null, dropId = '', justDragged = false;
+  const wrap = document.getElementById('wrap');
+  function dragClass(id){ return drag?.on ? (id===drag.id ? ' dragsrc' : id===dropId ? ' drop' : '') : ''; }
+  function under(ev){ const t=document.elementFromPoint(ev.clientX, ev.clientY);
+    return { id: t?.closest('.node')?.dataset.id || '', canvas: !!t && wrap.contains(t) }; }
+  function markDrag(){ nodeEls.forEach((e, id) => { e.grp.classList.toggle('dragsrc', !!drag?.on && id===drag.id);
+    e.grp.classList.toggle('drop', !!drag?.on && id===dropId); }); document.body.classList.toggle('dragging', !!drag?.on); }
+  function endDrag(){ drag=null; dropId=''; markDrag(); }
+  wrap.addEventListener('pointerdown', ev => {
+    const id = ev.button===0 && ev.target.closest('.node')?.dataset.id;
+    if(id) drag={id, x:ev.clientX, y:ev.clientY, on:false}; });
+  wrap.addEventListener('pointermove', ev => {
+    if(!drag || (!drag.on && Math.hypot(ev.clientX-drag.x, ev.clientY-drag.y) < 6)) return;
+    if(!drag.on) wrap.setPointerCapture?.(ev.pointerId);   // only a drag captures: a plain click stays on its card
+    drag.on = true; const t = under(ev).id; dropId = t!==drag.id ? t : ''; markDrag(); });
+  wrap.addEventListener('pointerup', ev => {
+    const d = drag; endDrag(); if(!d?.on) return;
+    justDragged = true; setTimeout(() => { justDragged = false; });
+    const t = under(ev);
+    if(t.id ? t.id!==d.id : t.canvas) vscode.postMessage({type:'group', source:d.id, target:t.id}); });
+  wrap.addEventListener('pointercancel', endDrag);
+  wrap.addEventListener('click', ev => { if(justDragged){ ev.stopPropagation(); justDragged=false; } }, true);
   // Empty canvas: the pool actions, exactly as a right-click on the list's background.
   document.getElementById('wrap').addEventListener('contextmenu', event => {
     if(!event.target.closest('.node')) showMenu(event, null, revealLabel); });

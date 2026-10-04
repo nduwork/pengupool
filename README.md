@@ -46,7 +46,7 @@ Open the PenguPool view (penguin icon in the Activity Bar). Claude Sessions list
 | --- | --- |
 | `Enter` / click | Open a session in the terminal; its folder is revealed in the Explorer when this window has it (`pengupool.explorerFollow` turns that off) |
 | `n`, `a` | Start a session (in the folder or a new worktree) or add a previous one |
-| `g` / drag | Group under another session |
+| `g` / drag | Group under another session, by dragging a row in Sessions or a card on the Map |
 | `r`, `d` | Rename a session, or describe its role |
 | `x`, `c` | Close or compact a session |
 | `Shift+R` | Restart & resume, e.g. after a Claude Code or pi update |
