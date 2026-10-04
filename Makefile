@@ -3,6 +3,7 @@ CLAUDE_SETTINGS ?= $(HOME)/.claude/settings.json
 STEP_STATUS_HOME ?= $(HOME)/.claude/step-status
 BIN := $(STEP_STATUS_HOME)/bin
 PI_AGENT ?= $(HOME)/.pi/agent
+CLAUDE_SKILLS ?= $(HOME)/.claude/skills
 TRACKER_CC := $(if $(filter pi,$(HARNESS)),,1)
 TRACKER_PI := $(if $(filter pi both,$(HARNESS)),1,$(if $(filter auto,$(HARNESS)),$(shell command -v pi >/dev/null && echo 1)))
 WT := workflow-tracker/scripts
@@ -19,13 +20,14 @@ EDITOR_CLI ?=
 EDITOR_RUN = EDITOR_CLI="$(EDITOR_CLI)" python3 scripts/editor_cli.py
 VSIX ?= $(or $(TMPDIR),/tmp)/pengupool-local.vsix
 
-.PHONY: install uninstall check-install install-all uninstall-all install-hooks uninstall-hooks install-tracker uninstall-tracker install-pool-groups uninstall-pool-groups selfcheck test ext-deps ext-test ext-compile ext-package ext-install ext-uninstall
+.PHONY: install uninstall check-install install-all uninstall-all install-hooks uninstall-hooks install-tracker uninstall-tracker install-pool-groups uninstall-pool-groups install-skill-repo uninstall-skill-repo selfcheck test ext-deps ext-test ext-compile ext-package ext-install ext-uninstall
 
 install:
 	$(UV) tool install --force $(UV_INSTALL_FLAGS) .
 	CLAUDE_SETTINGS="$(CLAUDE_SETTINGS)" "$(PENGUPOOL)" setup $(HARNESS)
 	$(MAKE) install-tracker
 	$(MAKE) install-pool-groups
+	$(MAKE) install-skill-repo
 
 check-install:
 	CLAUDE_SETTINGS="$(CLAUDE_SETTINGS)" "$(PENGUPOOL)" setup --check $(HARNESS)
@@ -70,6 +72,16 @@ install-pool-groups:
 uninstall-pool-groups:
 	rm -rf "$(PI_AGENT)/skills/pool-groups"
 
+# The skill-repo skill ships its scaffold script and templates, so the whole directory is copied (replaced
+# on update, so a removed template file does not linger).
+install-skill-repo:
+	$(if $(TRACKER_CC),rm -rf "$(CLAUDE_SKILLS)/skill-repo" && mkdir -p "$(CLAUDE_SKILLS)" && cp -R skill-repo "$(CLAUDE_SKILLS)/skill-repo")
+	$(if $(TRACKER_PI),rm -rf "$(PI_AGENT)/skills/skill-repo" && mkdir -p "$(PI_AGENT)/skills" && cp -R skill-repo "$(PI_AGENT)/skills/skill-repo")
+	@echo "skill-repo: skill installed (ask for it by name, e.g. \"new skill repo\")"
+
+uninstall-skill-repo:
+	rm -rf "$(CLAUDE_SKILLS)/skill-repo" "$(PI_AGENT)/skills/skill-repo"
+
 # Unwires both harnesses whatever HARNESS is: removing only our own files and settings entries is safe.
 uninstall-tracker:
 	@if [ -f "$(BIN)/wire_statusline.sh" ]; then $(WIRE_ENV) bash "$(BIN)/wire_statusline.sh" --unwire; fi
@@ -80,6 +92,7 @@ uninstall-tracker:
 uninstall:
 	$(MAKE) uninstall-tracker
 	$(MAKE) uninstall-pool-groups
+	$(MAKE) uninstall-skill-repo
 	CLAUDE_SETTINGS="$(CLAUDE_SETTINGS)" "$(PENGUPOOL)" teardown both
 	$(UV) tool uninstall pengupool
 
