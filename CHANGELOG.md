@@ -21,6 +21,7 @@ All notable changes to this project are documented here. The format follows
 ### Fixed
 - The installer is ready for Linux: Node.js installs under each package manager's own name, apt-get updates its lists first, a missing python3 or make is offered, and VS Code Insiders, VSCodium and Flatpak VS Code are found.
 - The installer fails, and says what to do, when it cannot install the editor extension, instead of reporting success.
+- The PenguPool terminal tab is just "PenguPool": it no longer shows the first session's folder after you switch sessions.
 
 ## [0.9.2] - 2026-10-02
 

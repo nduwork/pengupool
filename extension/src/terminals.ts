@@ -147,7 +147,8 @@ export class TerminalManager implements vscode.Disposable {
       name: slot.name,
       shellPath: '/bin/sh',
       shellArgs: ['-lc', `exec ${view.command}`],
-      cwd: view.cwd || undefined,
+      // no cwd: the terminal only attaches tmux, which keeps each session's own folder, and a cwd would put
+      // the first session's folder in the tab's description for good ("PenguPool  repo-a" while on repo-b)
       env: { ...process.env },
       strictEnv: true,
       isTransient: true,
