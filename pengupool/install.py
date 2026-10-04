@@ -123,8 +123,9 @@ def check(h: str) -> bool:
     if h == "cc":
         try:
             text = _settings().read_text()
-            wired = all(m in text for m in ("pengupool.context", "pengupool.routing", "pengupool.statusline"))
-        except OSError:
+            wired = all(m in text for m in ("pengupool.context", "pengupool.routing")) \
+                and hook.status_wrapped(json.loads(text))
+        except (OSError, ValueError, AttributeError):
             wired = False
         print(f"{'✓' if wired else '✗'} Claude Code lifecycle hooks, SendMessage guard and ctx % status line in {_settings()}")
         return ok and wired

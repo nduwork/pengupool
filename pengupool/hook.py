@@ -36,7 +36,7 @@ def _status(inner: str) -> str:
     """The wrapper command around `inner` ('' = standalone). It runs `inner` itself when the pinned
     interpreter is gone (a deleted venv), so the user's status line never goes blank over PenguPool."""
     py = shlex.quote(sys.executable)
-    run = f"{py} -m pengupool.statusline"
+    run = f"{py} -P -m pengupool.statusline"   # -P: a pengupool/ folder in the project cannot shadow ours
     return f"[ -x {py} ] && exec {run} -- {shlex.quote(inner)} || eval {shlex.quote(inner)}" if inner \
         else f"[ -x {py} ] && exec {run} || true"
 
@@ -51,9 +51,22 @@ def _inner_status(command: str) -> str | None:
         argv = argv[6:]  # the guarded form _status writes
     elif "&&" in argv:
         return None
+    if argv[1:2] == ["-P"]:
+        del argv[1]
     if argv[1:3] != ["-m", "pengupool.statusline"]:
         return None  # someone else's, including another wrapper around ours
     return argv[argv.index("--") + 1] if "--" in argv[:-1] else ""
+
+
+def _wrappable(line) -> bool:
+    return isinstance(line, dict) and line.get("type", "command") == "command" \
+        and isinstance(line.get("command"), str) and bool(line["command"].strip())
+
+
+def status_wrapped(cfg: dict) -> bool:
+    """The statusLine runs our wrapper, or is one install leaves alone on purpose."""
+    line = cfg.get("statusLine")
+    return line is not None and (not _wrappable(line) or _inner_status(line["command"]) is not None)
 
 
 def _wrap_status(cfg: dict) -> None:
@@ -61,8 +74,7 @@ def _wrap_status(cfg: dict) -> None:
     if line is None:
         cfg["statusLine"] = {"type": "command", "command": _status("")}
         return
-    if not isinstance(line, dict) or line.get("type", "command") != "command" \
-            or not isinstance(line.get("command"), str) or not line["command"].strip():
+    if not _wrappable(line):
         return  # not a command we can wrap: leave it be rather than lose it
     inner = _inner_status(line["command"])
     if inner is None:

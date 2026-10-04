@@ -108,3 +108,19 @@ def test_install_leaves_an_empty_or_odd_status_line_alone(tmp_path):
         assert json.loads(settings.read_text())['statusLine'] == odd
         hook.uninstall(settings)
         assert json.loads(settings.read_text())['statusLine'] == odd
+
+
+def test_a_pengupool_folder_in_the_project_cannot_blank_the_line(tmp_path):
+    (tmp_path / 'pengupool').mkdir()
+    (tmp_path / 'pengupool' / '__init__.py').write_text('')  # e.g. this repo at a commit before the wrapper
+    out = subprocess.run(['sh', '-c', hook._status('echo line')], input='{}', cwd=tmp_path,
+                         capture_output=True, text=True, env={'PATH': '/usr/bin:/bin', 'PENGUPOOL_HOME': str(tmp_path)})
+    assert out.stdout == 'line\n', out.stderr
+
+
+def test_setup_check_accepts_a_status_line_install_leaves_alone():
+    assert hook.status_wrapped({'statusLine': {'type': 'command', 'command': hook._status('x')}})
+    assert hook.status_wrapped({'statusLine': {'type': 'command', 'command': '', 'padding': 2}})
+    assert hook.status_wrapped({'statusLine': {'type': 'command', 'command': "/py -m pengupool.statusline -- 'x'"}})
+    assert not hook.status_wrapped({'statusLine': {'type': 'command', 'command': 'npx ccstatusline'}})
+    assert not hook.status_wrapped({})
