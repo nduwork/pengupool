@@ -173,6 +173,48 @@ puts the ticked ones back.
 | [pool-groups](pool-groups/SKILL.md) | pi | "group my sessions" | Proposes a new session tree. Nothing moves until you click Apply on the map banner or the notification; a session can never apply one itself. |
 | [skill-repo](skill-repo/SKILL.md) | Claude Code, pi | "offload my knowledge about X to a new skill repo" | Interviews you, then scaffolds a repo for that one task: the method in `skills/<task>/SKILL.md`, a log per subject that every session and headless run appends to, and a gitignored owner memory that is written only after you confirm it in your own words. It uses a skill-authoring skill such as `skill-creator` when one is installed. |
 
+## Q&A
+
+### Why PenguPool instead of subagents?
+
+Subagents are helpers inside one session: they start for a task, report back into their parent's context,
+and are gone. PenguPool sessions are full, long-lived agents.
+
+- **Each one lives in its own repo or worktree**, with that repo's instructions, skills and history, and its
+  own context window. Nothing funnels back into one parent's context.
+- **You can talk to any of them directly**, not only to the top, and see what each is doing on the map.
+- **They keep their role and place** across days, restarts and `/clear`.
+- **They still use subagents** for their own work. PenguPool organises the sessions; subagents stay a tool
+  inside each one.
+
+### Does it run on Linux?
+
+Yes. VS Code (.deb, .rpm, Snap or Flatpak), Cursor and VSCodium all run on Linux, and the installer puts the
+extension into every one it finds. It offers to install what is missing (make, tmux, Node.js for pi) through
+apt-get, dnf, pacman or Homebrew, asking first each time. If no editor is found, the install stops and says
+what to do, because the extension is required.
+
+### Why native messaging, not an MCP gateway?
+
+Sessions talk through their harness's own messaging (`SendMessage` in Claude Code, pi-intercom in pi), not
+through an MCP server that every agent connects to.
+
+- **A message wakes the receiver.** It arrives as a turn in the receiving session, even when that session
+  is idle. An MCP server only answers when an agent calls it, so a gateway needs polling or a nudge.
+- **The sender is known, not claimed.** The harness tells PenguPool which session is sending. An MCP tool
+  call carries whatever the model writes in its arguments.
+- **The routing rule is enforced where the agent acts.** A hook on the messaging tool checks every send
+  against the tree before it leaves, and the agent sees the reason when it is refused.
+- **Nothing extra to run or secure.** No server, port, token or per-harness MCP config, and messages stay in
+  each agent's own transcript, where you and the Log can read them.
+
+### Why not Codex (yet)?
+
+PenguPool needs one thing from a harness that Codex CLI does not offer yet: a built-in way for one running
+session to message another. Codex has hooks and subagents inside a session, but as of Codex CLI 0.157 its
+cross-session message board is still under development. When it ships, Codex can join as a third harness,
+with its own tree, like Claude Code and pi.
+
 ## Develop
 
 ```sh
