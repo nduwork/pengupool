@@ -5,14 +5,6 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-## [1.0.0] - 2026-10-04
-
-### Added
-- session menu adds child sessions, copies the path, and leads with operations (#75)
-- regroup by dragging a card on the map (#74)
-- /clear keeps a session's group and role, and a Fresh Context action (#73)
-
-- Editor extension: 0.7.0 (install both with `install.sh`; they ship together in this tag).
 ## [0.9.2] - 2026-10-02
 
 ### Fixed
