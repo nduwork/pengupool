@@ -111,4 +111,6 @@ test('new session picks a harness instead of a free-text launch command', () => 
   assert.match(commands, /cc: 'Claude Code', pi: 'pi'/);
   assert.match(commands, /label: 'Create a worktree'/);
   assert.match(commands, /label: 'Use selected folder'/);
+  // the quick pick pre-selects its first item: the folder as picked, a worktree only on request
+  assert.ok(commands.indexOf("label: 'Use selected folder'") < commands.indexOf("label: 'Create a worktree'"));
 });
