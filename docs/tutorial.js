@@ -9,7 +9,8 @@
   const $ = (s) => stage.querySelector(s);
   const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const RECORD = Number(new URLSearchParams(location.search).get('record')) || 0;
+  const REC = new URLSearchParams(location.search).get('record') || '';
+  const RECORD = Number(REC) || 0, HERO_REC = REC === 'hero';   // ?record=hero renders docs/assets/hero.gif
   const GLYPH = { active: '●', waiting: '◷', stale: '○', blocked: '?' };
   const LABEL = { active: 'Active', waiting: 'Waiting', stale: 'Stale', blocked: 'Approval' };
   const ctxLevel = (p) => (p < 30 ? 'ctx-low' : p < 60 ? 'ctx-mid' : 'ctx-high');  // as in the extension
@@ -152,9 +153,13 @@
 
   // pointer, overlays
   const ptr = $('.ptr');
+  // Rects come back in zoomed pixels and a transform is applied before the zoom, so divide by it: the GIF
+  // recorder zooms the page to 2 (scripts/record_tutorial.py), and without this every pointer, ghost and
+  // overlay lands at twice its offset in the recordings.
   function at(el, dx = 0.5, dy = 0.5) {
     const a = stage.getBoundingClientRect(), b = el.getBoundingClientRect();
-    return [b.left - a.left + b.width * dx, b.top - a.top + b.height * dy];
+    const z = Number(document.documentElement.style.zoom) || 1;
+    return [(b.left - a.left + b.width * dx) / z, (b.top - a.top + b.height * dy) / z];
   }
   async function point(sel, dx, dy) {
     if (FF) return; const el = typeof sel === 'string' ? $(sel) : sel; if (!el) return;
@@ -197,22 +202,43 @@
     const [x, y] = at(row, 0.35, 1); t.innerHTML = html; t.style.transform = `translate(${x}px,${y + 6}px)`; t.hidden = false;
     await wait(2300); t.hidden = true;
   }
-  async function menu(id, items, choice) {
+  // the right-click menu on a row id or any element; '—' draws a separator, as the extension groups its items
+  async function menu(on, items, choice) {
     const m = $('.ctx'); if (FF) return;
-    const row = $(`.row[data-id="${id}"]`); await click(row, 0.4);
-    const [x, y] = at(row, 0.4, 0.6);
-    m.innerHTML = items.map((it, j) => `<div class="${j === choice ? 'hl' : ''}">${esc(it)}</div>`).join('');
-    m.style.transform = `translate(${x}px,${y}px)`; m.hidden = false; await wait(500);
+    const el = typeof on === 'string' ? $(`.row[data-id="${on}"]`) : on; await click(el, 0.4);
+    const [x, y] = at(el, 0.4, 0.6);
+    m.innerHTML = items.map((it, j) => (it === '—' ? '<div class="sep"></div>' : `<div class="${j === choice ? 'hl' : ''}">${esc(it)}</div>`)).join('');
+    const room = stage.getBoundingClientRect().height - 8;   // keep a long menu inside the stage
+    m.hidden = false;   // shown first: its height is only measurable once it is laid out
+    m.style.transform = `translate(${x}px,${Math.max(4, Math.min(y, room - m.offsetHeight))}px)`; await wait(500);
     await point(m.children[choice], 0.3); await wait(400); m.hidden = true;
+  }
+  // drag a card on the map onto another card: the dragged session regroups under it, as in the extension
+  async function mapDrag(id, onto) {
+    if (FF) { find(id).parent = onto; render(); return; }
+    const card = $(`.card[data-id="${id}"]`), target = $(`.card[data-id="${onto}"]`);
+    await point(card, 0.5, 0.4); ptr.classList.add('down'); card.classList.add('dragsrc');
+    const ghost = document.createElement('div'); ghost.className = 'ghost cghost'; ghost.innerHTML = card.innerHTML;
+    const [x0, y0] = at(card, 0.1, 0.1); ghost.style.transform = `translate(${x0}px,${y0}px)`; stage.appendChild(ghost);
+    await wait(120);
+    const [x1, y1] = at(target, 0.5, 0.5); ptr.style.transform = `translate(${x1}px,${y1}px)`;
+    ghost.style.transform = `translate(${x1 - 20}px,${y1 - 10}px)`;
+    target.classList.add('drop'); await wait(900);
+    ghost.remove(); target.classList.remove('drop'); card.classList.remove('dragsrc'); ptr.classList.remove('down');
+    find(id).parent = onto; render(); await wait(700);
   }
   async function toast(text, ms = 1400) { const t = $('.toast'); if (FF) return; t.textContent = text; t.hidden = false; await wait(ms); t.hidden = true; }
 
   // ---- the scenes (docs/tutorial-script.md) --------------------------------------------------------
+  const MENU = ['New Child Session…', 'Add Previous Session as Child…', 'Resume Previous Sessions…', '—',
+    'Reveal in Finder', 'Copy Path', '—', 'Compact (/compact)', 'Fresh Context (/clear)', 'Restart & Resume', '—',
+    'Group Under…', 'Rename', 'Describe Role…', '—', 'Close'];
+  const PLACES = [['Use selected folder', 'no new worktree · fine if a session already runs here'], ['Create a worktree', 'isolated branch for this session']];
   const newSession = async (name, folder, where, harness, s) => {
     await key('n');
     await input('Folder for the new session', folder);
     await input('Session name', name);
-    await pick('Choose where to start the session', [['Create a worktree', 'isolated branch for this session'], ['Use selected folder', 'no new worktree · fine if a session already runs here']], where === 'worktree' ? 0 : 1);
+    await pick('Choose where to start the session', PLACES, where === 'worktree' ? 1 : 0);
     await pick('Choose the agent harness', [['Claude Code'], ['pi']], harness === 'pi' ? 1 : 0);
     await add({ name, id: name, h: harness, ...s });
   };
@@ -288,8 +314,8 @@
       await say('<span class="dot">⏺</span> Staging is live: shop-api v1.8.0, shop-web v2.3.0.', '', 800);
       hidePtr();
     } },
-    { t: 'Keep the tree healthy', p: 'Restart in place after an update. Compact with c, never /new or /clear.', run: async () => {
-      await menu('api', ['Open / Focus Session', 'Group Under…', 'Rename', 'Describe Role…', 'Compact (/compact)', 'Restart & Resume (Shift+R)', 'Close'], 5);
+    { t: 'Keep the tree healthy', p: 'Restart in place after an update. Compact with c; Shift+C gives a Claude Code session a fresh context and keeps its place.', run: async () => {
+      await menu('api', MENU, MENU.indexOf('Restart & Resume'));
       await set('api', { blink: true });
       await toast('PenguPool: restarting api…');
       await tab('api');
@@ -304,6 +330,25 @@
       hidePtr(); await wait(1200);
     } },
   ];
+
+  // The README hero (?record=hero): the team after scenes 1-2, asked once, then grown from the map.
+  const HERO = { t: 'Run an agent team from your editor', p: 'Ask the lead and watch it route. Right-click to add a child, drag a card to regroup.', run: async () => {
+    if (S.tab !== 'lead') await tab('lead');
+    await type('Add token refresh to login.');
+    await say('<span class="dot">⏺</span> Triage: → api, web', '', 350);
+    await log('lead', 'api', 'add the token refresh endpoint', 'lg'); await set('api', { ctx: 24 });
+    await log('lead', 'web', 'wire refresh into the login form', 'lg'); await set('web', { ctx: 19 });
+    await chain('[ship-auth] api ● → web ○ → deploy ○');
+    await log('api', 'lead', 'endpoint done, tests pass', 'lb'); await set('api', { state: 'waiting', ctx: 41 });
+    await chain('[ship-auth] api ✓ → web ● → deploy ○');
+    await menu($('.card[data-id="lead"]'), MENU, 0);
+    await input('Folder for the new session', '~/code/shop-e2e');
+    await input('Session name', 'qa');
+    await pick('Choose where to start the session', PLACES, 0);
+    await add({ name: 'qa', id: 'qa', h: 'cc', repo: 'shop-e2e', ctx: 2, parent: 'lead' });
+    await mapDrag('payments', 'lead');
+    S.sel = 'lead'; render(); hidePtr(); await wait(1400);
+  } };
 
   // ---- controls ------------------------------------------------------------------------------------
   const list = document.getElementById('chapters'), playBtn = document.getElementById('tplay');
@@ -350,6 +395,12 @@
   playBtn.textContent = playing ? '❚❚ Pause' : '▶ Play';
   if (REDUCED) playBtn.hidden = true;
 
+  if (HERO_REC) {
+    document.body.classList.add('record');
+    tut.querySelector('.cap-n').textContent = '1.0'; tut.querySelector('.cap-t').textContent = HERO.t; tut.querySelector('.cap-p').textContent = HERO.p;
+    resetTo(2).then(() => wait(500)).then(HERO.run).then(() => wait(800)).then(() => { window.__done = true; });
+    return;
+  }
   if (RECORD) { document.body.classList.add('record'); start(RECORD - 1, false); return; }
   resetTo(0).then(() => caption(0));
   if (REDUCED) { start(0, false); return; }

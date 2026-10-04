@@ -1,4 +1,5 @@
-"""Re-render docs/assets/tutorial/*.gif from the landing page's tutorial player (docs/tutorial.js).
+"""Re-render docs/assets/tutorial/*.gif and the README hero (docs/assets/hero.gif) from the landing page's
+tutorial player (docs/tutorial.js).
 
 Needs Python Playwright with Chrome (`pip install playwright`) and ffmpeg. Run: python3 scripts/record_tutorial.py
 Each scene plays alone via docs/index.html?record=N; the video is cropped to the player and converted with
@@ -25,7 +26,9 @@ with tempfile.TemporaryDirectory() as tmp, sync_playwright() as p:
     OUT.mkdir(parents=True, exist_ok=True)
     for old in OUT.glob("*.gif"):   # scenes are renumbered when the list changes
         old.unlink()
-    for n, name in enumerate(NAMES, 1):
+    jobs = [(str(n), OUT / f"{n}-{name}.gif") for n, name in enumerate(NAMES, 1)]
+    jobs.append(("hero", ROOT / "docs/assets/hero.gif"))   # the README hero: docs/tutorial.js HERO
+    for n, gif in jobs:
         vdir = pathlib.Path(tmp) / str(n)
         # recorded at 2x (a 2x viewport with the page zoomed to 2, same layout): the video's 4:2:0 chroma
         # would otherwise wash out the colour of 2-3px lines. Playwright ignores device_scale_factor here.
@@ -43,7 +46,6 @@ with tempfile.TemporaryDirectory() as tmp, sync_playwright() as p:
         vf = (f"[0:v]crop={w - w % 2}:{h - h % 2}:{x}:{y},fps=10,scale=800:-1:flags=lanczos,split[a][b];{strip}"
               "[a][keys]vstack=shortest=1,palettegen=max_colors=128:stats_mode=full[p];"
               "[b][p]paletteuse=dither=none:diff_mode=rectangle")
-        gif = OUT / f"{n}-{name}.gif"
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-ss", "0.7", "-i", str(next(vdir.glob("*.webm"))),
                         "-filter_complex", vf, "-loop", "0", str(gif)], check=True)
         print(f"{gif.relative_to(ROOT)}: {gif.stat().st_size / 1e6:.2f} MB")
