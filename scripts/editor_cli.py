@@ -13,14 +13,16 @@ def resolve_editor(editor="", *, path=None, app_roots=None):
         found = shutil.which(editor, path=path)
         if found:
             return found
-        apps = {'code': 'Visual Studio Code.app', 'cursor': 'Cursor.app'}
+        apps = {'code': 'Visual Studio Code.app', 'code-insiders': 'Visual Studio Code - Insiders.app',
+                'cursor': 'Cursor.app', 'codium': 'VSCodium.app'}
         if editor in apps:
             for root in roots:
                 candidate = Path(root) / apps[editor] / 'Contents/Resources/app/bin' / editor
                 if candidate.is_file() and os.access(candidate, os.X_OK):
                     return str(candidate)
         raise ValueError(f"EDITOR_CLI={editor!r} is not executable. Use code, cursor, or an absolute CLI path.")
-    for command, app in (('code', 'Visual Studio Code.app'), ('cursor', 'Cursor.app')):
+    for command, app in (('code', 'Visual Studio Code.app'), ('code-insiders', 'Visual Studio Code - Insiders.app'),
+                         ('cursor', 'Cursor.app'), ('codium', 'VSCodium.app')):
         found = shutil.which(command, path=path)
         if found:
             return found

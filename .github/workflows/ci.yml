@@ -86,15 +86,43 @@ jobs:
           path: ${{ runner.temp }}/pengupool-ci.vsix
           if-no-files-found: error
 
+  install:
+    # install.sh end to end on Linux, from this checkout: system tools present, stub agent and editor CLIs
+    needs: changes
+    if: needs.changes.outputs.python == 'true' || needs.changes.outputs.extension == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: sudo apt-get update && sudo apt-get install -y tmux
+      - name: Stub claude and code on PATH
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          printf '#!/bin/sh\necho "claude stub $*"\n' > "$RUNNER_TEMP/bin/claude"
+          printf '#!/bin/sh\necho "$*" >> "$RUNNER_TEMP/code.log"\n' > "$RUNNER_TEMP/bin/code"
+          chmod +x "$RUNNER_TEMP/bin/claude" "$RUNNER_TEMP/bin/code"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - run: bash install.sh </dev/null
+      - name: The extension went to the editor and the CLI is wired
+        run: |
+          grep -- '--install-extension .*pengupool.vsix --force' "$RUNNER_TEMP/code.log"
+          pengupool setup --check cc
+      - name: No editor fails loudly
+        run: |
+          rm "$RUNNER_TEMP/bin/code"
+          if out=$(bash install.sh </dev/null 2>&1); then echo "install.sh passed without an editor"; exit 1; fi
+          grep -q "editor extension is not" <<<"$out"
+
   test:
-    needs: [changes, python, extension]
+    needs: [changes, python, extension, install]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - env:
-          RESULTS: ${{ needs.changes.result }} ${{ needs.python.result }} ${{ needs.extension.result }}
+          RESULTS: ${{ needs.changes.result }} ${{ needs.python.result }} ${{ needs.extension.result }} ${{ needs.install.result }}
         run: |
-          echo "changes/python/extension: $RESULTS"
+          echo "changes/python/extension/install: $RESULTS"
           for r in $RESULTS; do
             case "$r" in success|skipped) ;; *) echo "a required suite did not pass: $r"; exit 1 ;; esac
           done

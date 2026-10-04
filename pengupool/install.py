@@ -42,12 +42,16 @@ def _confirm(question: str) -> bool:
         return False
 
 
+# a package's name where it differs by package manager: Debian, Fedora and Arch ship Node as nodejs + npm
+PKG_NAMES = {"node": {"apt-get": "nodejs npm", "dnf": "nodejs npm", "pacman": "nodejs npm"}}
+
+
 def _pkg_install(pkg: str) -> str:
     """Install command for a system package via the first package manager found ('' = none)."""
-    for pm, cmd in (("brew", f"brew install {pkg}"), ("apt-get", f"sudo apt-get install -y {pkg}"),
-                    ("dnf", f"sudo dnf install -y {pkg}"), ("pacman", f"sudo pacman -S --noconfirm {pkg}")):
-        if shutil.which(pm):
-            return cmd
+    for pm, cmd in (("brew", "brew install {}"), ("apt-get", "sudo apt-get update && sudo apt-get install -y {}"),
+                    ("dnf", "sudo dnf install -y {}"), ("pacman", "sudo pacman -S --needed --noconfirm {}")):
+        if shutil.which(pm):  # apt-get update first: a fresh machine's package lists are empty
+            return cmd.format(PKG_NAMES.get(pkg, {}).get(pm, pkg))
     return ""
 
 

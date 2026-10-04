@@ -94,3 +94,15 @@ def test_check_ignores_which_cli_path_was_baked_in(env, monkeypatch):
     assert install._unbaked(install._pi_extension().read_text()) == install.EXTENSION.read_text()
     install._pi_extension().write_text("// stale\n")
     assert install._unbaked(install._pi_extension().read_text()) != install.EXTENSION.read_text()
+
+
+@pytest.mark.parametrize(("pm", "cmd"), [
+    ("brew", "brew install node"),
+    ("apt-get", "sudo apt-get update && sudo apt-get install -y nodejs npm"),
+    ("dnf", "sudo dnf install -y nodejs npm"),
+    ("pacman", "sudo pacman -S --needed --noconfirm nodejs npm"),
+])
+def test_node_installs_under_each_package_managers_own_name(monkeypatch, pm, cmd):
+    monkeypatch.setattr(install.shutil, "which", lambda b: f"/bin/{b}" if b == pm else None)
+    assert install._pkg_install("node") == cmd
+    assert install._pkg_install("tmux").endswith("tmux")
