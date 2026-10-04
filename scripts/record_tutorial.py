@@ -19,7 +19,7 @@ from playwright.sync_api import sync_playwright
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 OUT = ROOT / "docs/assets/tutorial"
 NAMES = ["group-the-children", "brief-the-parent", "ask-the-top", "direct-line", "keep-it-healthy"]
-W, H = 1132, 700
+W, H = 1132, 760   # tall enough for the hero, whose three-level map is taller; each GIF is cropped to the player
 
 with tempfile.TemporaryDirectory() as tmp, sync_playwright() as p:
     browser = p.chromium.launch(channel="chrome")

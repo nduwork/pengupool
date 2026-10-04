@@ -19,7 +19,7 @@
   <a href="CHANGELOG.md">Changelog</a>
 </p>
 
-![PenguPool in Cursor: the lead routes "Add token refresh to login" to api and web, the map lights each message, then a right-click adds a qa child and a dragged card joins the tree](docs/assets/hero.gif)
+![PenguPool in Cursor: a dragged payments card joins under api, the lead routes "Add token refresh to login" to api and web, api passes part on to payments, and a right-click adds a qa child under web: a three-level tree](docs/assets/hero.gif)
 
 Your agents are the pengus: Claude Code and pi sessions, each swimming its own lane in its own repo or
 worktree. PenguPool manages the pool from VS Code or Cursor. You arrange the sessions as a tree, talk to

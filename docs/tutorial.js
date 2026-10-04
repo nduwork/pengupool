@@ -22,19 +22,20 @@
   const kids = (id) => S.sessions.filter((s) => s.parent === id && s.h === 'cc');
   const seen = new Set();
 
-  function rowHTML(s, indent) {
+  function rowHTML(s, depth) {
     const isNew = !seen.has('row' + s.id); seen.add('row' + s.id);
     const meta = s.h === 'pi' ? esc(`pi · ${s.repo}`) : `${esc(s.repo)} · <span class="${ctxLevel(s.ctx)}">${s.ctx}% ctx</span>`;
-    return `<div class="row st-${s.state}${S.sel === s.id ? ' sel' : ''}${indent ? ' in' : ''}${isNew ? ' fade' : ''}" data-id="${s.id}">`
+    return `<div class="row st-${s.state}${S.sel === s.id ? ' sel' : ''}${depth ? ' in' + (depth > 1 ? depth : '') : ''}${isNew ? ' fade' : ''}" data-id="${s.id}">`
       + `<span class="g">${GLYPH[s.state]}</span><b>${esc(s.name)}</b><em>${meta}</em></div>`;
   }
   function renderSide() {
     const cc = S.sessions.filter((s) => s.h === 'cc'), pi = S.sessions.filter((s) => s.h === 'pi');
     let h = '<div class="side-title">PENGUPOOL</div><div class="side-sec">⌄ CLAUDE SESSIONS</div>';
     if (!cc.length) h += '<div class="side-empty">No sessions yet · press <kbd>n</kbd></div>';
-    for (const r of cc.filter((s) => !s.parent)) { h += rowHTML(r, false); for (const c of kids(r.id)) h += rowHTML(c, true); }
+    const tree = (s, d) => { h += rowHTML(s, d); for (const c of kids(s.id)) tree(c, d + 1); };
+    for (const r of cc.filter((s) => !s.parent)) tree(r, 0);
     h += '<div class="side-sec">⌄ PI SESSIONS</div>';
-    for (const s of pi) h += rowHTML(s, false);
+    for (const s of pi) h += rowHTML(s, 0);
     h += '<div class="side-sec closed">› SHORTCUTS</div>';
     $('.ide-side').innerHTML = h;
   }
@@ -54,17 +55,22 @@
     const all = S.sessions.filter((s) => s.h === 'cc' && !s.parent), grouped = all.some((r) => kids(r.id).length);
     const loners = grouped ? all.filter((r) => !kids(r.id).length) : [], roots = all.filter((r) => !loners.includes(r));
     const area = loners.length ? 70 : 92;
-    const units = roots.map((r) => Math.max(1, kids(r.id).length));
-    const total = units.reduce((a, b) => a + b, 0) || 1;
+    // each session gets horizontal room for its leaves; a level per depth, two levels as before
+    const units = (id) => kids(id).reduce((a, k) => a + units(k.id), 0) || 1;
+    const depth = (id) => 1 + Math.max(0, ...kids(id).map((k) => depth(k.id)));
+    const total = roots.reduce((a, r) => a + units(r.id), 0) || 1, levels = Math.max(1, ...roots.map((r) => depth(r.id)));
+    const ys = levels > 2 ? [12, 44, 74] : [10, 62];   // three levels clear the toolbar; the hero's map is taller
     const w = Math.min(29, area / total);
     const pos = {}; let start = 0;
     loners.forEach((r) => { pos[r.id] = { x: 79, y: 0, w: 20, col: true }; });  // left edge; stacked in renderMap
-    roots.forEach((r, i) => {
-      const x0 = 4 + (start / total) * area, span = (units[i] / total) * area, ks = kids(r.id);
-      pos[r.id] = { x: x0 + span / 2, y: ks.length ? 10 : 36, w: ks.length ? Math.min(60, w * 2.5) : w };  // room for the chain
-      ks.forEach((k, j) => { pos[k.id] = { x: x0 + span * (j + 0.5) / ks.length, y: 62, w }; });
-      start += units[i];
-    });
+    const place = (s, x0, span, d) => {
+      const ks = kids(s.id);
+      pos[s.id] = d ? { x: x0 + span / 2, y: ys[Math.min(d, ys.length - 1)], w }
+        : { x: x0 + span / 2, y: ks.length ? ys[0] : 36, w: ks.length ? Math.min(60, w * 2.5) : w };  // room for the chain
+      let at = x0;
+      for (const k of ks) { const sp = span * units(k.id) / units(s.id); place(k, at, sp, d + 1); at += sp; }
+    };
+    roots.forEach((r) => { const span = units(r.id) / total * area; place(r, 4 + start / total * area, span, 0); start += units(r.id); });
     return pos;
   }
   function renderMap() {
@@ -332,21 +338,23 @@
   ];
 
   // The README hero (?record=hero): the team after scenes 1-2, asked once, then grown from the map.
-  const HERO = { t: 'Run an agent team from your editor', p: 'Ask the lead and watch it route. Right-click to add a child, drag a card to regroup.', run: async () => {
+  const HERO = { t: 'Run an agent team from your editor', p: 'Ask the lead and watch the work flow down the tree. Drag a card to regroup, right-click to add a child.', run: async () => {
     if (S.tab !== 'lead') await tab('lead');
+    await mapDrag('payments', 'api');   // a third level: payments joins under api
     await type('Add token refresh to login.');
     await say('<span class="dot">⏺</span> Triage: → api, web', '', 350);
     await log('lead', 'api', 'add the token refresh endpoint', 'lg'); await set('api', { ctx: 24 });
     await log('lead', 'web', 'wire refresh into the login form', 'lg'); await set('web', { ctx: 19 });
     await chain('[ship-auth] api ● → web ○ → deploy ○');
+    await log('api', 'payments', 'keep checkout sessions alive across a refresh', 'lg'); await set('payments', { state: 'active', ctx: 18 });
+    await log('payments', 'api', 'done: checkout re-reads the token on each call', 'lb'); await set('payments', { state: 'waiting', ctx: 27 });
     await log('api', 'lead', 'endpoint done, tests pass', 'lb'); await set('api', { state: 'waiting', ctx: 41 });
     await chain('[ship-auth] api ✓ → web ● → deploy ○');
-    await menu($('.card[data-id="lead"]'), MENU, 0);
+    await menu($('.card[data-id="web"]'), MENU, 0);
     await input('Folder for the new session', '~/code/shop-e2e');
     await input('Session name', 'qa');
     await pick('Choose where to start the session', PLACES, 0);
-    await add({ name: 'qa', id: 'qa', h: 'cc', repo: 'shop-e2e', ctx: 2, parent: 'lead' });
-    await mapDrag('payments', 'lead');
+    await add({ name: 'qa', id: 'qa', h: 'cc', repo: 'shop-e2e', ctx: 2, parent: 'web' });
     S.sel = 'lead'; render(); hidePtr(); await wait(1400);
   } };
 
@@ -396,7 +404,7 @@
   if (REDUCED) playBtn.hidden = true;
 
   if (HERO_REC) {
-    document.body.classList.add('record');
+    document.body.classList.add('record', 'hero-rec');
     tut.querySelector('.cap-n').textContent = '1.0'; tut.querySelector('.cap-t').textContent = HERO.t; tut.querySelector('.cap-p').textContent = HERO.p;
     resetTo(2).then(() => wait(500)).then(HERO.run).then(() => wait(800)).then(() => { window.__done = true; });
     return;
