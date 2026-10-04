@@ -196,3 +196,4 @@ body.record .team-intro{display:none}
 .team-steps li::before{left:10px;top:8px;width:20px;height:20px;font-size:11px}
 @media(max-width:900px){.team-intro{flex-direction:column}.team-intro h2{align-self:flex-start}}
 .hero-rec .map-pane{min-height:340px}   /* the README hero's tree is three levels deep */
+.record .term{height:212px;overflow:hidden}   /* recordings crop to the player once, so it must not grow */
