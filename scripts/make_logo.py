@@ -4,7 +4,8 @@
 
 writes the one-colour glyph (currentColor; the Activity Bar icon and the site's small icons) to
 extension/media/penguin.svg and docs/assets/penguin.svg, the full-colour tile to docs/assets/logo.svg,
-and renders the extension's marketplace icon extension/media/icon.png with rsvg-convert."""
+renders the extension's marketplace icon extension/media/icon.png with rsvg-convert, and draws the
+README banner docs/assets/pengupool.webp (rsvg-convert + ImageMagick)."""
 import pathlib
 import subprocess
 
@@ -50,9 +51,54 @@ def icon(tile: str = "#16324a") -> str:
             f'<g transform="translate(14 16) scale(9.5)">{inner}</g></svg>\n')
 
 
+
+def coach_gear() -> str:
+    """Cap, whistle on a lanyard and a clipboard, in the penguin's 24-unit box."""
+    return ('<path d="M6.2 5.9C6.4 1.9 17.6 1.9 17.8 5.9Z" fill="#8ce5c5"/>'
+            '<ellipse cx="16.2" cy="5.9" rx="4.2" ry=".85" fill="#5fcfae"/>'
+            '<path d="M9.4 10.4Q12 14.6 14.6 10.4" fill="none" stroke="#f3c880" stroke-width=".45"/>'
+            '<rect x="11.2" y="12.9" width="1.6" height="1.4" rx=".4" fill="#f3c880"/>'
+            '<g transform="rotate(14 19.2 15.6)"><rect x="17.3" y="12.8" width="3.8" height="5" rx=".45" '
+            'fill="#eef6f2" stroke="#0b1320" stroke-width=".35"/><rect x="18.4" y="12.4" width="1.6" height=".9" '
+            'rx=".3" fill="#0b1320"/><path d="M18 14.6h2.4M18 15.7h2.4M18 16.8h1.6" stroke="#8b9aa3" stroke-width=".3"/></g>')
+
+
+def penguin(x: float, y: float, s: float, extra: str = "") -> str:
+    return (f'<g {T(x, y, s)}><g fill="#f3c880">{FEET}</g><g fill="#0b1320">{BODY}</g>'
+            f'<g fill="#eef6f2">{BELLY}{EYES}</g><g fill="#0b1320">{PUPILS}</g><g fill="#f3c880">{BEAK}</g>{extra}</g>')
+
+
+def banner() -> str:
+    """The README banner, 2240x1120: PenguPool is the coach; the agents swim their own lanes."""
+    agents = [(1060, "api"), (1460, "web"), (1860, "deploy")]
+    msgs = "".join(f'<path d="M600 590C{(600 + x) / 2} 430 {x - 60} 520 {x} 650" fill="none" stroke="#0b1320" '
+                   f'stroke-width="7" stroke-dasharray="4 18" stroke-linecap="round" opacity=".45"/>' for x, _ in agents)
+    swimmers = "".join(penguin(x - 150, 610, 12.5) for x, _ in agents)
+    lanes = "".join(f'<path d="M{x} 800V1120" stroke="#eef6f2" stroke-width="10" stroke-dasharray="26 22" opacity=".8"/>'
+                    for x in (860, 1260, 1660, 2060))
+    chips = "".join(f'<rect x="{x - 95}" y="930" width="190" height="64" rx="32" fill="#eef6f2"/>'
+                    f'<text x="{x}" y="974" text-anchor="middle" font-size="38" font-weight="700" fill="#0b1320">{n}</text>'
+                    for x, n in agents)
+    return ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2240 1120" font-family="Inter, Helvetica, Arial, sans-serif">'
+            '<rect width="2240" height="1120" fill="#e6f7f0"/>'
+            '<rect y="720" width="2240" height="70" fill="#cdeee2"/>'                      # pool deck
+            f'{msgs}{penguin(170, 238, 22, coach_gear())}{swimmers}'
+            '<path d="M0 800Q140 770 280 800T560 800T840 800T1120 800T1400 800T1680 800T1960 800T2240 800V1120H0Z" '
+            'fill="#8ce5c5"/>'                                                              # the pool, over the swimmers
+            f'{lanes}{chips}'
+            '<text x="1060" y="250" font-size="150" font-weight="800" fill="#0b1320" letter-spacing="-4">PenguPool</text>'
+            '<text x="1064" y="350" font-size="56" font-weight="600" fill="#2b4a5c">the coach for your agent harnesses</text>'
+            '</svg>\n')
+
+
 if __name__ == "__main__":
     for path in ("extension/media/penguin.svg", "docs/assets/penguin.svg"):
         (ROOT / path).write_text(glyph())
     (ROOT / "docs/assets/logo.svg").write_text(icon())
     subprocess.run(["rsvg-convert", "-w", "256", str(ROOT / "docs/assets/logo.svg"),
                     "-o", str(ROOT / "extension/media/icon.png")], check=True)
+    png = ROOT / "docs/assets/pengupool.png"
+    png.write_bytes(subprocess.run(["rsvg-convert", "-w", "2240"], input=banner().encode(), capture_output=True,
+                                   check=True).stdout)
+    subprocess.run(["magick", str(png), "-quality", "90", str(ROOT / "docs/assets/pengupool.webp")], check=True)
+    png.unlink()
