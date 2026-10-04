@@ -5,6 +5,18 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- A new logo and README banner: three penguins for a pool of agents, with PenguPool as the coach of your agent harnesses. `scripts/make_logo.py` draws the logo, the Activity Bar glyph and the extension icon.
+- skill-repo skill: say "offload my knowledge about X to a new skill repo" and it scaffolds a repo for that one task, with its method in a skill file, one log per subject that every session and headless run appends to, and an owner memory written only after you confirm it.
+- Claude Code sessions report their context % in the list and map: `pengupool setup cc` wraps your status line (it falls back to your own line if PenguPool is gone) the way the pi extension reports pi's.
+- The session menu adds child sessions, copies the path, and leads with operations (#75).
+- Regroup by dragging a card on the map (#74).
+- /clear keeps a session's group and role, and a Fresh Context action (#73).
+
+### Changed
+- A 1.0 README with the banner on top, a hero GIF and re-recorded tutorial GIFs; the landing page's tutorial draws trees of any depth.
+- The repository is renamed nduwork/pengupool (#77).
+
 ## [0.9.2] - 2026-10-02
 
 ### Fixed
