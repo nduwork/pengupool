@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.0
+
+- PenguPool 1.0 (#82)
+- session menu adds child sessions, copies the path, and leads with operations (#75)
+- regroup by dragging a card on the map (#74)
+- /clear keeps a session's group and role, and a Fresh Context action (#73)
+
+Ships with PenguPool v1.0.0.
+
 ## 0.6.1
 
 - tidy the Shortcuts panel and the right-click menu (#67)
