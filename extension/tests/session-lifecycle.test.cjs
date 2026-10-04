@@ -115,6 +115,13 @@ test('new worktree terminal is reused despite changed cwd and normalized name', 
   assert.equal(h.errors.length, 0);
 });
 
+test('the terminal tab is just "PenguPool", with no session folder as its cwd', async () => {
+  const h = harness();
+  await h.manager.newSession('/repo', 'normalized worker');
+  assert.equal(h.terminals[0].name, 'PenguPool');
+  assert.equal(h.terminals[0].options.cwd, undefined);
+});
+
 test('snapshot arriving before launch response still binds the terminal', async () => {
   const h = harness();
   h.manager.reconcile([node]);

@@ -16,7 +16,7 @@ def executable(path):
     return str(path)
 
 
-@pytest.mark.parametrize('name', ['code', 'cursor'])
+@pytest.mark.parametrize('name', ['code', 'code-insiders', 'cursor', 'codium'])
 def test_either_editor_on_path(tmp_path, name):
     expected = executable(tmp_path / name)
     assert editor_cli.resolve_editor(path=str(tmp_path), app_roots=[]) == expected

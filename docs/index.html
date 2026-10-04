@@ -3,16 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="PenguPool turns Claude Code and pi sessions into an agent team you can manage from VS Code or Cursor: a lead that routes work to the agents that own it, a live map of who is messaging whom, the message log, and one terminal per harness.">
+  <meta name="description" content="PenguPool turns Claude Code and pi sessions into an agent team you can manage from VS Code: a lead that routes work to the agents that own it, a live map of who is messaging whom, the message log, and one terminal per harness.">
   <meta name="theme-color" content="#0b1320">
   <title>PenguPool — agent teams in your editor</title>
   <link rel="canonical" href="https://pengupool.nduwork.com/">
-  <link rel="icon" type="image/svg+xml" href="assets/penguin.svg">
+  <link rel="icon" type="image/svg+xml" href="assets/logo.svg">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header class="site-header">
-    <a class="brand" href="#top"><span class="brand-icon"><img src="assets/penguin.svg" alt=""></span> PenguPool</a>
+    <a class="brand" href="#top"><img class="brand-logo" src="assets/logo.svg" alt=""> PenguPool</a>
     <nav aria-label="Main navigation">
       <a href="#tutorial">Demo</a>
       <a href="#plugins">Plugins</a>
@@ -27,7 +27,7 @@
     <section class="hero wrap">
       <div class="hero-copy">
         <h1>Build an agent team. <em>Actually manage it.</em></h1>
-        <p>Claude Code and pi agents as a team you run from VS Code or Cursor. Talk to the lead: it routes each part to the agent that owns it, and the map shows who is messaging whom.</p>
+        <p>Claude Code and pi agents as a team you run from VS Code. Talk to the lead: it routes each part to the agent that owns it, and the map shows who is messaging whom.</p>
         <div class="install-box" id="install">
           <div class="cmd"><span class="pmt" aria-hidden="true">$</span><code id="cmd">curl -fsSL https://pengupool.nduwork.com/install.sh | bash</code></div>
           <button type="button" id="copy" aria-label="Copy install command">Copy</button>
@@ -37,8 +37,8 @@
 
     <section class="tutorial wrap" id="tutorial" aria-labelledby="tut-h">
       <div class="tut" id="tut">
-        <div class="ide" id="stage" role="img" aria-label="Animated walkthrough of the PenguPool extension in Cursor: an agent team with a lead in the monorepo and backend, frontend and deployment agents under it; the caption below describes each scene">
-          <div class="ide-title"><div class="dots"><i></i><i></i><i></i></div><span>shop — Cursor</span><span></span></div>
+        <div class="ide" id="stage" role="img" aria-label="Animated walkthrough of the PenguPool extension in VS Code: an agent team with a lead in the monorepo and backend, frontend and deployment agents under it; the caption below describes each scene">
+          <div class="ide-title"><div class="dots"><i></i><i></i><i></i></div><span>shop — Visual Studio Code</span><span></span></div>
           <div class="ide-body">
             <div class="ide-activity" aria-hidden="true"><span>⧉</span><span>⌕</span><span>⑂</span><span class="on"><img src="assets/penguin.svg" alt=""></span></div>
             <div class="ide-side"></div>
@@ -88,7 +88,7 @@
     <section class="features wrap" id="plugins">
       <div class="section-intro"><span class="eyebrow">THE PLUGINS</span><h2>One backend, three ways in.</h2><p>Each harness gets its own wiring. They all read the same local model under <code>~/.pengupool/</code>, and one tag ships a matching backend and extension.</p></div>
       <div class="feature-grid plugin-grid">
-        <article><div class="feature-icon">▣</div><h3>VS Code &amp; Cursor extension</h3><ul><li>Sessions and pi Sessions trees; drag a row or a map card to regroup, right-click a session to add a child</li><li>Live map: lines light green when a parent messages a child and milky blue on the reply; ungrouped sessions stack in their own column</li><li>Top-down or left-right layout, compact or roomy spacing, and <b>⟳ Refresh</b></li><li>Message log coloured by edge: parent → child, child → parent, <code>@session</code></li><li>One tmux-backed terminal per harness that switches sessions in place</li><li><kbd>Shift</kbd>+<kbd>R</kbd> Restart &amp; Resume after a Claude Code or pi update</li></ul></article>
+        <article><div class="feature-icon">▣</div><h3>VS Code extension</h3><ul><li>Sessions and pi Sessions trees; drag a row or a map card to regroup, right-click a session to add a child</li><li>Live map: lines light green when a parent messages a child and milky blue on the reply; ungrouped sessions stack in their own column</li><li>Top-down or left-right layout, compact or roomy spacing, and <b>⟳ Refresh</b></li><li>Message log coloured by edge: parent → child, child → parent, <code>@session</code></li><li>One tmux-backed terminal per harness that switches sessions in place</li><li><kbd>Shift</kbd>+<kbd>R</kbd> Restart &amp; Resume after a Claude Code or pi update</li></ul></article>
         <article><div class="feature-icon">⚓</div><h3>Claude Code hooks</h3><ul><li>A <code>&lt;pengupool&gt;</code> block each prompt: tree, parent, children, role</li><li><code>SendMessage</code> guard: parent and direct children only</li><li><code>ROUTE CHECK</code> when a prompt matches a child's keywords: a hint, never a blocked turn</li><li><code>ROLE REQUIRED</code> until the session describes itself</li></ul></article>
         <article><div class="feature-icon">π</div><h3>pi extension</h3><ul><li>The same tree block, appended to pi's system prompt</li><li>pi-intercom <code>send</code>/<code>ask</code> checked against the routing rule</li><li>Workflow chain in pi's footer and prompt</li><li>Its own tmux server; never grouped with Claude Code sessions</li></ul></article>
       </div>

@@ -5,14 +5,24 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-## [1.0.0] - 2026-10-04
-
 ### Added
-- session menu adds child sessions, copies the path, and leads with operations (#75)
-- regroup by dragging a card on the map (#74)
-- /clear keeps a session's group and role, and a Fresh Context action (#73)
+- A new logo and README banner: three penguins for a pool of agents, with PenguPool as the coach of your agent harnesses. `scripts/make_logo.py` draws the logo, the Activity Bar glyph and the extension icon.
+- skill-repo skill: say "offload my knowledge about X to a new skill repo" and it scaffolds a repo for that one task, with its method in a skill file, one log per subject that every session and headless run appends to, and an owner memory written only after you confirm it.
+- Claude Code sessions report their context % in the list and map: `pengupool setup cc` wraps your status line (it falls back to your own line if PenguPool is gone) the way the pi extension reports pi's.
+- The session menu adds child sessions, copies the path, and leads with operations (#75).
+- Regroup by dragging a card on the map (#74).
+- /clear keeps a session's group and role, and a Fresh Context action (#73).
 
-- Editor extension: 0.7.0 (install both with `install.sh`; they ship together in this tag).
+### Changed
+- A 1.0 README with the banner on top, a hero GIF and re-recorded tutorial GIFs; the landing page's tutorial draws trees of any depth.
+- The repository is renamed nduwork/pengupool (#77).
+- The README answers why PenguPool instead of subagents, Linux support, native messaging over an MCP gateway, and why not Codex yet.
+
+### Fixed
+- The installer is ready for Linux: Node.js installs under each package manager's own name, apt-get updates its lists first, a missing python3 or make is offered, and VS Code Insiders, VSCodium and Flatpak VS Code are found.
+- The installer fails, and says what to do, when it cannot install the editor extension, instead of reporting success.
+- The PenguPool terminal tab is just "PenguPool": it no longer shows the first session's folder after you switch sessions.
+
 ## [0.9.2] - 2026-10-02
 
 ### Fixed

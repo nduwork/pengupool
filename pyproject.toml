@@ -1,6 +1,6 @@
 [project]
 name = "pengupool"
-version = "1.0.0"
+version = "0.9.2"
 description = "Manage collaborating Claude Code and pi sessions: the shared backend for the VS Code/Cursor extension"
 requires-python = ">=3.11"
 dependencies = []
@@ -10,6 +10,9 @@ pengupool = "pengupool.cli:main"
 
 [dependency-groups]
 dev = ["pytest"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]  # skill-repo/template/tests belongs to the generated repo, not to this suite
 
 [build-system]
 requires = ["hatchling"]

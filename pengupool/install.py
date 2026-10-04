@@ -42,12 +42,16 @@ def _confirm(question: str) -> bool:
         return False
 
 
+# a package's name where it differs by package manager: Debian, Fedora and Arch ship Node as nodejs + npm
+PKG_NAMES = {"node": {"apt-get": "nodejs npm", "dnf": "nodejs npm", "pacman": "nodejs npm"}}
+
+
 def _pkg_install(pkg: str) -> str:
     """Install command for a system package via the first package manager found ('' = none)."""
-    for pm, cmd in (("brew", f"brew install {pkg}"), ("apt-get", f"sudo apt-get install -y {pkg}"),
-                    ("dnf", f"sudo dnf install -y {pkg}"), ("pacman", f"sudo pacman -S --noconfirm {pkg}")):
-        if shutil.which(pm):
-            return cmd
+    for pm, cmd in (("brew", "brew install {}"), ("apt-get", "sudo apt-get update && sudo apt-get install -y {}"),
+                    ("dnf", "sudo dnf install -y {}"), ("pacman", "sudo pacman -S --needed --noconfirm {}")):
+        if shutil.which(pm):  # apt-get update first: a fresh machine's package lists are empty
+            return cmd.format(PKG_NAMES.get(pkg, {}).get(pm, pkg))
     return ""
 
 
@@ -123,10 +127,11 @@ def check(h: str) -> bool:
     if h == "cc":
         try:
             text = _settings().read_text()
-            wired = "pengupool.context" in text and "pengupool.routing" in text
-        except OSError:
+            wired = all(m in text for m in ("pengupool.context", "pengupool.routing")) \
+                and hook.status_wrapped(json.loads(text))
+        except (OSError, ValueError, AttributeError):
             wired = False
-        print(f"{'✓' if wired else '✗'} Claude Code lifecycle hooks and SendMessage guard in {_settings()}")
+        print(f"{'✓' if wired else '✗'} Claude Code lifecycle hooks, SendMessage guard and ctx % status line in {_settings()}")
         return ok and wired
     wired = _pi_extension().is_file() and _unbaked(_pi_extension().read_text()) == EXTENSION.read_text()
     print(f"{'✓' if wired else '✗'} PenguPool pi extension at {_pi_extension()}"

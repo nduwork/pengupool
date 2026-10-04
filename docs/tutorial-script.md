@@ -7,7 +7,7 @@ demo. Each scene is one chapter of the player and one GIF below (`docs/assets/tu
 **The story:** you add token refresh to the login of a small shop built from several repos. A `lead`
 session sits in the monorepo that manages the apps and plans the work. Each child owns one app in its own
 repo: `api` builds the endpoint in the backend (in a worktree, on its own branch), `web` wires up the
-login form in the frontend, and `deploy` ships both to staging. All of it runs from one Cursor window.
+login form in the frontend, and `deploy` ships both to staging. All of it runs from one VS Code window.
 
 **Cast:**
 
@@ -85,8 +85,8 @@ Do this before you go on stage. The player starts from this state.
 | | |
 | --- | --- |
 | **Shot** | Sidebar. |
-| **Action** | Right-click `api` → **Restart & Resume (Shift+R)**. A "restarting api…" notification; the card blinks and comes back in the same terminal, worktree and group. Then `lead`'s context badge turns red (71%): press `c` on it to compact, and it drops back to green (9%). `deploy` reports "staging deploy done, smoke tests green" and the chain completes: `api ✓ → web ✓ → deploy ✓`. |
-| **Caption** | Restart in place after an update. Compact with c, never /new or /clear. |
+| **Action** | Right-click `api` → **Restart & Resume**. A "restarting api…" notification; the card blinks and comes back in the same terminal, worktree and group. Then `lead`'s context badge turns red (71%): press `c` on it to compact, and it drops back to green (9%). `deploy` reports "staging deploy done, smoke tests green" and the chain completes: `api ✓ → web ✓ → deploy ✓`. |
+| **Caption** | Restart in place after an update. Compact with c; Shift+C gives a Claude Code session a fresh context and keeps its place. |
 | **Live demo** | End on the finished chain and the full tree. |
 
 ---
@@ -95,7 +95,7 @@ Do this before you go on stage. The player starts from this state.
 
 - Four fictional repos: a `shop` monorepo that manages the apps, plus `shop-api`, `shop-web`,
   `shop-deploy` and a separate `shop-payments`. No real names on screen.
-- Cursor with only the PenguPool view open: Map and Log side by side, terminal panel at the bottom.
+- VS Code with only the PenguPool view open: Map and Log side by side, terminal panel at the bottom.
 - Add the agents beforehand (see the setup), each in its own repo, and group them live in scene 1. The briefing in scene 2 is the point of the talk.
 - Keep prompts short and on screen long enough to read. Pause on each `Triage:` line.
 - Have a small, fast task ready for `api`, and a staging target `deploy` can hit, so scenes 3–4 finish on stage.
