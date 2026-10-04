@@ -193,3 +193,4 @@ body.record .team-intro{display:none}
 .team-steps li{padding:8px 12px 8px 40px;font-size:12.5px;line-height:1.45}
 .team-steps li::before{left:10px;top:8px;width:20px;height:20px;font-size:11px}
 @media(max-width:900px){.team-intro{flex-direction:column}.team-intro h2{align-self:flex-start}}
+.brand-logo{width:34px;height:34px}
