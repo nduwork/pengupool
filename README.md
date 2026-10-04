@@ -173,9 +173,9 @@ puts the ticked ones back.
 
 | Skill | Harness | Ask for it with | What it does |
 | --- | --- | --- | --- |
-| [workflow-tracker](workflow-tracker/SKILL.md) | Claude Code (status line + hooks), pi (skill + extension) | (always on) | Keeps one workflow chain per session and shows its current phase under the session's map card. |
-| [pool-groups](pool-groups/SKILL.md) | pi | "group my sessions" | Proposes a new session tree. Nothing moves until you click Apply on the map banner or the notification; a session can never apply one itself. |
-| [skill-repo](skill-repo/SKILL.md) | Claude Code, pi | "offload my knowledge about X to a new skill repo" | Interviews you, then scaffolds a repo for that one task: the method in `skills/<task>/SKILL.md`, a log per subject that every session and headless run appends to, and a gitignored owner memory that is written only after you confirm it in your own words. It uses a skill-authoring skill such as `skill-creator` when one is installed. |
+| [workflow-tracker](skills/workflow-tracker/SKILL.md) | Claude Code (status line + hooks), pi (skill + extension) | (always on) | Keeps one workflow chain per session and shows its current phase under the session's map card. |
+| [pool-groups](skills/pool-groups/SKILL.md) | pi | "group my sessions" | Proposes a new session tree. Nothing moves until you click Apply on the map banner or the notification; a session can never apply one itself. |
+| [skill-repo](skills/skill-repo/SKILL.md) | Claude Code, pi | "offload my knowledge about X to a new skill repo" | Interviews you, then scaffolds a repo for that one task: the method in `skills/<task>/SKILL.md`, a log per subject that every session and headless run appends to, and a gitignored owner memory that is written only after you confirm it in your own words. It uses a skill-authoring skill such as `skill-creator` when one is installed. |
 
 ## Q&A
 

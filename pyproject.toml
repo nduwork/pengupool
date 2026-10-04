@@ -12,7 +12,7 @@ pengupool = "pengupool.cli:main"
 dev = ["pytest"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]  # skill-repo/template/tests belongs to the generated repo, not to this suite
+testpaths = ["tests"]  # skills/skill-repo/template/tests belongs to the generated repo, not to this suite
 
 [build-system]
 requires = ["hatchling"]

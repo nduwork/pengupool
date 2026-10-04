@@ -126,7 +126,7 @@ Claude Code or pi update takes effect without losing the session or its group.
 Grouping is session-based: use `c` or `/compact` to stay grouped. In Claude Code, `Shift+C` (Fresh Context)
 or `/clear` keeps the session's group and role. In pi, do not use `/new`: it starts a new session outside the group.
 Grouping also changes only when you ask for it. A session may *propose* a regrouping, which the
-[pool-groups skill](../pool-groups/SKILL.md) does when you ask it to, and the view then shows a
+[pool-groups skill](../skills/pool-groups/SKILL.md) does when you ask it to, and the view then shows a
 notification and a **Review Regrouping** button. It lists the moves and applies them only if you approve.
 A session can never regroup itself.
 See the [guide](https://github.com/nduwork/pengupool/blob/main/docs/guide.md) for how to brief a new child and

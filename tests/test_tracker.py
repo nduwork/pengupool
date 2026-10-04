@@ -4,7 +4,7 @@ import os
 import subprocess
 from pathlib import Path
 
-SCRIPTS = Path(__file__).resolve().parents[1] / 'workflow-tracker/scripts'
+SCRIPTS = Path(__file__).resolve().parents[1] / 'skills/workflow-tracker/scripts'
 # PenguPool exports a session id for the tools it manages, and the tracker falls back to it, so a test
 # that inherited this session's id would key the fixtures to it. Tests start from a clean env.
 CLEAN = {k: v for k, v in os.environ.items() if k not in ('PENGUPOOL_SESSION', 'STEP_STATUS_SESSION')}

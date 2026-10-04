@@ -6,7 +6,7 @@ PI_AGENT ?= $(HOME)/.pi/agent
 CLAUDE_SKILLS ?= $(HOME)/.claude/skills
 TRACKER_CC := $(if $(filter pi,$(HARNESS)),,1)
 TRACKER_PI := $(if $(filter pi both,$(HARNESS)),1,$(if $(filter auto,$(HARNESS)),$(shell command -v pi >/dev/null && echo 1)))
-WT := workflow-tracker/scripts
+WT := skills/workflow-tracker/scripts
 SCRIPTS := steps.sh statusline.sh capture_context.py hook_session_start.sh hook_prompt.sh wire_statusline.sh
 WIRE_ENV := CLAUDE_SETTINGS="$(CLAUDE_SETTINGS)" STEP_STATUS_HOME="$(STEP_STATUS_HOME)"
 
@@ -57,8 +57,8 @@ install-tracker:
 	chmod +x "$(BIN)"/*.sh
 	$(if $(TRACKER_CC),$(WIRE_ENV) bash "$(BIN)/wire_statusline.sh")
 	$(if $(TRACKER_PI),mkdir -p "$(PI_AGENT)/extensions" "$(PI_AGENT)/skills/workflow-tracker")
-	$(if $(TRACKER_PI),sed 's|__STEP_STATUS_BIN__|$(BIN)|' workflow-tracker/pi/workflow-tracker.ts > "$(PI_AGENT)/extensions/workflow-tracker.ts")
-	$(if $(TRACKER_PI),cp workflow-tracker/SKILL.md "$(PI_AGENT)/skills/workflow-tracker/SKILL.md")
+	$(if $(TRACKER_PI),sed 's|__STEP_STATUS_BIN__|$(BIN)|' skills/workflow-tracker/pi/workflow-tracker.ts > "$(PI_AGENT)/extensions/workflow-tracker.ts")
+	$(if $(TRACKER_PI),cp skills/workflow-tracker/SKILL.md "$(PI_AGENT)/skills/workflow-tracker/SKILL.md")
 	$(if $(TRACKER_PI),ln -sfn "$(BIN)" "$(PI_AGENT)/skills/workflow-tracker/scripts")
 	$(if $(TRACKER_PI),@echo "workflow-tracker: pi extension + skill → $(PI_AGENT) (restart pi sessions to load)")
 
@@ -66,7 +66,7 @@ install-tracker:
 # backend, and applying a proposal stays the user's step.
 install-pool-groups:
 	$(if $(TRACKER_PI),mkdir -p "$(PI_AGENT)/skills/pool-groups")
-	$(if $(TRACKER_PI),cp pool-groups/SKILL.md "$(PI_AGENT)/skills/pool-groups/SKILL.md")
+	$(if $(TRACKER_PI),cp skills/pool-groups/SKILL.md "$(PI_AGENT)/skills/pool-groups/SKILL.md")
 	$(if $(TRACKER_PI),@echo "pool-groups: skill → $(PI_AGENT) (restart pi sessions to load; ask for it by name)")
 
 uninstall-pool-groups:
@@ -76,7 +76,7 @@ uninstall-pool-groups:
 # on update, so a removed template file does not linger). Only a copy carrying our .pengupool marker is
 # replaced or removed: a user's own skill that happens to be called skill-repo is left alone.
 OWN_SKILL_REPO = [ ! -e "$(1)" ] || [ -f "$(1)/.pengupool" ]
-put_skill_repo = if $(OWN_SKILL_REPO); then rm -rf "$(1)" && mkdir -p "$(2)" && cp -R skill-repo "$(1)" \
+put_skill_repo = if $(OWN_SKILL_REPO); then rm -rf "$(1)" && mkdir -p "$(2)" && cp -R skills/skill-repo "$(1)" \
 	&& touch "$(1)/.pengupool" && echo "skill-repo: installed in $(1) (ask for it by name, e.g. \"new skill repo\")"; \
 	else echo "skill-repo: $(1) is not PenguPool's; left alone" >&2; fi
 

@@ -191,7 +191,7 @@ def test_the_map_and_steps_sh_render_the_same_chain(tmp_path):
     """Parity: the status line (steps.sh render) and the map (read_status) must agree, from a
     subfolder of a real git repo, before and after the chain finishes and expires."""
     import os, pathlib, subprocess, time
-    steps = pathlib.Path(__file__).resolve().parents[1] / "workflow-tracker/scripts/steps.sh"
+    steps = pathlib.Path(__file__).resolve().parents[1] / "skills/workflow-tracker/scripts/steps.sh"
     repo = tmp_path / "repo"
     sub = repo / "app"
     sub.mkdir(parents=True)

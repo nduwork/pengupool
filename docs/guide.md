@@ -117,7 +117,7 @@ Worktrees are created next to the repo as `<repo>-wt-<name>` on a `pengupool/<na
 - To reorganise, drag rows in Sessions or cards on the Map. Dropping on empty space moves a session to the top level.
 - To add a session straight under another, right-click it → **New Child Session** or **Add Previous Session as Child**.
 - To reorganise by asking, say so in a session ("group these sessions") and the
-  [pool-groups skill](../pool-groups/SKILL.md) proposes the moves, shows them to you and stores them only
+  [pool-groups skill](../skills/pool-groups/SKILL.md) proposes the moves, shows them to you and stores them only
   if you agree. Nothing moves until you approve it in the editor, because a session may propose a regroup
   but never apply one.
 

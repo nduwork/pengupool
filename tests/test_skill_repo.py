@@ -6,7 +6,7 @@ import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-SKILL = ROOT / "skill-repo"
+SKILL = ROOT / "skills" / "skill-repo"
 SCAFFOLD = SKILL / "scripts" / "scaffold.py"
 
 

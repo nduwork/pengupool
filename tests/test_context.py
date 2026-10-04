@@ -9,7 +9,7 @@ from pengupool import model
 
 
 SID = "abcdef12-0000"
-STATUSLINE = Path(__file__).resolve().parents[1] / "workflow-tracker" / "scripts" / "statusline.sh"
+STATUSLINE = Path(__file__).resolve().parents[1] / "skills" / "workflow-tracker" / "scripts" / "statusline.sh"
 
 
 def feed_statusline(tmp_path, payload):

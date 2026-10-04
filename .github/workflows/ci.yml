@@ -39,7 +39,7 @@ jobs:
           files=$(git diff --name-only "$BASE...$HEAD")
           printf 'changed:\n%s\n' "$files"
           # install.sh and the tracker are exercised by the Python tests; a CI change reruns everything.
-          py='^(pengupool/|tests/|scripts/|workflow-tracker/|pyproject\.toml$|uv\.lock$|Makefile$|install\.sh$|\.github/workflows/ci\.yml$)'
+          py='^(pengupool/|tests/|scripts/|skills/pyproject\.toml$|uv\.lock$|Makefile$|install\.sh$|\.github/workflows/ci\.yml$)'
           ext='^(extension/|\.github/workflows/ci\.yml$)'
           ext_docs='^extension/(README|CHANGELOG)\.md$'
           echo "python=$(grep -qE "$py" <<<"$files" && echo true || echo false)" >> "$GITHUB_OUTPUT"
