@@ -67,3 +67,13 @@ def test_install_copies_the_whole_skill_for_both_harnesses(tmp_path):
         assert (home / "template" / "AGENTS.md").is_file()
     subprocess.run(["make", "-s", "-C", str(ROOT), "uninstall-skill-repo", *env], check=True, capture_output=True)
     assert not any(tmp_path.rglob("skill-repo"))
+
+
+def test_install_and_uninstall_leave_a_users_own_skill_repo_alone(tmp_path):
+    env = [f"CLAUDE_SKILLS={tmp_path / 'cc'}", f"PI_AGENT={tmp_path / 'pi'}", "HARNESS=cc"]
+    mine = tmp_path / "cc" / "skill-repo" / "SKILL.md"
+    mine.parent.mkdir(parents=True)
+    mine.write_text("my own skill")
+    for target in ("install-skill-repo", "uninstall-skill-repo"):
+        subprocess.run(["make", "-s", "-C", str(ROOT), target, *env], check=True, capture_output=True)
+        assert mine.read_text() == "my own skill"

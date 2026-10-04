@@ -147,17 +147,23 @@ def build(current: str, proposal: dict) -> str:
         if not OWNER_OK.fullmatch(stated):
             raise ValueError('creating memory requires an "owner" handle (no spaces/underscores), e.g. "jane.doe"')
         text = _new_file(stated)
+    updates = proposal.get("update") or {}
+    if not isinstance(updates, dict):
+        raise ValueError('"update" must be an object mapping an entry id to its new line')
+    taken = {m.group(1) for ln in text.splitlines() if (m := ENTRY_ID_RE.match(ln))}
     for key, heading in SECTIONS.items():
         entries = [str(e).strip() for e in (proposal.get(key) or []) if str(e).strip()]
         bad = [e for e in entries if not _valid_entry(e)]
         if bad:
             raise ValueError(f"{key}: each entry must look like '- [P1] text …': {bad[0]!r}")
+        for e in entries:  # a duplicate id could never be updated again; adding and updating one is ambiguous
+            ident = ENTRY_ID_RE.match(e).group(1)
+            if ident in taken or ident in updates:
+                raise ValueError(f"entry id {ident!r} already exists or is also updated; use a new id")
+            taken.add(ident)
         if entries:
             text = _insert(text, heading, entries)
-    updates = proposal.get("update") or {}
     if updates:
-        if not isinstance(updates, dict):
-            raise ValueError('"update" must be an object mapping an entry id to its new line')
         for ident, line in updates.items():
             new_line = str(line).strip()
             m = ENTRY_ID_RE.match(new_line)
@@ -171,7 +177,8 @@ def build(current: str, proposal: dict) -> str:
 
 
 def _atomic_write(path: str, text: str) -> None:
-    d = os.path.dirname(os.path.abspath(path)) or "."
+    path = os.path.realpath(path)  # through a symlinked MEMORY.md, not over it
+    d = os.path.dirname(path) or "."
     os.makedirs(d, exist_ok=True)
     fd, tmp = tempfile.mkstemp(prefix=".memory.", dir=d)
     try:
@@ -203,6 +210,7 @@ def cmd_apply(path: str, expect: str, proposal_file: str, dry_run: bool) -> int:
     except (ValueError, AssertionError) as e:
         print(f"memory.py: invalid proposal JSON: {e}", file=sys.stderr)
         return 2
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)  # the lock file lives beside it
     with _locked(path):
         current = _read(path)
         if digest(current) != expect:

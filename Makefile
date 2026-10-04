@@ -73,14 +73,20 @@ uninstall-pool-groups:
 	rm -rf "$(PI_AGENT)/skills/pool-groups"
 
 # The skill-repo skill ships its scaffold script and templates, so the whole directory is copied (replaced
-# on update, so a removed template file does not linger).
+# on update, so a removed template file does not linger). Only a copy carrying our .pengupool marker is
+# replaced or removed: a user's own skill that happens to be called skill-repo is left alone.
+OWN_SKILL_REPO = [ ! -e "$(1)" ] || [ -f "$(1)/.pengupool" ]
+put_skill_repo = if $(OWN_SKILL_REPO); then rm -rf "$(1)" && mkdir -p "$(2)" && cp -R skill-repo "$(1)" \
+	&& touch "$(1)/.pengupool"; else echo "skill-repo: $(1) is not PenguPool's; left alone" >&2; fi
+
 install-skill-repo:
-	$(if $(TRACKER_CC),rm -rf "$(CLAUDE_SKILLS)/skill-repo" && mkdir -p "$(CLAUDE_SKILLS)" && cp -R skill-repo "$(CLAUDE_SKILLS)/skill-repo")
-	$(if $(TRACKER_PI),rm -rf "$(PI_AGENT)/skills/skill-repo" && mkdir -p "$(PI_AGENT)/skills" && cp -R skill-repo "$(PI_AGENT)/skills/skill-repo")
+	$(if $(TRACKER_CC),@$(call put_skill_repo,$(CLAUDE_SKILLS)/skill-repo,$(CLAUDE_SKILLS)))
+	$(if $(TRACKER_PI),@$(call put_skill_repo,$(PI_AGENT)/skills/skill-repo,$(PI_AGENT)/skills))
 	@echo "skill-repo: skill installed (ask for it by name, e.g. \"new skill repo\")"
 
 uninstall-skill-repo:
-	rm -rf "$(CLAUDE_SKILLS)/skill-repo" "$(PI_AGENT)/skills/skill-repo"
+	@for d in "$(CLAUDE_SKILLS)/skill-repo" "$(PI_AGENT)/skills/skill-repo"; do \
+		if [ -f "$$d/.pengupool" ]; then rm -rf "$$d"; fi; done
 
 # Unwires both harnesses whatever HARNESS is: removing only our own files and settings entries is safe.
 uninstall-tracker:

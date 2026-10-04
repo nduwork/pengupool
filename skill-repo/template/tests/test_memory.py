@@ -55,6 +55,23 @@ class MemoryTest(unittest.TestCase):
         self.assertIn(new, text)
         self.assertNotIn(P1, text)
 
+    def test_duplicate_or_ambiguous_ids_are_refused(self):
+        self.assertEqual(self.apply({"owner": "jane.doe", "preferences": [P1]}).returncode, 0)
+        self.assertEqual(self.apply({"preferences": [P1.replace("terse", "brief")]}).returncode, 2)
+        p2 = '- [P2] cite sources — evidence: "cite" — added 2026-01-01'
+        self.assertEqual(self.apply({"preferences": [p2], "update": {"P2": p2}}).returncode, 2)
+
+    def test_apply_into_a_new_folder_and_through_a_symlink(self):
+        deep = os.path.join(self.dir.name, "a", "b", "MEMORY.md")
+        r = run("apply", deep, "--expect", run("hash", deep).stdout.strip(), "--proposal", "-",
+                stdin=json.dumps({"owner": "jane.doe", "preferences": [P1]}))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        os.symlink(deep, self.path)
+        self.assertEqual(self.apply({"preferences": [P1.replace("[P1]", "[P3]")]}).returncode, 0)
+        self.assertTrue(os.path.islink(self.path))
+        with open(deep, encoding="utf-8") as fh:
+            self.assertIn("[P3]", fh.read())
+
 
 if __name__ == "__main__":
     unittest.main()
