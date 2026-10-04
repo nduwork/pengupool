@@ -1,7 +1,5 @@
 <p align="center">
-  <img src="docs/assets/penguin.svg" width="96" alt="PenguPool logo: a penguin">
-  <br>
-  <strong>PenguPool</strong>
+  <img src="docs/assets/pengupool.webp" width="720" alt="PenguPool, the coach for your agent harnesses: a coach penguin with a cap, whistle and clipboard sends messages to agent penguins swimming in their own lanes (api, web, deploy)">
 </p>
 
 <p align="center">Run a team of Claude Code and pi agents from your editor.</p>
@@ -49,10 +47,6 @@ who is messaging whom. Sessions run in tmux, so they keep working when you close
   There is no account and no hosted service.
 
 ## How it works
-
-<p align="center">
-  <img src="docs/assets/pengupool.webp" width="560" alt="PenguPool, the lifeguard for your pool of agents: a penguin lifeguard with a headset sends messages to penguin agents working in their own pool lanes">
-</p>
 
 One Python backend holds the model: the sessions, the tree, the roles and the message log. Three front ends
 plug into it, one for each place you meet your agents.
