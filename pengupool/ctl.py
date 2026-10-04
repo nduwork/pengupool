@@ -30,7 +30,8 @@ Verbs:
     context <sid> [--prompt-stdin | --keyed-prompt-stdin]  print the session-tree context block for a
                                   session (used by the pi extension); the prompt's @session tags open a
                                   direct line only when the pi extension's key leads stdin
-    slash <sid> compact | rename <name>  type the slash command into the session's own pane (user only)
+    slash <sid> compact | clear | rename <name>  type the slash command into the session's own pane (user
+                                  only); clear keeps the session's group and role (Claude Code only)
     register <sid> <cwd> [--key-stdin]  create/refresh a session's profile (workspace scan; used by the pi extension)
     describe <sid> [--summary S] [--responsibility R] [--keywords "a, b"]
                                   set what a session owns; allowed from the session itself, its parent, or the user
@@ -350,7 +351,7 @@ def _past_all() -> int:
 
 
 def _slash(sid: str, what: str, name: str = "") -> int:
-    """Compact or rename a session by typing its slash command into its own pane. User-only: a session
+    """Compact, clear or rename a session by typing its slash command into its own pane. User-only: a session
     that could type into another session's pane would bypass the routing rule entirely."""
     from . import tmux
     try:
@@ -369,10 +370,12 @@ def _slash(sid: str, what: str, name: str = "") -> int:
     h = harness.of(s)
     if what == "compact" and not name:
         text = "/compact"
+    elif what == "clear" and not name and h == "cc":  # the SessionStart hook keeps its group and role
+        text = "/clear"
     elif what == "rename" and re.fullmatch(r"[^\x00-\x1f\x7f]{1,80}", name):  # one printable line
         text = f"{harness.RENAME[h]} {name}"
     else:
-        print("usage: pengupool ctl slash <sid> compact | rename <name>", file=sys.stderr)
+        print("usage: pengupool ctl slash <sid> compact | clear (Claude Code only) | rename <name>", file=sys.stderr)
         return 2
     return 0 if tmux.slash(pane, text, h) else 1
 

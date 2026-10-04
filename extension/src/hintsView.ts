@@ -23,6 +23,8 @@ const HINTS: Hint[] = [
     { label: 'x', description: 'close session', icon: 'close' },
     { label: 'c', description: 'compact · preserve group placement', icon: 'fold',
       tooltip: 'Same as typing /compact in the session' },
+    { label: '⇧C', description: 'fresh context · keep group and role', icon: 'clear-all',
+      tooltip: 'Same as typing /clear in a Claude Code session' },
     { label: '⇧R', description: 'restart & resume · picks up a Claude Code / pi update', icon: 'debug-restart' },
     { label: '⇧⏎', description: 'prompt newline in Claude terminal', icon: 'newline' },
   ] },

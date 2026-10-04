@@ -335,3 +335,81 @@ def test_a_regroup_is_announced_once_and_refreshes_the_cached_tree(home, monkeyp
     assert not context._changed_since(__import__("time").time() + 60)
     model.save_groups({B: A})
     assert context._changed_since(0)
+
+
+class _Procs:
+    """ps as the hook would see it: the hook (pid 900) runs under B's Claude process (pid 101)."""
+    rows = {900: (101, "", "sh"), 101: (1, "Sun Oct  4 10:00:00 2026", "claude")}
+
+    def refresh(self):
+        return self
+
+    def ppid(self, pid):
+        return self.rows.get(pid, (0,))[0]
+
+
+@pytest.fixture
+def cleared(home, monkeypatch):
+    """B (pid 101, pane %5) sits under A and leads C, with a role; /clear is about to give it id D."""
+    import time
+    from pengupool import tmux
+    monkeypatch.setattr(model, "PENGU", home)
+    monkeypatch.setattr(model, "GROUPS", home / "groups.json")
+    monkeypatch.setattr(model, "AGENT_STATE", home / "agent_state")
+    monkeypatch.setattr(model, "PROCS", _Procs())
+    monkeypatch.setattr(context, "load_tree", lambda: {})
+    monkeypatch.setattr(context.os, "getppid", lambda: 900)
+    in_pane = {"%5"}
+    monkeypatch.setattr(tmux, "pane_owns", lambda pane, pid, h="cc": pane in in_pane)
+    monkeypatch.setenv("TMUX_PANE", "%5")
+    model.save_groups({B: A, C: B})
+    profiles.describe(B, "Researches libraries", "Reports findings", editor=B, keywords_text="research")
+    started = time.mktime(time.strptime("Sun Oct  4 10:00:00 2026", "%a %b %d %H:%M:%S %Y"))
+    lines = [{"sessionId": B, "tmuxPane": "%5", "ts": started + 5},
+             {"sessionId": E, "tmuxPane": "%5", "ts": started + 9, "harness": "pi"}]  # pi's own %5: another pane
+    (home / "registry.jsonl").write_text("\n".join(json.dumps(x) for x in lines) + "\n")
+
+    def clear(new=D):
+        import io
+        import sys
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(
+            {"session_id": new, "hook_event_name": "SessionStart", "source": "clear", "cwd": str(home)})))
+        context.main()
+
+    return clear, in_pane, home
+
+
+def test_clear_hands_the_new_id_its_place_in_the_tree_and_its_role(cleared):
+    clear, _, _ = cleared
+    clear()
+    assert model.load_groups() == {D: A, C: D}
+    p = profiles.load(D)
+    assert (p["summary"], p["responsibility"], p["keywords"]) == ("Researches libraries", "Reports findings", ["research"])
+    assert p["description_editor"] == D
+
+
+def test_clear_moves_nothing_unless_the_hook_runs_in_that_pane(cleared):
+    clear, in_pane, _ = cleared
+    in_pane.clear()                      # a forged event naming a pane this process is not in
+    clear()
+    assert model.load_groups() == {B: A, C: B}
+
+
+def test_clear_cannot_hand_a_place_to_another_live_session(cleared):
+    clear, _, _ = cleared
+    clear(new=C)                         # C is live under pid 102, not the Claude process above the hook
+    assert model.load_groups() == {B: A, C: B}
+
+
+def test_clear_ignores_a_pane_line_from_before_this_process_started(cleared):
+    clear, _, home = cleared
+    (home / "registry.jsonl").write_text(json.dumps({"sessionId": A, "tmuxPane": "%5", "ts": 1000}) + "\n")
+    clear()                              # %5 from an earlier tmux server life: A is not this session
+    assert model.load_groups() == {B: A, C: B}
+
+
+def test_a_failed_carry_over_still_registers_the_session(cleared, monkeypatch):
+    clear, _, home = cleared
+    monkeypatch.setattr(model, "rekey_groups", lambda old, new: (_ for _ in ()).throw(OSError("disk full")))
+    clear()
+    assert json.loads((home / "registry.jsonl").read_text().splitlines()[-1])["sessionId"] == D

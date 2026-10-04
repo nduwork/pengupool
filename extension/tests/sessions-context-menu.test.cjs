@@ -82,7 +82,7 @@ test('the shared menu offers the pool actions, the session actions, and no nativ
   assert.match(source, /addMenuItem\('New Session', 'pengupool\.new', 'add', 'N'\)/);
   assert.match(source, /addMenuItem\('Add Previous Session…', 'pengupool\.add', 'history', 'A'\)/);
   assert.match(source, /addMenuItem\('Resume Previous Sessions…', 'pengupool\.resumePrevious', 'run-all'\)/);
-  for (const command of ['switch', 'reveal', 'group', 'rename', 'describe', 'compact', 'restart', 'close']) {
+  for (const command of ['switch', 'reveal', 'group', 'rename', 'describe', 'compact', 'clear', 'restart', 'close']) {
     assert.match(source, new RegExp(`'pengupool\\.${command}'`));
   }
   assert.match(source, /new Set\(\['pengupool\.new', 'pengupool\.add', 'pengupool\.resumePrevious'\]\)/);
@@ -94,12 +94,12 @@ test('every menu item has an icon, and each item with a Sessions key shows that 
   const source = fs.readFileSync(path.join(__dirname, '../src/webviewMenu.ts'), 'utf8');
   const icons = source.slice(source.indexOf('const MENU_ICONS'), source.indexOf('function hideMenu'));
   const items = [...source.matchAll(/addMenuItem\([^,]+, '(pengupool\.\w+)', '([\w-]+)'(?:, '([^']*)')?/g)];
-  assert.equal(items.length, 11);
+  assert.equal(items.length, 12);
   for (const [, , icon] of items) { assert.ok(icons.includes(`${icon.includes('-') ? `'${icon}'` : icon}:`), `no icon ${icon}`); }
   const keys = Object.fromEntries(items.map(([, cmd, , key]) => [cmd, key]));
   const manifest = require('../package.json');
   for (const binding of manifest.contributes.keybindings.filter((b) => /pengupoolSessions/.test(b.when))) {
-    const shown = binding.key === 'shift+r' ? '⇧R' : binding.key.toUpperCase();
+    const shown = binding.key.replace('shift+', '⇧').toUpperCase();
     assert.equal(keys[binding.command], shown, `${binding.command} should show ${shown}`);
   }
   assert.match(source, /addMenuItem\('Close', 'pengupool\.close', 'close', 'X', true\)/);

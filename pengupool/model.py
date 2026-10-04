@@ -942,6 +942,14 @@ def save_groups(groups: dict[str, str]) -> None:
     write_json(GROUPS, groups)
 
 
+def rekey_groups(old: str, new: str) -> None:
+    """A /clear gives the same session a new id: move its place in the tree (as child and as parent)."""
+    with locked(GROUPS):
+        g = load_groups()
+        if old in g or old in g.values():
+            save_groups({(new if k == old else k): (new if v == old else v) for k, v in g.items()})
+
+
 def apply_groups(sessions: list[dict], edges: list[Edge], groups: dict[str, str]) -> list[Edge]:
     """Manual parents win: drop every derived edge into a grouped child, then prepend the manual edge."""
     names = tree_names(sessions)

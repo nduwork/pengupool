@@ -86,6 +86,19 @@ def register(sid: str, cwd: str) -> dict:
     return d
 
 
+def carry_over(old: str, new: str) -> None:
+    """A /clear gives the same session a new id: keep the role it had, unless the new id has one."""
+    o, n = load(old), load(new)
+    if not o.get("summary") or not _path(new) or n.get("summary"):
+        return
+    keep = ("summary", "responsibility", "keywords", "description_source", "description_editor", "updated_at")
+    n = n or {"schema": 1, "session_id": new, "workspace": o.get("workspace", {})}
+    n.update({k: o[k] for k in keep if k in o})
+    if n.get("description_editor") == old:
+        n["description_editor"] = new
+    _save(n)
+
+
 def workspace_label(p: dict) -> str:
     w = p.get("workspace") or {}
     repos = w.get("repos") or []

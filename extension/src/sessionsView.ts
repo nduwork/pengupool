@@ -207,7 +207,7 @@ ${MENU_HTML}
     }
     if(event.key==='Enter'&&selected){ event.preventDefault(); command('pengupool.switch',selected); return; }
     if(event.ctrlKey||event.metaKey||event.altKey) return;  // Cmd/Ctrl+C is copy, not compact
-    const shortcuts={n:'pengupool.new',a:'pengupool.add',g:'pengupool.group',r:'pengupool.rename',d:'pengupool.describe',x:'pengupool.close',c:'pengupool.compact',R:'pengupool.restart'};
+    const shortcuts={n:'pengupool.new',a:'pengupool.add',g:'pengupool.group',r:'pengupool.rename',d:'pengupool.describe',x:'pengupool.close',c:'pengupool.compact',C:'pengupool.clear',R:'pengupool.restart'};
     const cmd=shortcuts[event.key]; if(cmd&&(!['g','r','x','c','R'].includes(event.key)||selected)){
       event.preventDefault(); command(cmd,selected); }
   });

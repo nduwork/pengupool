@@ -354,6 +354,44 @@ def ask_role(tree: dict, sid: str) -> tuple[bool, bool]:
     return True, True
 
 
+def carry_over_clear(sid: str, pane: str) -> None:
+    """/clear restarts the conversation under a new id in the same process and pane. The pane's last
+    Claude registry line (pi writes its own, tagged) is the id it replaces: hand its group and role over.
+    Only when this hook provably runs in that pane, under that pane's Claude process, and the line was
+    written by that process: a forged event or a recycled pane id must move nothing."""
+    from . import tmux
+    if not pane or not tmux.pane_owns(pane, os.getpid(), "cc"):
+        return  # not inside that PenguPool pane: no reliable link to the old id
+    live = {s["sessionId"]: s for s in model.load_sessions() if harness.of(s) == "cc"}
+    by_pid = {s["pid"]: s for s in live.values()}
+    procs, pid, seen = model.PROCS.refresh(), os.getppid(), set()
+    while pid > 1 and pid not in by_pid and pid not in seen:  # the Claude process running this hook
+        seen.add(pid)
+        pid = procs.ppid(pid)
+    if pid not in by_pid or (sid in live and live[sid]["pid"] != pid):
+        return  # no Claude process above us, or the "new" id belongs to another session
+    row = procs.rows.get(pid)
+    started = model._start_epoch(row[1], utc=False) if row else 0.0
+    if not started:
+        return
+    old = ""
+    p = model.PENGU / "registry.jsonl"
+    for line in p.read_text().splitlines() if p.is_file() else []:
+        try:
+            d = json.loads(line)
+        except ValueError:
+            continue
+        if (isinstance(d, dict) and d.get("tmuxPane") == pane and not d.get("harness")
+                and isinstance(d.get("ts"), (int, float)) and d["ts"] >= started - 2):  # this process's lines only
+            old = str(d.get("sessionId", ""))
+    if not old or old == sid or not model._SID.fullmatch(old):
+        return
+    if old in live and live[old]["pid"] != pid:
+        return  # the old id is still another live session's
+    model.rekey_groups(old, sid)
+    profiles.carry_over(old, sid)
+
+
 def main() -> None:
     try:
         inp = json.loads(sys.stdin.read() or "{}")
@@ -373,6 +411,11 @@ def main() -> None:
     if event == "SessionStart":  # registry line for the session -> tmux pane mapping
         profiles.register(sid, str(inp.get("cwd") or os.getcwd()))
         model.PENGU.mkdir(parents=True, exist_ok=True)
+        if inp.get("source") == "clear":
+            try:  # best effort: a failure here must never cost the session its registry line below
+                carry_over_clear(sid, os.environ.get("TMUX_PANE", ""))
+            except Exception:
+                pass
         with (model.PENGU / "registry.jsonl").open("a") as fh:
             fh.write(json.dumps({"sessionId": sid, "cwd": os.getcwd(), "tmuxPane": os.environ.get("TMUX_PANE", ""),
                                  "ts": int(time.time())}) + "\n")

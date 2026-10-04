@@ -107,6 +107,10 @@
         "title": "PenguPool: Compact (/compact)"
       },
       {
+        "command": "pengupool.clear",
+        "title": "PenguPool: Fresh Context (/clear)"
+      },
+      {
         "command": "pengupool.groupPlan",
         "title": "PenguPool: Apply Regrouping",
         "icon": "$(list-unordered)"
@@ -206,6 +210,11 @@
       {
         "command": "pengupool.compact",
         "key": "c",
+        "when": "focusedView == pengupoolSessions || focusedView == pengupoolPiSessions"
+      },
+      {
+        "command": "pengupool.clear",
+        "key": "shift+c",
         "when": "focusedView == pengupoolSessions || focusedView == pengupoolPiSessions"
       },
       {
