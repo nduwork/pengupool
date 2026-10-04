@@ -52,7 +52,7 @@ Open the PenguPool view (penguin icon in the Activity Bar). Claude Sessions list
 | `Shift+R` | Restart & resume, e.g. after a Claude Code or pi update |
 | `Shift+C` | Fresh context (`/clear`) for a Claude Code session; it keeps its place in the tree and its role |
 | `Shift+Enter` | New line in a Claude Code prompt, in the PenguPool terminal |
-| right-click | All session actions, including Reveal in Finder and Describe Role; the map offers the same menu on its nodes |
+| right-click | All session actions, including New Child Session, Copy Path and Describe Role; the map offers the same menu on its nodes |
 
 After a reboot, or any time the tmux server is gone, **Resume Previous Sessions…** (the run-all button
 in the Sessions title, or right-click → the same) rebuilds the pool: it lists every session PenguPool
