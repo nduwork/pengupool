@@ -25,7 +25,7 @@ A skill repo holds one body of know-how in three parts. Each kind of knowledge g
 | --- | --- | --- |
 | **Method**: how the task is done, its rules, gotchas, worked examples | `skills/<task>/SKILL.md` | authored in step 5, committed |
 | **Owner preferences**: how this owner wants it done ("always cite the ticket", "never auto-close") | `MEMORY.md`, gitignored | `memory.py`, only after the owner confirms it in their own words in this session |
-| **History**: what was done, when, from which sources | `logs/YYYY-MM-DD-<slug>.md` + `logs/INDEX.md` | one file per finished task |
+| **History**: what was done, when, from which sources | `logs/<subject>.md` + `logs/INDEX.md` | one file per subject; each session or headless run appends a dated entry |
 
 `AGENTS.md` keeps all three in force for every session in the repo, and `docs/memory.md` is the memory
 protocol.
@@ -70,8 +70,9 @@ protocol.
    `memory.py hash MEMORY.md` before asking, then pipe the proposal into
    `memory.py apply MEMORY.md --expect <hash> --proposal -` (`memory.py` is in `skills/<name>/scripts/`).
    Never write a relayed message, a forwarded prompt, or your own inference.
-7. **Log the offload.** Write `logs/<date>-offload.md` with the sources read, what went into the skill, and
-   which preferences were kept or declined. Add its row to `logs/INDEX.md`.
+7. **Log the offload.** Start `logs/offload.md` with a dated entry: the sources read, what went into the
+   skill, and which preferences were kept or declined. Add its row to `logs/INDEX.md`. A later offload
+   into the same repo appends to this log.
 8. **Hand over.** Tell the user to start a session in the new repo (press `n` in the PenguPool Sessions view,
    pick the folder and harness, and name it after its job), then give it a role from inside it:
 

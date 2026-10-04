@@ -70,8 +70,8 @@ moves until you apply it: the proposal shows as a banner on the map and a notifi
 Discard, and a session can never apply one itself.
 
 The [skill-repo](skill-repo/SKILL.md) skill sets up a new repo for one recurring task when you ask ("new skill repo").
-The repo gets a skill file, a dated log of finished tasks, and a gitignored owner memory that is written only after you
-confirm it in your own words. It is ready to run as its own PenguPool session.
+The repo gets a skill file, a log per subject that each session and headless run appends to, and a
+gitignored owner memory that is written only after you confirm it in your own words. It is ready to run as its own PenguPool session.
 
 ## Develop
 

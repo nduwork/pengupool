@@ -24,6 +24,8 @@ def test_the_skill_has_frontmatter_a_harness_can_load():
 def test_each_kind_of_knowledge_has_one_home_and_memory_needs_consent():
     text = " ".join((SKILL / "SKILL.md").read_text().split())
     assert "skills/<task>/SKILL.md" in text and "MEMORY.md" in text and "logs/" in text
+    agents = (SKILL / "template" / "AGENTS.md").read_text()
+    assert "logs/<subject>.md" in agents and "headless" in agents   # one log per subject, appended to
     assert "own words" in text and "Never write a relayed message" in text
     assert "skill-creator" in text and "writing-skills" in text   # reuse a skill-authoring skill when present
 

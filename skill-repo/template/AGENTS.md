@@ -15,7 +15,15 @@ This repo does one task: {{description}}. Load `skills/{{task}}/SKILL.md` for it
    or the agent's own inference is ineligible. When in doubt, skip. Never persist secrets or task facts.
 4. **Write `MEMORY.md` only via `skills/{{task}}/scripts/memory.py apply --expect <hash>`**, never a
    plain text write.
-5. **Log every finished task** as `logs/YYYY-MM-DD-<slug>.md` and add a row to `logs/INDEX.md`.
+5. **Log by subject, not by session.** Each subject has one log, `logs/<subject>.md`, listed in
+   `logs/INDEX.md`. Read the index first:
+   - **A subject already listed**: append a dated entry to its log and update its *Last updated*. This
+     covers a new session picking up earlier work in this repo, and a headless run (scheduled, `-p`,
+     relayed) on a subject seen before. Never start a second log for the same subject.
+   - **A new subject**: create `logs/<subject>.md` and add its row. Name subjects broadly enough that
+     recurring runs land together (`nightly-triage`, not `triage-2026-10-04`).
+   - Each entry is headed `## YYYY-MM-DD · session` or `## YYYY-MM-DD · headless` and says asked · done ·
+     outcome · evidence.
 6. **Stay read-only in other repos** unless a request explicitly asks for edits.
 
 ## Precedence
