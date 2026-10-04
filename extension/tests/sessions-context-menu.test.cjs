@@ -82,9 +82,17 @@ test('the shared menu offers the pool actions, the session actions, and no nativ
   assert.match(source, /addMenuItem\('New Session', 'pengupool\.new', 'add', 'N'\)/);
   assert.match(source, /addMenuItem\('Add Previous Session…', 'pengupool\.add', 'history', 'A'\)/);
   assert.match(source, /addMenuItem\('Resume Previous Sessions…', 'pengupool\.resumePrevious', 'run-all'\)/);
-  for (const command of ['switch', 'reveal', 'group', 'rename', 'describe', 'compact', 'clear', 'restart', 'close']) {
+  for (const command of ['newChild', 'addChild', 'reveal', 'copyPath', 'group', 'rename', 'describe', 'compact',
+    'clear', 'restart', 'close']) {
     assert.match(source, new RegExp(`'pengupool\\.${command}'`));
   }
+  // a click opens a session, so the menu no longer repeats it
+  assert.doesNotMatch(source, /'pengupool\.switch'/);
+  // on a session: add as its child, then folder, the session operations, its place and name, close
+  const order = [...source.slice(source.indexOf('if(id){')).matchAll(/addMenuItem\([^,]+, '(pengupool\.\w+)'/g)].map((m) => m[1]);
+  assert.deepEqual(order, ['pengupool.newChild', 'pengupool.addChild', 'pengupool.new', 'pengupool.add',
+    'pengupool.resumePrevious', 'pengupool.reveal', 'pengupool.copyPath', 'pengupool.compact', 'pengupool.clear',
+    'pengupool.restart', 'pengupool.group', 'pengupool.rename', 'pengupool.describe', 'pengupool.close']);
   assert.match(source, /new Set\(\['pengupool\.new', 'pengupool\.add', 'pengupool\.resumePrevious'\]\)/);
   // The system cut/copy/paste menu is suppressed, so one right-click never leaves two menus behind.
   assert.match(source, /addEventListener\('contextmenu',event=>\{ if\(!event\.defaultPrevented\) event\.preventDefault\(\); \}\)/);
@@ -94,7 +102,7 @@ test('every menu item has an icon, and each item with a Sessions key shows that 
   const source = fs.readFileSync(path.join(__dirname, '../src/webviewMenu.ts'), 'utf8');
   const icons = source.slice(source.indexOf('const MENU_ICONS'), source.indexOf('function hideMenu'));
   const items = [...source.matchAll(/addMenuItem\([^,]+, '(pengupool\.\w+)', '([\w-]+)'(?:, '([^']*)')?/g)];
-  assert.equal(items.length, 12);
+  assert.equal(items.length, 14);
   for (const [, , icon] of items) { assert.ok(icons.includes(`${icon.includes('-') ? `'${icon}'` : icon}:`), `no icon ${icon}`); }
   const keys = Object.fromEntries(items.map(([, cmd, , key]) => [cmd, key]));
   const manifest = require('../package.json');
