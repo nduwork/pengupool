@@ -17,10 +17,10 @@
   <a href="CHANGELOG.md">Changelog</a>
 </p>
 
-![PenguPool in Cursor: a dragged payments card joins under api, the lead routes "Add token refresh to login" to api and web, api passes part on to payments, and a right-click adds a qa child under web: a three-level tree](docs/assets/hero.gif)
+![PenguPool in VS Code: a dragged payments card joins under api, the lead routes "Add token refresh to login" to api and web, api passes part on to payments, and a right-click adds a qa child under web: a three-level tree](docs/assets/hero.gif)
 
 Your agents are the pengus: Claude Code and pi sessions, each swimming its own lane in its own repo or
-worktree. PenguPool manages the pool from VS Code or Cursor. You arrange the sessions as a tree, talk to
+worktree. PenguPool manages the pool from VS Code. You arrange the sessions as a tree, talk to
 the one at the top, and it routes each part of the work to the session that owns it, while the map shows
 who is messaging whom. Sessions run in tmux, so they keep working when you close the editor.
 
@@ -52,7 +52,7 @@ One Python backend holds the model: the sessions, the tree, the roles and the me
 plug into it, one for each place you meet your agents.
 
 ```text
-     VS Code / Cursor              Claude Code               pi
+         VS Code                   Claude Code               pi
  ┌──────────────────────┐  ┌──────────────────────┐  ┌──────────────────────┐
  │  editor extension    │  │  hooks + guard       │  │  pi extension        │
  │  Sessions · Map ·    │  │  <pengupool> block,  │  │  tree block,         │
@@ -82,15 +82,19 @@ plug into it, one for each place you meet your agents.
 ## Install
 
 One command installs the latest release: the `pengupool` CLI, the wiring for every installed harness
-(Claude Code, pi), the bundled skills, and the extension in every VS Code and Cursor it finds.
+(Claude Code, pi), the bundled skills, and the VS Code extension.
 
 ```sh
 curl -fsSL https://pengupool.nduwork.com/install.sh | bash
 ```
 
-It needs Python 3.11+ and Make, installs [uv](https://docs.astral.sh/uv/) if missing, and offers tmux 3.2+
-and the agent CLIs (y/N each). `PENGUPOOL_REF=vX.Y.Z` pins a release; `HARNESS=cc|pi|both` and
-`EDITOR_CLI=code|cursor` override detection. Reload the editor window after installing or updating.
+It needs Python 3 and Make (offered on Linux), installs [uv](https://docs.astral.sh/uv/) if missing, and
+offers tmux 3.2+ and the agent CLIs (y/N each). `PENGUPOOL_REF=vX.Y.Z` pins a release; `HARNESS=cc|pi|both`
+overrides harness detection, and `EDITOR_CLI=/path/to/code` picks the editor CLI. Reload the editor window
+after installing or updating.
+
+PenguPool is built and tested with VS Code. Editors built on it, such as Cursor or VSCodium, may work, but
+they are not tested.
 
 <details>
 <summary>From a checkout</summary>
@@ -100,7 +104,7 @@ git clone https://github.com/nduwork/pengupool.git
 cd pengupool
 make install        # CLI, harness wiring, tracker, skills (HARNESS=auto|cc|pi|both)
 make ext-deps       # once, to build the extension (needs Node.js/npm)
-make install-all    # backend + extension (EDITOR_CLI=code|cursor to choose)
+make install-all    # backend + extension (EDITOR_CLI=/path/to/code to choose)
 ```
 
 `make check-install` reports what is missing. `make uninstall-all` removes the extension, hooks, tracker,
@@ -189,8 +193,7 @@ and are gone. PenguPool sessions are full, long-lived agents.
 
 ### Does it run on Linux?
 
-Yes. VS Code (.deb, .rpm, Snap or Flatpak), Cursor and VSCodium all run on Linux, and the installer puts the
-extension into every one it finds. It offers to install what is missing (make, tmux, Node.js for pi) through
+Yes. VS Code runs on Linux (.deb, .rpm, Snap or Flatpak), and the installer puts the extension into it. It offers to install what is missing (make, tmux, Node.js for pi) through
 apt-get, dnf, pacman or Homebrew, asking first each time. If no editor is found, the install stops and says
 what to do, because the extension is required.
 

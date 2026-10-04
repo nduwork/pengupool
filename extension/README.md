@@ -12,7 +12,7 @@ with the extension installed in the remote extension host. The backend needs Pyt
 include the Python CLI, tmux, or either agent harness. Install those in the environment where the
 workspace and extension host run.
 
-**One command** installs the backend and this extension together, in every VS Code and Cursor found:
+**One command** installs the backend and this extension together, in VS Code:
 
 ```sh
 curl -fsSL https://pengupool.nduwork.com/install.sh | bash
@@ -145,10 +145,10 @@ make uninstall-all                   # remove from detected editor plus CLI/hook
 ```
 
 After updating, run **Developer: Reload Window**. Use `make ext-install` or
-`make ext-uninstall` to manage just the extension. At least one of **VS Code or Cursor** is required. Make detects VS Code first, then Cursor,
-including standard macOS app locations when the CLI is absent from PATH. `EDITOR_CLI` is optional;
-set it to `code`, `cursor`, or an absolute CLI path to choose explicitly. Use the same editor
-choice when uninstalling.
+`make ext-uninstall` to manage just the extension. **VS Code** is required; Make finds its `code` CLI on
+PATH or in the standard macOS app location. `EDITOR_CLI` is optional; set it to an absolute CLI path
+to choose explicitly, and use the same choice when uninstalling. PenguPool is built and tested with
+VS Code; editors built on it, such as Cursor, may work but are not tested.
 The map shows workflow chains and Claude's reported context percentage, updating them on each
 changed snapshot. When Claude provides no recent percentage or explicit context window size,
 PenguPool hides `%ctx` instead of estimating it from transcript tokens.
