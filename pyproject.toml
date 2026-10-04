@@ -3,7 +3,15 @@ name = "pengupool"
 version = "1.0.0"
 description = "Manage collaborating Claude Code and pi sessions: the shared backend for the VS Code/Cursor extension"
 requires-python = ">=3.11"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = []
+
+[project.urls]
+Homepage = "https://pengupool.nduwork.com"
+Repository = "https://github.com/nduwork/pengupool"
+Changelog = "https://github.com/nduwork/pengupool/blob/main/CHANGELOG.md"
 
 [project.scripts]
 pengupool = "pengupool.cli:main"
@@ -12,7 +20,7 @@ pengupool = "pengupool.cli:main"
 dev = ["pytest"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]  # skill-repo/template/tests belongs to the generated repo, not to this suite
+testpaths = ["tests"]  # skills/skill-repo/template/tests belongs to the generated repo, not to this suite
 
 [build-system]
 requires = ["hatchling"]

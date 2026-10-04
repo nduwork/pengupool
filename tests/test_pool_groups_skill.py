@@ -3,7 +3,7 @@ import pathlib
 import re
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-SKILL = ROOT / "pool-groups" / "SKILL.md"
+SKILL = ROOT / "skills" / "pool-groups" / "SKILL.md"
 
 
 def prose() -> str:
@@ -47,5 +47,5 @@ def test_it_asks_the_user_before_submitting_and_leaves_the_apply_to_them():
 
 def test_the_makefile_installs_and_removes_it():
     make = (ROOT / "Makefile").read_text()
-    assert "pool-groups/SKILL.md" in make
+    assert "skills/pool-groups/SKILL.md" in make
     assert "$(PI_AGENT)/skills/pool-groups" in make

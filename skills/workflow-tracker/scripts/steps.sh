@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# workflow-tracker CLI — record where a multi-step workflow is, so the status line can
-# render a chain like:  init ✓ → loop|check agent status ● → summary ○
+# workflow-tracker CLI — record where a multi-step workflow is, so the prompt hook and the map
+# can render a chain like:  init ✓ → loop|check agent status ● → summary ○
 #
 #   steps.sh set [--name CHAIN] <step>...  define the chain; first step active. --name/-n
 #                                     names the ticker (the [bracket] label); default: "default"
@@ -16,7 +16,7 @@
 #                                     (detail becomes "⇢ session: text" / "⇠ session: text")
 #   steps.sh render                   print the current chain (nothing if no chain)
 #   steps.sh clear                    remove the current chain (and its note)
-#   steps.sh use <chain>              switch to (or create) a named chain; the status line follows
+#   steps.sh use <chain>              switch to (or create) a named chain; the map follows
 #   steps.sh list [--all]             chains for this session: * marks the active one, with notes;
 #                                     --all adds other sessions' chains as session/<id>, and `shared`
 #                                     prefixes the repo's shared ones

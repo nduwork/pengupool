@@ -2,19 +2,18 @@
 import json
 import os
 import subprocess
+import sys
 import time
-from pathlib import Path
 
 from pengupool import model
 
 
 SID = "abcdef12-0000"
-STATUSLINE = Path(__file__).resolve().parents[1] / "workflow-tracker" / "scripts" / "statusline.sh"
 
 
 def feed_statusline(tmp_path, payload):
     env = {**os.environ, "PENGUPOOL_HOME": str(tmp_path)}
-    return subprocess.run(["bash", str(STATUSLINE), "--", "printf ccstatusline"],
+    return subprocess.run([sys.executable, "-m", "pengupool.statusline", "--", "printf ccstatusline"],
                           input=json.dumps(payload), text=True, capture_output=True, env=env, check=True)
 
 
@@ -24,7 +23,7 @@ def test_statusline_captures_claudes_used_percentage_and_preserves_renderer(tmp_
         "used_percentage": 12.3, "context_window_size": 1_000_000,
         "current_usage": {"input_tokens": 100_000},
     }})
-    assert result.stdout == "ccstatusline\n"
+    assert result.stdout == "ccstatusline"  # passed through unchanged
     assert model.load_context_pct(SID) == 12.3  # Claude's percentage wins over token arithmetic
 
 
