@@ -108,11 +108,14 @@ Worktrees are created next to the repo as `<repo>-wt-<name>` on a `pengupool/<na
 
 ### 6. Keep the tree intact
 
-- Compact with `c` in the Sessions view, or `/compact` in the session. **Don't use `/new` or `/clear`.**
-  Either starts a new session, and the new session isn't in the group.
+- Compact with `c` in the Sessions view, or `/compact` in the session.
+- For a fresh context in a Claude Code session, press `Shift+C` (or right-click → **Fresh Context**) or type
+  `/clear`: the session keeps its group and role. In pi, **don't use `/new`**: it starts a new session outside
+  the group.
 - After a Claude Code or pi update, press `Shift+R` (or right-click → **Restart & Resume**). The session
   stops and resumes in the same terminal with the new version, keeping its id, group and role.
 - To reorganise, drag rows in Sessions or cards on the Map. Dropping on empty space moves a session to the top level.
+- To add a session straight under another, right-click it → **New Child Session** or **Add Previous Session as Child**.
 - To reorganise by asking, say so in a session ("group these sessions") and the
   [pool-groups skill](../pool-groups/SKILL.md) proposes the moves, shows them to you and stores them only
   if you agree. Nothing moves until you approve it in the editor, because a session may propose a regroup
@@ -136,5 +139,5 @@ Worktrees are created next to the repo as `<repo>-wt-<name>` on a `pengupool/<na
 | `? Approval` | The session is waiting for you to approve a tool call. |
 | "routing skipped for `<name>`" | A prompt matched a child, but the session answered it itself. It gets sent back once to route it. |
 | A message was refused | The recipient isn't adjacent. The refusal names the next hop. |
-| A session dropped out of its group | It ran `/new` or `/clear`. Press `a` (Add Previous Session) to resume the old session; groups are kept by session id, so it returns to its place. |
+| A session dropped out of its group | It ran pi's `/new` (or `/clear` outside a PenguPool terminal). Press `a` (Add Previous Session) to resume the old session; groups are kept by session id, so it returns to its place. |
 | Roles, tree or hooks look out of date | Reload the editor window. Restart any Claude session that predates an install (`Shift+R`). |
