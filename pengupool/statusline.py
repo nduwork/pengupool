@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import json
 import math
-import subprocess
+import os
 import sys
+import tempfile
 import time
 
 from . import model
@@ -51,15 +52,20 @@ def capture(raw: bytes) -> None:
         pct = context_percentage(data)
         if pct is not None:
             model.write_json(model.PENGU / "context" / f"{sid}.json", {"pct": pct, "ts": time.time()})
-    except (OSError, ValueError, TypeError):
-        pass  # a status line must never disturb Claude
+    except Exception:  # noqa: BLE001 - a status line must never disturb Claude (even a RecursionError)
+        pass
 
 
 def main(argv: list[str]) -> int:
     raw = sys.stdin.buffer.read()
     capture(raw)
     if argv[:1] == ["--"] and len(argv) > 1:
-        return subprocess.run(argv[1], shell=True, input=raw).returncode
+        # become the user's command, fed the same stdin: no wrapper process is left to outlive a cancel
+        with tempfile.TemporaryFile() as f:
+            f.write(raw)
+            f.seek(0)
+            os.dup2(f.fileno(), 0)
+        os.execv("/bin/sh", ["sh", "-c", argv[1]])
     return 0
 
 

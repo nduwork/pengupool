@@ -1,5 +1,6 @@
 """PenguPool and workflow-tracker hooks coexist on shared Claude events."""
 import json
+import subprocess
 
 from pengupool import hook
 
@@ -64,7 +65,7 @@ def test_install_wraps_the_status_line_and_uninstall_restores_it(tmp_path):
     hook.install(settings)
     hook.install(settings)  # idempotent: never wraps its own wrapper
     line = json.loads(settings.read_text())['statusLine']
-    assert line == {**original, 'command': f"{hook.STATUS} -- 'npx -y ccstatusline@latest'"}
+    assert line == {**original, 'command': hook._status('npx -y ccstatusline@latest')}
     hook.uninstall(settings)
     assert json.loads(settings.read_text())['statusLine'] == original
 
@@ -72,7 +73,7 @@ def test_install_wraps_the_status_line_and_uninstall_restores_it(tmp_path):
 def test_install_adds_a_silent_status_line_when_none_is_set(tmp_path):
     settings = tmp_path / 'settings.json'
     hook.install(settings)
-    assert json.loads(settings.read_text())['statusLine'] == {'type': 'command', 'command': hook.STATUS}
+    assert json.loads(settings.read_text())['statusLine'] == {'type': 'command', 'command': hook._status('')}
     hook.uninstall(settings)
     assert 'statusLine' not in json.loads(settings.read_text())
 
@@ -82,8 +83,28 @@ def test_install_repins_a_stale_wrapper_and_leaves_an_outer_wrapper_alone(tmp_pa
     stale = "/old/venv/bin/python -m pengupool.statusline -- 'echo hi'"
     settings.write_text(json.dumps({'statusLine': {'type': 'command', 'command': stale}}))
     hook.install(settings)
-    assert json.loads(settings.read_text())['statusLine']['command'] == f"{hook.STATUS} -- 'echo hi'"
-    outer = f'bash "/stable/statusline.sh" -- {hook.shlex.quote(hook.STATUS)}'
+    assert json.loads(settings.read_text())['statusLine']['command'] == hook._status('echo hi')
+    outer = f'bash "/stable/statusline.sh" -- {hook.shlex.quote(hook._status(""))}'
     settings.write_text(json.dumps({'statusLine': {'type': 'command', 'command': outer}}))
     hook.uninstall(settings)
     assert json.loads(settings.read_text())['statusLine']['command'] == outer
+
+
+def test_the_wrapper_falls_back_to_the_users_line_when_its_interpreter_is_gone(tmp_path, monkeypatch):
+    for py, ok in ((hook.sys.executable, True), ('/gone/venv/bin/python', False)):
+        monkeypatch.setattr(hook.sys, 'executable', py)
+        out = subprocess.run(['sh', '-c', hook._status('cat; echo " | $HOME"')], input='{}',
+                                  capture_output=True, text=True, env={'HOME': '/h', 'PATH': '/usr/bin:/bin',
+                                                                       'PENGUPOOL_HOME': str(tmp_path)})
+        assert out.stdout == '{} | /h\n', (py, out.stderr)  # same line with or without PenguPool
+        assert hook._inner_status(hook._status('cat; echo " | $HOME"')) == 'cat; echo " | $HOME"'
+
+
+def test_install_leaves_an_empty_or_odd_status_line_alone(tmp_path):
+    settings = tmp_path / 'settings.json'
+    for odd in ({'type': 'command', 'command': '', 'padding': 2}, 'not-a-dict'):
+        settings.write_text(json.dumps({'statusLine': odd}))
+        hook.install(settings)
+        assert json.loads(settings.read_text())['statusLine'] == odd
+        hook.uninstall(settings)
+        assert json.loads(settings.read_text())['statusLine'] == odd

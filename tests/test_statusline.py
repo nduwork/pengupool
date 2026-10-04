@@ -29,3 +29,21 @@ def test_standalone_prints_nothing_and_skips_unusable_input(tmp_path, monkeypatc
     assert run(tmp_path, {"session_id": "../x", "context_window": {"used_percentage": 5}}).returncode == 0
     assert run(tmp_path, {"session_id": SID}).returncode == 0
     assert model.load_context_pct(SID) == 25.0
+
+
+def test_deeply_nested_input_still_runs_the_users_line(tmp_path):
+    out = subprocess.run([sys.executable, "-m", "pengupool.statusline", "--", "echo ok"], input="[" * 100_000,
+                         capture_output=True, text=True, env={"PENGUPOOL_HOME": str(tmp_path), "PATH": "/usr/bin:/bin"})
+    assert out.stdout == "ok\n"
+
+
+def test_the_wrapper_becomes_the_users_command(tmp_path):
+    """exec, not a child: a cancel that kills the wrapper's pid stops the user's command, nothing is orphaned."""
+    probe = subprocess.Popen([sys.executable, "-m", "pengupool.statusline", "--", "echo $$; sleep 30"],
+                             stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
+                             env={"PENGUPOOL_HOME": str(tmp_path), "PATH": "/usr/bin:/bin"})
+    probe.stdin.write("{}")
+    probe.stdin.close()
+    assert int(probe.stdout.readline()) == probe.pid  # the shell runs in the wrapper's own process
+    probe.terminate()
+    probe.wait(5)

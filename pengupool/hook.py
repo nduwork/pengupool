@@ -15,7 +15,6 @@ from .model import CLAUDE, write_json
 CMD = f"{shlex.quote(sys.executable)} -m pengupool.context 2>/dev/null || true"
 GUARD = f"{shlex.quote(sys.executable)} -m pengupool.routing || true"
 LEGACY = "pengupool/session_start.sh"
-STATUS = f"{shlex.quote(sys.executable)} -m pengupool.statusline"
 
 
 def _without_ours(entries: list) -> list:
@@ -33,11 +32,24 @@ def _without_ours(entries: list) -> list:
     return kept
 
 
+def _status(inner: str) -> str:
+    """The wrapper command around `inner` ('' = standalone). It runs `inner` itself when the pinned
+    interpreter is gone (a deleted venv), so the user's status line never goes blank over PenguPool."""
+    py = shlex.quote(sys.executable)
+    run = f"{py} -m pengupool.statusline"
+    return f"[ -x {py} ] && exec {run} -- {shlex.quote(inner)} || eval {shlex.quote(inner)}" if inner \
+        else f"[ -x {py} ] && exec {run} || true"
+
+
 def _inner_status(command: str) -> str | None:
     """The status line our wrapper runs ('' = standalone), or None when `command` is not ours."""
     try:
         argv = shlex.split(command)
     except ValueError:
+        return None
+    if argv[:2] == ["[", "-x"] and argv[3:6] == ["]", "&&", "exec"]:
+        argv = argv[6:]  # the guarded form _status writes
+    elif "&&" in argv:
         return None
     if argv[1:3] != ["-m", "pengupool.statusline"]:
         return None  # someone else's, including another wrapper around ours
@@ -46,15 +58,16 @@ def _inner_status(command: str) -> str | None:
 
 def _wrap_status(cfg: dict) -> None:
     line = cfg.get("statusLine")
-    if not isinstance(line, dict):
-        cfg["statusLine"] = {"type": "command", "command": STATUS}
+    if line is None:
+        cfg["statusLine"] = {"type": "command", "command": _status("")}
         return
-    if line.get("type", "command") != "command" or not isinstance(line.get("command"), str):
+    if not isinstance(line, dict) or line.get("type", "command") != "command" \
+            or not isinstance(line.get("command"), str) or not line["command"].strip():
         return  # not a command we can wrap: leave it be rather than lose it
     inner = _inner_status(line["command"])
     if inner is None:
         inner = line["command"]
-    line["command"] = f"{STATUS} -- {shlex.quote(inner)}" if inner else STATUS  # re-pin a stale interpreter
+    line["command"] = _status(inner)  # re-pins a stale interpreter
 
 
 def _unwrap_status(cfg: dict) -> None:
