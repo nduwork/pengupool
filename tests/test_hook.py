@@ -122,5 +122,7 @@ def test_setup_check_accepts_a_status_line_install_leaves_alone():
     assert hook.status_wrapped({'statusLine': {'type': 'command', 'command': hook._status('x')}})
     assert hook.status_wrapped({'statusLine': {'type': 'command', 'command': '', 'padding': 2}})
     assert hook.status_wrapped({'statusLine': {'type': 'command', 'command': "/py -m pengupool.statusline -- 'x'"}})
+    outer = f'bash "$HOME/.claude/step-status/bin/statusline.sh" -- {hook.shlex.quote(hook._status(""))}'
+    assert hook.status_wrapped({'statusLine': {'type': 'command', 'command': outer}})  # the tracker wraps ours
     assert not hook.status_wrapped({'statusLine': {'type': 'command', 'command': 'npx ccstatusline'}})
     assert not hook.status_wrapped({})

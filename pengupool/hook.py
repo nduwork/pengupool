@@ -64,9 +64,10 @@ def _wrappable(line) -> bool:
 
 
 def status_wrapped(cfg: dict) -> bool:
-    """The statusLine runs our wrapper, or is one install leaves alone on purpose."""
+    """The statusLine runs our wrapper (also inside another tool's wrapper, e.g. the workflow tracker's), or
+    is one install leaves alone on purpose."""
     line = cfg.get("statusLine")
-    return line is not None and (not _wrappable(line) or _inner_status(line["command"]) is not None)
+    return line is not None and (not _wrappable(line) or "pengupool.statusline" in line["command"])
 
 
 def _wrap_status(cfg: dict) -> None:
