@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/pengupool.webp" width="720" alt="PenguPool, the coach for your agent harnesses: a coach penguin with a cap, whistle and clipboard sends messages to agent penguins swimming in their own lanes (api, web, deploy)">
+  <img src="docs/assets/pengupool.webp" width="900" alt="PenguPool, the coach for your agent harnesses: a coach penguin with a cap, whistle and clipboard on the pool edge sends messages to four penguin agents working in their own lanes">
 </p>
 
 <p align="center">Run a team of Claude Code and pi agents from your editor.</p>
