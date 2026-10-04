@@ -11,6 +11,9 @@ pengupool = "pengupool.cli:main"
 [dependency-groups]
 dev = ["pytest"]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]  # skill-repo/template/tests belongs to the generated repo, not to this suite
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
