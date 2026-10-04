@@ -21,11 +21,11 @@ curl -fsSL https://pengupool.nduwork.com/install.sh | bash
 Or step by step:
 
 1. Install this extension from the Marketplace or a VSIX (each GitHub release attaches `pengupool.vsix`).
-2. Install and configure the backend from the [PenguPool repository](https://github.com/nduwork/pengutool):
+2. Install and configure the backend from the [PenguPool repository](https://github.com/nduwork/pengupool):
 
    ```sh
-   git clone https://github.com/nduwork/pengutool.git
-   cd pengutool
+   git clone https://github.com/nduwork/pengupool.git
+   cd pengupool
    make install
    make check-install
    ```
@@ -123,13 +123,13 @@ copy terminal text on selection, enable VS Code's `terminal.integrated.copyOnSel
 `Shift+R` (or right-clicking the session in the Sessions list → Restart & Resume) stops a session and resumes it in the same terminal, so a
 Claude Code or pi update takes effect without losing the session or its group.
 
-Grouping is session-based: use `c` or `/compact` to stay grouped. Do not use `/new` or `/clear`,
-because either command starts a new session and removes it from the current group.
+Grouping is session-based: use `c` or `/compact` to stay grouped. In Claude Code, `Shift+C` (Fresh Context)
+or `/clear` keeps the session's group and role. In pi, do not use `/new`: it starts a new session outside the group.
 Grouping also changes only when you ask for it. A session may *propose* a regrouping, which the
 [pool-groups skill](../pool-groups/SKILL.md) does when you ask it to, and the view then shows a
 notification and a **Review Regrouping** button. It lists the moves and applies them only if you approve.
 A session can never regroup itself.
-See the [guide](https://github.com/nduwork/pengutool/blob/main/docs/guide.md) for how to brief a new child and
+See the [guide](https://github.com/nduwork/pengupool/blob/main/docs/guide.md) for how to brief a new child and
 keep work routed.
 
 ## Install, update, and remove

@@ -19,7 +19,7 @@
       <a href="#guide">Guide</a>
       <a href="#how-it-works">How it works</a>
       <a href="#install">Install</a>
-      <a href="https://github.com/nduwork/pengutool">GitHub ↗</a>
+      <a href="https://github.com/nduwork/pengupool">GitHub ↗</a>
     </nav>
   </header>
 
@@ -88,7 +88,7 @@
     <section class="features wrap" id="plugins">
       <div class="section-intro"><span class="eyebrow">THE PLUGINS</span><h2>One backend, three ways in.</h2><p>Each harness gets its own wiring. They all read the same local model under <code>~/.pengupool/</code>, and one tag ships a matching backend and extension.</p></div>
       <div class="feature-grid plugin-grid">
-        <article><div class="feature-icon">▣</div><h3>VS Code &amp; Cursor extension</h3><ul><li>Sessions and pi Sessions trees; drag a row to regroup</li><li>Live map: lines light green when a parent messages a child and milky blue on the reply; ungrouped sessions stack in their own column</li><li>Top-down or left-right layout, compact or roomy spacing, and <b>⟳ Refresh</b></li><li>Message log coloured by edge: parent → child, child → parent, <code>@session</code></li><li>One tmux-backed terminal per harness that switches sessions in place</li><li><kbd>Shift</kbd>+<kbd>R</kbd> Restart &amp; Resume after a Claude Code or pi update</li></ul></article>
+        <article><div class="feature-icon">▣</div><h3>VS Code &amp; Cursor extension</h3><ul><li>Sessions and pi Sessions trees; drag a row or a map card to regroup, right-click a session to add a child</li><li>Live map: lines light green when a parent messages a child and milky blue on the reply; ungrouped sessions stack in their own column</li><li>Top-down or left-right layout, compact or roomy spacing, and <b>⟳ Refresh</b></li><li>Message log coloured by edge: parent → child, child → parent, <code>@session</code></li><li>One tmux-backed terminal per harness that switches sessions in place</li><li><kbd>Shift</kbd>+<kbd>R</kbd> Restart &amp; Resume after a Claude Code or pi update</li></ul></article>
         <article><div class="feature-icon">⚓</div><h3>Claude Code hooks</h3><ul><li>A <code>&lt;pengupool&gt;</code> block each prompt: tree, parent, children, role</li><li><code>SendMessage</code> guard: parent and direct children only</li><li><code>ROUTE CHECK</code> when a prompt matches a child's keywords: a hint, never a blocked turn</li><li><code>ROLE REQUIRED</code> until the session describes itself</li></ul></article>
         <article><div class="feature-icon">π</div><h3>pi extension</h3><ul><li>The same tree block, appended to pi's system prompt</li><li>pi-intercom <code>send</code>/<code>ask</code> checked against the routing rule</li><li>Workflow chain in pi's footer and prompt</li><li>Its own tmux server; never grouped with Claude Code sessions</li></ul></article>
       </div>
@@ -102,9 +102,9 @@
         <article><span class="step">3</span><h3>Talk to the top, let triage route</h3><p>Prompt the root session and read the <code>Triage:</code> line that starts each reply. To keep one task local, say so.</p><pre class="snip">Fix the login copy typo. Do it yourself.</pre></article>
         <article><span class="step">4</span><h3>Use @session for a one-off direct line</h3><p>Tagging a session lets the one you typed into message it directly until your next prompt, without regrouping anything.</p><pre class="snip">@payments will token refresh log users out of checkout?</pre></article>
         <article><span class="step">5</span><h3>Pick folder or worktree on purpose</h3><p>Use the same folder for reviewers, readers or a second pair of hands, even when a session already runs there. Use a worktree when two sessions edit the same files.</p></article>
-        <article><span class="step">6</span><h3>Keep the tree intact</h3><p>Compact with <kbd>c</kbd> or <code>/compact</code>. <code>/new</code> and <code>/clear</code> start a new session, which leaves the group. After a Claude Code or pi update, press <kbd>Shift</kbd>+<kbd>R</kbd> to restart in place.</p></article>
+        <article><span class="step">6</span><h3>Keep the tree intact</h3><p>Compact with <kbd>c</kbd> or <code>/compact</code>. For a fresh context, <kbd>Shift</kbd>+<kbd>C</kbd> or <code>/clear</code> keeps a Claude Code session's group and role; pi's <code>/new</code> still leaves the group. After a Claude Code or pi update, press <kbd>Shift</kbd>+<kbd>R</kbd> to restart in place.</p></article>
       </div>
-      <a class="more" href="https://github.com/nduwork/pengutool/blob/main/docs/guide.md">Read the full guide →</a>
+      <a class="more" href="https://github.com/nduwork/pengupool/blob/main/docs/guide.md">Read the full guide →</a>
     </section>
 
     <section class="features wrap" id="how-it-works">
@@ -117,7 +117,7 @@
     </section>
 
   </main>
-  <footer class="wrap"><span>© 2026 PenguPool · MIT licensed</span><div><a href="https://github.com/nduwork/pengutool">Source</a><a href="https://github.com/nduwork/pengutool/blob/main/.github/CONTRIBUTING.md">Contribute</a><a href="https://github.com/nduwork/pengutool/blob/main/.github/SECURITY.md">Security</a></div></footer>
+  <footer class="wrap"><span>© 2026 PenguPool · MIT licensed</span><div><a href="https://github.com/nduwork/pengupool">Source</a><a href="https://github.com/nduwork/pengupool/blob/main/.github/CONTRIBUTING.md">Contribute</a><a href="https://github.com/nduwork/pengupool/blob/main/.github/SECURITY.md">Security</a></div></footer>
   <script>
     document.getElementById('copy').addEventListener('click', function () {
       var b = this;
