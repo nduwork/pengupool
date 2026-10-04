@@ -183,6 +183,43 @@ test('map has a refresh button that redraws and asks for a fresh snapshot', () =
   assert.match(h.html(), /fresh = true/);                      // and re-lay out from that snapshot
 });
 
+test('dragging a map card onto another groups it there, and onto empty canvas lifts it to the top', () => {
+  const h = loadPanel('mapPanel');
+  h.exports.MapPanel.show({ extensionUri: 'extension' }, snapshot, 1);
+  const script = [...h.html().matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].at(-1)[1];
+  const posted = [], on = {};
+  const card = (id) => ({ inWrap: true, closest: (sel) => (sel === '.node' ? { dataset: { id } } : null) });
+  const canvas = { inWrap: true, closest: () => null };
+  const at = { 0: card('a'), 20: card('b'), 40: canvas, 99: null };  // x -> what the pointer is over
+  const dom = fakeDom();
+  const make = dom.getElementById;
+  const wrap = { ...make(), addEventListener: (type, fn) => { on[type] = fn; }, contains: (t) => !!t?.inWrap, setPointerCapture() {} };
+  dom.getElementById = (id) => (id === 'wrap' ? wrap : make());
+  dom.elementFromPoint = (x) => at[x];
+  dom.body.classList = { toggle() {} };
+  const sandbox = { acquireVsCodeApi: () => ({ postMessage: (m) => posted.push(m) }), document: dom,
+                    window: { addEventListener() {} }, setTimeout() {} };
+  vm.createContext(sandbox);
+  vm.runInContext(script, sandbox);
+  const drag = (from, to, moved = true) => {
+    on.pointerdown({ button: 0, clientX: from, clientY: 0, target: at[from] });
+    if (moved) { on.pointermove({ clientX: to, clientY: 0, pointerId: 1 }); }
+    on.pointerup({ clientX: to, clientY: 0 });
+  };
+  const groups = () => posted.filter((m) => m.type === 'group');
+  drag(0, 20);
+  assert.deepEqual({ ...groups().at(-1) }, { type: 'group', source: 'a', target: 'b' });
+  drag(0, 40);
+  assert.deepEqual({ ...groups().at(-1) }, { type: 'group', source: 'a', target: '' });
+  const before = groups().length;
+  drag(0, 0, false);   // a plain click: no move past the threshold, so it selects, not regroups
+  drag(0, 0);          // dropped back on itself
+  drag(0, 99);         // released outside the map
+  assert.equal(groups().length, before);
+  h.send({ type: 'group', source: 'a', target: 'b' });
+  assert.deepEqual([...h.ctl.at(-1)], ['group', 'a', 'b']);   // the host regroups through ctl, like the list
+});
+
 test('map refreshes workflow and context without a topology change', () => {
   const h = loadPanel('mapPanel');
   h.exports.MapPanel.show({ extensionUri: 'extension' }, snapshot, 1);
