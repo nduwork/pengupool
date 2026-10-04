@@ -121,10 +121,9 @@
   }
   function renderTerm() {
     $('.term-name').textContent = '⌨ ' + S.tab;
-    // Claude Code's own status line sits under the prompt: model | context | branch | repo, then the chain
+    // Claude Code's own status line sits under the prompt: model | context | branch | repo
     const me = S.sessions.find((s) => s.name === S.tab);
-    const status = me ? `<div class="sl">Opus | <span class="${ctxLevel(me.ctx)}">${me.ctx}%</span> | main | ${esc(me.repo)}</div>`
-      + (S.chain ? `<div class="sl">${esc(S.chain)}</div>` : '') : '';
+    const status = me ? `<div class="sl">Opus | <span class="${ctxLevel(me.ctx)}">${me.ctx}%</span> | main | ${esc(me.repo)}</div>` : '';
     $('.term').innerHTML = S.term.slice(-5).map((l) => `<div class="${l.cls || ''}">${l.html}</div>`).join('')
       + (S.tab === 'zsh' ? '' : '<div class="box"><span class="you">&gt;</span> <span class="cursor"></span></div>' + status);
   }

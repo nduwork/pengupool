@@ -19,6 +19,7 @@ All notable changes to this project are documented here. The format follows
 - A 1.0 README with the banner on top, a hero GIF and re-recorded tutorial GIFs; the landing page's tutorial draws trees of any depth.
 - The repository is renamed nduwork/pengupool (#77).
 - The README answers why PenguPool instead of subagents, Linux support, native messaging over an MCP gateway, and why not Codex yet.
+- The workflow tracker no longer wires its own status line: the chain shows in the conversation and on the map, and PenguPool's status line wrapper captures the context %. `make install` takes down the status line an older tracker wired and keeps the line it wrapped. The bundled skills now live under `skills/`.
 
 ### Fixed
 - The installer is ready for Linux: Node.js installs under each package manager's own name, apt-get updates its lists first, a missing python3 or make is offered, and VS Code Insiders, VSCodium and Flatpak VS Code are found.

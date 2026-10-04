@@ -76,12 +76,3 @@ def test_the_pengupool_session_id_keys_a_harness_that_sends_none(tmp_path):
     assert '[mine] my-step ●' in out and 'shared-work' not in out
     env.pop('PENGUPOOL_SESSION')
     assert '[shared-work] shared-step ●' in _hook('hook_prompt.sh', {'cwd': str(tmp_path)}, env=env).stdout
-
-
-def test_statusline_shows_the_sessions_chain(tmp_path):
-    _tracked(tmp_path, chain='shared-work', step='shared-step')
-    _tracked(tmp_path, session='sess-1', chain='mine', step='my-step')
-    payload = {'workspace': {'current_dir': str(tmp_path)}, 'session_id': 'sess-1'}
-    assert '[mine] my-step ●' in _hook('statusline.sh', payload).stdout
-    payload.pop('session_id')
-    assert '[shared-work] shared-step ●' in _hook('statusline.sh', payload).stdout

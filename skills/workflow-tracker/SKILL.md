@@ -6,11 +6,10 @@ description: |
   at every phase transition: `init ✓ → loop|check agent status ● → summary ○`. Use whenever
   you start such a workflow, when the user asks for a status/progress indicator, or types
   "/workflow-tracker". Claude records transitions with scripts/steps.sh and quotes the echoed
-  chain in its reply; showing it in the status line as well is optional.
+  chain in its reply; PenguPool's map shows it under the session's card.
 triggers:
   - workflow-tracker
   - step-status
-  - status line progress
   - show pipeline status
   - step chain
   - workflow progress indicator
@@ -54,7 +53,7 @@ lives in `./.step-status/` (self-ignoring; each session gets a tracker of its ow
 3. **At the end**: post the finished chain as the last progress line. There's no need to clear it.
    A chain is finished when no step is active: all `✓`, stopped at a `✗`, or the last step done past a
    skipped `○`. A minute after its last update (`STEP_STATUS_DONE_TTL`, in seconds), it stops rendering
-   in the status line, the map and the next prompt. `start`/`done`/`fail`/`msg` then refuse it, and a
+   on the map and in the next prompt. `start`/`done`/`fail`/`msg` then refuse it, and a
    bare `set` starts `default` instead of overwriting it, so the next workflow always runs `set --name`
    for its own chain. Its files stay, and `list` shows it as history (`use` marks it `(finished)`).
    A chain with an active step never expires, and neither does a loop (a chain you have `cycle`d):
@@ -70,7 +69,7 @@ sees and moves only its own workflow. The harness sets that key for the session'
 extension exports `STEP_STATUS_SESSION` (pi spawns the session's tools from its own process, so they
 inherit it) and passes the session id to the prompt hook; Claude Code's `SessionStart` hook appends
 `export STEP_STATUS_SESSION=<id>` to `$CLAUDE_ENV_FILE`, which Claude Code applies to the session's Bash
-tool. So the prompt line, the status line and the agent's own `steps.sh` calls all agree on which
+tool. So the prompt line, the map and the agent's own `steps.sh` calls all agree on which
 workflow is this session's. PenguPool's own extension exports the same session id, so a session
 whose pi extension predates this still keys correctly. Without a valid key — a script, cron, a human at a shell, a harness that
 sends no session id — the shared `.step-status/` is used, exactly as it always was, and that is where
@@ -204,31 +203,18 @@ tracking instructions and keys the session (it never erases a chain). A `UserPro
 injects this session's chain (or a nudge to `set` one) into every turn, so the ticker does not depend
 on Claude remembering this skill exists.
 
-## Optional: mirror the chain in the status line (`/workflow-tracker setup`)
+## Setup
 
-Under pi, `make install-tracker` installs a pi extension that does the hooks' job (the chain or
-nudge is appended to every prompt); the rest of this section is Claude Code only.
-
-Not needed for the conversation ticker. If the user explicitly wants the chain in the
-status bar too, plugins cannot set `statusLine`, so run:
-
-```bash
-bash <this skill's dir>/scripts/wire_statusline.sh          # plugin installs skip the hook automatically (already shipped)
-bash <this skill's dir>/scripts/wire_statusline.sh --unwire # undo
-```
-
-It auto-detects an existing status line command and wraps it, or installs standalone. It
-refuses to touch a settings.json it cannot parse, and saves the original `statusLine` so
-`--unwire` restores it exactly. Plugin installs live in a versioned cache dir, so the scripts
-are copied to `~/.claude/step-status/bin` and settings point there: re-run setup after a
-plugin update. Tell the user to restart Claude Code afterwards. `make install-tracker` runs this
-for you.
+`make install-tracker` copies the scripts to `~/.claude/step-status/bin` and, for Claude Code, runs
+`wire_hooks.sh` from there to register the two hooks in `~/.claude/settings.json`
+(`wire_hooks.sh --unwire` removes them). Under pi it installs a pi extension that does the hooks' job:
+the chain or nudge is appended to every prompt. Tell the user to restart Claude Code afterwards.
 
 ## Checks
 
 ```bash
 bash skills/workflow-tracker/scripts/steps.sh --selfcheck
-bash skills/workflow-tracker/scripts/wire_statusline.sh --selfcheck   # settings.json wrap/unwire round trip
+bash skills/workflow-tracker/scripts/wire_hooks.sh --selfcheck   # settings.json wire/unwire round trip
 for s in skills/workflow-tracker/scripts/*.sh; do bash -n "$s"; done
 ```
 
@@ -242,7 +228,3 @@ for s in skills/workflow-tracker/scripts/*.sh; do bash -n "$s"; done
 - Step names must not be empty or contain tabs/newlines, and must be unique in a chain.
 - Tool output is not reliably shown to the user: the progress line only exists if you
   write it in your reply. Every mutating command echoes the chain so you can quote it.
-- If the optional status-line mirror is wired, it repaints on Claude Code's cadence, so a
-  chain cleared in the same turn it was set never shows there.
-- `statusline.sh` never fails and prints nothing when no chain is set, so wrapping is
-  invisible until a workflow calls `set`.

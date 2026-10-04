@@ -7,7 +7,9 @@ CLAUDE_SKILLS ?= $(HOME)/.claude/skills
 TRACKER_CC := $(if $(filter pi,$(HARNESS)),,1)
 TRACKER_PI := $(if $(filter pi both,$(HARNESS)),1,$(if $(filter auto,$(HARNESS)),$(shell command -v pi >/dev/null && echo 1)))
 WT := skills/workflow-tracker/scripts
-SCRIPTS := steps.sh statusline.sh capture_context.py hook_session_start.sh hook_prompt.sh wire_statusline.sh
+SCRIPTS := steps.sh hook_session_start.sh hook_prompt.sh wire_hooks.sh
+# Scripts older versions installed into $(BIN); install-tracker removes them once settings stop using them.
+OLD_SCRIPTS := statusline.sh capture_context.py wire_statusline.sh
 WIRE_ENV := CLAUDE_SETTINGS="$(CLAUDE_SETTINGS)" STEP_STATUS_HOME="$(STEP_STATUS_HOME)"
 
 EXT := extension
@@ -24,8 +26,8 @@ VSIX ?= $(or $(TMPDIR),/tmp)/pengupool-local.vsix
 
 install:
 	$(UV) tool install --force $(UV_INSTALL_FLAGS) .
-	CLAUDE_SETTINGS="$(CLAUDE_SETTINGS)" "$(PENGUPOOL)" setup $(HARNESS)
 	$(MAKE) install-tracker
+	CLAUDE_SETTINGS="$(CLAUDE_SETTINGS)" "$(PENGUPOOL)" setup $(HARNESS)
 	$(MAKE) install-pool-groups
 	$(MAKE) install-skill-repo
 
@@ -47,15 +49,16 @@ install-hooks:
 uninstall-hooks:
 	CLAUDE_SETTINGS="$(CLAUDE_SETTINGS)" "$(PENGUPOOL)" uninstall-hook
 
-# Copy the tracker scripts to a stable dir (the plugin cache dir changes on every update) and wire
-# GLOBAL settings from there, so settings.json points at paths that survive updates. Running
-# wire_statusline.sh FROM $(BIN) makes it register statusLine + SessionStart + UserPromptSubmit all
-# pointing at $(BIN).
+# Copy the tracker scripts to a stable dir and wire GLOBAL settings from there, so settings.json points
+# at paths that survive a checkout moving. Running wire_hooks.sh FROM $(BIN) registers SessionStart +
+# UserPromptSubmit pointing at $(BIN), and takes down the status line older versions wired. `install`
+# runs this before `pengupool setup`, so PenguPool wraps whatever status line is left.
 install-tracker:
 	mkdir -p "$(BIN)"
 	for f in $(SCRIPTS); do cp "$(WT)/$$f" "$(BIN)/$$f"; done
 	chmod +x "$(BIN)"/*.sh
-	$(if $(TRACKER_CC),$(WIRE_ENV) bash "$(BIN)/wire_statusline.sh")
+	$(if $(TRACKER_CC),$(WIRE_ENV) bash "$(BIN)/wire_hooks.sh")
+	for f in $(OLD_SCRIPTS); do rm -f "$(BIN)/$$f"; done
 	$(if $(TRACKER_PI),mkdir -p "$(PI_AGENT)/extensions" "$(PI_AGENT)/skills/workflow-tracker")
 	$(if $(TRACKER_PI),sed 's|__STEP_STATUS_BIN__|$(BIN)|' skills/workflow-tracker/pi/workflow-tracker.ts > "$(PI_AGENT)/extensions/workflow-tracker.ts")
 	$(if $(TRACKER_PI),cp skills/workflow-tracker/SKILL.md "$(PI_AGENT)/skills/workflow-tracker/SKILL.md")
@@ -90,8 +93,9 @@ uninstall-skill-repo:
 
 # Unwires both harnesses whatever HARNESS is: removing only our own files and settings entries is safe.
 uninstall-tracker:
-	@if [ -f "$(BIN)/wire_statusline.sh" ]; then $(WIRE_ENV) bash "$(BIN)/wire_statusline.sh" --unwire; fi
-	for f in $(SCRIPTS); do rm -f "$(BIN)/$$f"; done
+	@if [ -f "$(BIN)/wire_hooks.sh" ]; then $(WIRE_ENV) bash "$(BIN)/wire_hooks.sh" --unwire; \
+	elif [ -f "$(BIN)/wire_statusline.sh" ]; then $(WIRE_ENV) bash "$(BIN)/wire_statusline.sh" --unwire; fi
+	for f in $(SCRIPTS) $(OLD_SCRIPTS); do rm -f "$(BIN)/$$f"; done
 	rm -f "$(PI_AGENT)/extensions/workflow-tracker.ts"
 	rm -rf "$(PI_AGENT)/skills/workflow-tracker"
 
@@ -103,7 +107,7 @@ uninstall:
 	$(UV) tool uninstall pengupool
 
 selfcheck:
-	bash "$(WT)/wire_statusline.sh" --selfcheck
+	bash "$(WT)/wire_hooks.sh" --selfcheck
 	bash "$(WT)/steps.sh" --selfcheck
 
 # Both suites. A fresh clone or git worktree has no extension/node_modules, so run make ext-deps once.
