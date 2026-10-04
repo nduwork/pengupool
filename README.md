@@ -29,8 +29,8 @@ It needs Python 3.11+ and Make, installs [uv](https://docs.astral.sh/uv/) if mis
 From a checkout, Make covers the same steps:
 
 ```sh
-git clone https://github.com/nduwork/pengutool.git
-cd pengutool
+git clone https://github.com/nduwork/pengupool.git
+cd pengupool
 make install        # CLI, harness wiring, tracker (HARNESS=auto|cc|pi|both)
 make ext-deps       # once, to build the extension (needs Node.js/npm)
 make install-all    # backend + extension (EDITOR_CLI=code|cursor to choose)

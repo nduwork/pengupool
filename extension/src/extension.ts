@@ -48,7 +48,7 @@ export function activate(context: vscode.ExtensionContext): void {
       'Setup guide', 'Open setting',
     ).then((choice) => {
       if (choice === 'Setup guide') {
-        void vscode.env.openExternal(vscode.Uri.parse('https://github.com/nduwork/pengutool/blob/main/extension/README.md#setup'));
+        void vscode.env.openExternal(vscode.Uri.parse('https://github.com/nduwork/pengupool/blob/main/extension/README.md#setup'));
       } else if (choice === 'Open setting') {
         void vscode.commands.executeCommand('workbench.action.openSettings', 'pengupool.command');
       }

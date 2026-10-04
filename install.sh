@@ -8,7 +8,7 @@
 # PENGUPOOL_REF=vX.Y.Z pins a release (default: the latest). HARNESS=cc|pi|both overrides detection.
 # Needs uv, make and python3; tmux and the agent CLIs are offered by `pengupool setup` (y/N each).
 set -euo pipefail
-REPO=nduwork/pengutool
+REPO=nduwork/pengupool
 need() { command -v "$1" >/dev/null || { echo "PenguPool needs $1: $2" >&2; exit 1; }; }
 gh_ok() { command -v gh >/dev/null && gh auth status >/dev/null 2>&1; }  # installed AND signed in
 
