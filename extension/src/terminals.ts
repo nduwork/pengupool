@@ -33,6 +33,8 @@ export class TerminalManager implements vscode.Disposable {
     ['pi', { name: 'PenguPool · pi', viewId: newViewId() }],
   ]);
   private roots: SessionNode[] = [];
+  /** Sessions launched as a child: grouped under `parent` by `ctl group` once a snapshot shows them live. */
+  private placements: { match: (node: SessionNode) => boolean; parent: string }[] = [];
   private readonly disp: vscode.Disposable[] = [];
   private readonly legacyNames = new Set<string>();
   private legacySwept = false;  // the one post-activation sweep for restored old-build terminals
@@ -100,6 +102,15 @@ export class TerminalManager implements vscode.Disposable {
       for (const terminal of vscode.window.terminals) { this.removeLegacyTerminal(terminal, names); }
       this.legacyNames.clear();
     }
+    this.placements = this.placements.filter(({ match, parent }) => {
+      const hit = flatten(roots).find(match);
+      if (hit) {
+        void runCtl(['group', hit.id, parent]).then((r) => {
+          if (r.code !== 0) { vscode.window.showErrorMessage(`PenguPool: ${r.stderr || 'could not group the new session'}`); }
+        });
+      }
+      return !hit;
+    });
     for (const [harness, slot] of this.slots) {
       if (!slot.pending) { continue; }
       // pane ids are per tmux server: a cc %3 and a pi %3 are different panes
@@ -214,19 +225,35 @@ export class TerminalManager implements vscode.Disposable {
     return node ? this.switchTo(node, false) : false;
   }
 
-  async newSession(cwd: string, name: string, harness: Harness = 'cc', createWorktree = true): Promise<void> {
+  async newSession(cwd: string, name: string, harness: Harness = 'cc', createWorktree = true, parent?: string): Promise<void> {
     const location = createWorktree ? 'worktree' : 'folder';
     const result = await runCtl(['--json', 'new', cwd, name, this.slot(harness).viewId, harness, location]);
-    if (result.code === 0 && result.stdout) { this.open(result.stdout); }
-    else { vscode.window.showErrorMessage(`PenguPool: ${result.stderr || 'could not start session'}`); }
+    if (result.code === 0 && result.stdout) {
+      // A new session's id is unknown until it starts: recognise it by its pane, as the pending view does.
+      if (parent) { this.placeUnder(parent, result.stdout, harness); }
+      this.open(result.stdout);
+    } else { vscode.window.showErrorMessage(`PenguPool: ${result.stderr || 'could not start session'}`); }
   }
 
-  async resume(cwd: string, name: string, sessionId: string, harness: Harness = 'cc'): Promise<void> {
+  async resume(cwd: string, name: string, sessionId: string, harness: Harness = 'cc', parent?: string): Promise<void> {
+    const placement = parent ? { match: (node: SessionNode) => node.id === sessionId, parent } : undefined;
+    if (placement) { this.placements.push(placement); }
     const live = flatten(this.roots).find((node) => node.id === sessionId);
-    if (live) { await this.switchTo(live); return; }
+    if (live) { this.reconcile(this.roots); await this.switchTo(live); return; }
     const result = await runCtl(['--json', 'resume', cwd, name, sessionId, this.slot(harness).viewId]);
     if (result.code === 0 && result.stdout) { this.open(result.stdout, sessionId); }
-    else { vscode.window.showErrorMessage(`PenguPool: ${result.stderr || 'could not resume session'}`); }
+    else {
+      this.placements = this.placements.filter((p) => p !== placement);
+      vscode.window.showErrorMessage(`PenguPool: ${result.stderr || 'could not resume session'}`);
+    }
+  }
+
+  private placeUnder(parent: string, stdout: string, harness: Harness): void {
+    try {
+      const { pane, cwd } = JSON.parse(stdout);
+      this.placements.push({ parent, match: (node) =>
+        (node.harness ?? 'cc') === harness && node.tmux_pane === pane && node.cwd === cwd });
+    } catch { /* open() reports invalid launch metadata */ }
   }
 
   async adopt(node: SessionNode): Promise<boolean> {

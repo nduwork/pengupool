@@ -45,8 +45,8 @@ export const MENU_JS = `
     add: 'M8 3v10M3 8h10',
     history: 'M2.5 8a5.5 5.5 0 1 0 1.6-3.9M2.5 2.5v2.6h2.6M8 5v3l2 1.5',
     'run-all': 'M2.5 3.5 7 8l-4.5 4.5zM8 3.5 12.5 8 8 12.5z',
-    open: 'M9 2.5h4.5v11H9M2 8h8M7 5l3 3-3 3',
     folder: 'M1.5 4h4.5l1.5 1.5h7v7.5h-13z',
+    copy: 'M5.5 5.5h8v8h-8zM2.5 10.5v-8h8',
     tree: 'M3.5 2.5v9h3M3.5 6h3M9 4.5h5M9 11.5h5',
     edit: 'M10.5 2.5l3 3-8 8h-3v-3z',
     note: 'M3 2h10v12H3zM5.5 5h5M5.5 7.5h5M5.5 10h3',
@@ -73,21 +73,28 @@ export const MENU_JS = `
   function showMenu(event, id, revealLabel){
     event.preventDefault(); event.stopPropagation(); menuId=id||'';
     hideMenu();
-    addMenuItem('New Session', 'pengupool.new', 'add', 'N');
-    addMenuItem('Add Previous Session…', 'pengupool.add', 'history', 'A');
+    // On a session, adding makes a child of it; on empty space, a top-level session (the N and A keys).
+    // A click already opens a session, and dragging regroups, so the menu leads with what neither does.
+    if(id){
+      addMenuItem('New Child Session…', 'pengupool.newChild', 'add');
+      addMenuItem('Add Previous Session as Child…', 'pengupool.addChild', 'history');
+    } else {
+      addMenuItem('New Session', 'pengupool.new', 'add', 'N');
+      addMenuItem('Add Previous Session…', 'pengupool.add', 'history', 'A');
+    }
     addMenuItem('Resume Previous Sessions…', 'pengupool.resumePrevious', 'run-all');
     if(id){
       menu.appendChild(document.createElement('hr'));
-      addMenuItem('Open / Focus Session', 'pengupool.switch', 'open', '⏎');
       addMenuItem(revealLabel, 'pengupool.reveal', 'folder');
-      menu.appendChild(document.createElement('hr'));
-      addMenuItem('Group Under…', 'pengupool.group', 'tree', 'G');
-      addMenuItem('Rename', 'pengupool.rename', 'edit', 'R');
-      addMenuItem('Describe Role…', 'pengupool.describe', 'note', 'D');
+      addMenuItem('Copy Path', 'pengupool.copyPath', 'copy');
       menu.appendChild(document.createElement('hr'));
       addMenuItem('Compact (/compact)', 'pengupool.compact', 'fold', 'C');
       addMenuItem('Fresh Context (/clear)', 'pengupool.clear', 'clear', '⇧C');
       addMenuItem('Restart & Resume', 'pengupool.restart', 'restart', '⇧R');
+      menu.appendChild(document.createElement('hr'));
+      addMenuItem('Group Under…', 'pengupool.group', 'tree', 'G');
+      addMenuItem('Rename', 'pengupool.rename', 'edit', 'R');
+      addMenuItem('Describe Role…', 'pengupool.describe', 'note', 'D');
       menu.appendChild(document.createElement('hr'));
       addMenuItem('Close', 'pengupool.close', 'close', 'X', true);
     }
@@ -115,10 +122,11 @@ export const MENU_JS = `
 /** Pool-wide menu items: they need no session, so a right-click on empty space offers them alone. */
 const GLOBAL_COMMANDS = new Set(['pengupool.new', 'pengupool.add', 'pengupool.resumePrevious']);
 
-/** Session menu items. `pengupool.switch` takes the id; the rest take the node, as they do everywhere. */
+/** Session menu items: each takes the node, as it does everywhere. */
 const SESSION_COMMANDS = new Set([
-  'pengupool.switch', 'pengupool.reveal', 'pengupool.group', 'pengupool.rename', 'pengupool.describe',
-  'pengupool.compact', 'pengupool.clear', 'pengupool.restart', 'pengupool.close',
+  'pengupool.newChild', 'pengupool.addChild', 'pengupool.reveal', 'pengupool.copyPath', 'pengupool.group',
+  'pengupool.rename', 'pengupool.describe', 'pengupool.compact', 'pengupool.clear', 'pengupool.restart',
+  'pengupool.close',
 ]);
 
 /** Run a command a webview's context menu asked for, and report whether it was allowed. The menu lives in
@@ -138,6 +146,6 @@ export async function runMenuCommand(
   const node = find(id);
   if (!node) { return false; }
   select?.(node.id);
-  await vscode.commands.executeCommand(command, command === 'pengupool.switch' ? node.id : node);
+  await vscode.commands.executeCommand(command, node);
   return true;
 }

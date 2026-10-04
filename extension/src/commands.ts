@@ -87,7 +87,9 @@ export function registerCommands(context: vscode.ExtensionContext, d: Deps): voi
     if (pick) { void vscode.commands.executeCommand('pengupool.switch', pick.node.id); }
   });
 
-  reg('pengupool.new', async () => {
+  // From a session's right-click menu the new session becomes its child, so it runs the parent's harness:
+  // harnesses never share a tree.
+  const newSession = async (parent?: SessionNode) => {
     const dir = await vscode.window.showOpenDialog({
       canSelectFolders: true, canSelectFiles: false, canSelectMany: false,
       defaultUri: defaultDir(), openLabel: 'New session here',
@@ -96,19 +98,21 @@ export function registerCommands(context: vscode.ExtensionContext, d: Deps): voi
     const name = await vscode.window.showInputBox({ prompt: 'Session name', value: dir[0].path.split('/').pop() });
     if (!name) { return; }
     const placement = await vscode.window.showQuickPick([
-      { label: 'Create a worktree', description: 'isolated branch for this session', value: 'worktree' },
       { label: 'Use selected folder', description: 'no new worktree · fine if a session already runs here', value: 'folder' },
+      { label: 'Create a worktree', description: 'isolated branch for this session', value: 'worktree' },
     ], { placeHolder: 'Choose where to start the session' });
     if (!placement) { return; }
-    const harness = await vscode.window.showQuickPick(
+    const harness = parent ? parent.harness ?? 'cc' : (await vscode.window.showQuickPick(
       (['cc', 'pi'] as Harness[]).map((value) => ({ label: HARNESS_LABEL[value], value })),
       { placeHolder: 'Choose the agent harness' },
-    );
+    ))?.value;
     if (!harness) { return; }
-    await d.terminals.newSession(dir[0].fsPath, name, harness.value, placement.value === 'worktree');
-  });
+    await d.terminals.newSession(dir[0].fsPath, name, harness, placement.value === 'worktree', parent?.id);
+  };
+  reg('pengupool.new', () => newSession());
+  reg('pengupool.newChild', (node?: SessionNode) => { const n = sel(node); return n && newSession(n); });
 
-  reg('pengupool.add', async () => {
+  const addPrevious = async (parent?: SessionNode) => {
     const dir = await vscode.window.showOpenDialog({
       canSelectFolders: true, canSelectFiles: false, canSelectMany: false,
       defaultUri: lastAddDirectory(context, defaultDir()), openLabel: 'Add previous from here',
@@ -119,6 +123,7 @@ export function registerCommands(context: vscode.ExtensionContext, d: Deps): voi
     if (r.code !== 0) { vscode.window.showErrorMessage(`PenguPool: ${r.stderr || 'no past sessions'}`); return; }
     let past: [string, string, Harness?][] = [];
     try { past = JSON.parse(r.stdout || '[]'); } catch { /* empty */ }
+    if (parent) { past = past.filter(([, , harness = 'cc']) => harness === (parent.harness ?? 'cc')); }
     if (!past.length) { vscode.window.showInformationMessage('PenguPool: no past sessions in that folder.'); return; }
     const pick = await vscode.window.showQuickPick(
       past.map(([id, title, harness = 'cc']) => ({
@@ -129,7 +134,14 @@ export function registerCommands(context: vscode.ExtensionContext, d: Deps): voi
     if (!pick) { return; }
     const name = await vscode.window.showInputBox({ prompt: 'Session name', value: pick.label.slice(0, 40) });
     if (!name) { return; }
-    await d.terminals.resume(dir[0].fsPath, name, pick.id, pick.harness);
+    await d.terminals.resume(dir[0].fsPath, name, pick.id, pick.harness, parent?.id);
+  };
+  reg('pengupool.add', () => addPrevious());
+  reg('pengupool.addChild', (node?: SessionNode) => { const n = sel(node); return n && addPrevious(n); });
+
+  reg('pengupool.copyPath', async (node?: SessionNode) => {
+    const n = sel(node);
+    if (n?.cwd) { await vscode.env.clipboard.writeText(n.cwd); }
   });
 
   reg('pengupool.resumePrevious', async () => {

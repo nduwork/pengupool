@@ -187,6 +187,30 @@ test('a new Claude terminal never binds to a pi session with the same pane id', 
   assert.equal(h.terminals.length, 1);
 });
 
+test('a session started from a parent\'s menu is grouped under it once it shows up, and only once', async () => {
+  const h = harness();
+  await h.manager.newSession('/repo', 'worker', 'cc', true, 'lead');
+  assert.ok(!h.requests.some((args) => args[0] === 'group'), 'no id to group until the session starts');
+  const piTwin = { ...node, id: 'pid', harness: 'pi' };   // same pane id on the pi server: not ours
+  h.manager.reconcile([piTwin]);
+  assert.ok(!h.requests.some((args) => args[0] === 'group'));
+  h.manager.reconcile([piTwin, node]);
+  h.manager.reconcile([piTwin, node]);
+  assert.equal(JSON.stringify(h.requests.filter((args) => args[0] === 'group')), '[["group","sid","lead"]]');
+});
+
+test('a previous session added from a parent\'s menu is grouped under it, live or resumed', async () => {
+  const h = harness();
+  await h.manager.resume('/repo', 'worker', 'sid', 'cc', 'lead');
+  h.manager.reconcile([node]);
+  const live = harness();
+  live.manager.reconcile([node]);
+  await live.manager.resume('/repo', 'worker', 'sid', 'cc', 'lead');   // already running: group right away
+  for (const r of [h.requests, live.requests]) {
+    assert.equal(JSON.stringify(r.filter((args) => args[0] === 'group')), '[["group","sid","lead"]]');
+  }
+});
+
 test('failed close keeps the existing terminal', async () => {
   const h = harness();
   await h.manager.switchTo(node);

@@ -111,6 +111,18 @@
         "title": "PenguPool: Fresh Context (/clear)"
       },
       {
+        "command": "pengupool.newChild",
+        "title": "PenguPool: New Child Session…"
+      },
+      {
+        "command": "pengupool.addChild",
+        "title": "PenguPool: Add Previous Session as Child…"
+      },
+      {
+        "command": "pengupool.copyPath",
+        "title": "PenguPool: Copy Path"
+      },
+      {
         "command": "pengupool.groupPlan",
         "title": "PenguPool: Apply Regrouping",
         "icon": "$(list-unordered)"
