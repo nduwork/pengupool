@@ -262,9 +262,9 @@ export class TerminalManager implements vscode.Disposable {
     if (slot.currentId === node.id) { slot.currentId = undefined; }
   }
 
-  /** /compact or /rename a session: ctl clears the agent's input line and types into the session's own
+  /** /compact, /clear or /rename a session: ctl clears the agent's input line and types into the session's own
    * pane, so a half-typed prompt is never submitted with it and a concurrent switch can't redirect it. */
-  async slash(node: SessionNode, ...args: ['compact'] | ['rename', string]): Promise<boolean> {
+  async slash(node: SessionNode, ...args: ['compact'] | ['clear'] | ['rename', string]): Promise<boolean> {
     if (!(await this.switchTo(node))) { return false; }
     const result = await runCtl(['slash', node.id, ...args]);
     if (result.code !== 0) {

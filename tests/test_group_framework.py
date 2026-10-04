@@ -335,3 +335,36 @@ def test_a_regroup_is_announced_once_and_refreshes_the_cached_tree(home, monkeyp
     assert not context._changed_since(__import__("time").time() + 60)
     model.save_groups({B: A})
     assert context._changed_since(0)
+
+
+def test_clear_hands_the_new_id_its_place_in_the_tree_and_its_role(home, monkeypatch, capsys):
+    import io
+    import sys
+    monkeypatch.setattr(model, "PENGU", home)
+    monkeypatch.setattr(model, "GROUPS", home / "groups.json")
+    monkeypatch.setattr(model, "AGENT_STATE", home / "agent_state")
+    monkeypatch.setattr(context, "load_tree", lambda: {})
+    monkeypatch.setenv("TMUX_PANE", "%5")
+    old, new = B, D
+    model.save_groups({old: A, C: old})               # old sits under A and leads C
+    profiles.describe(old, "Researches libraries", "Reports findings", editor=old, keywords_text="research")
+    (home / "registry.jsonl").write_text("\n".join(json.dumps(x) for x in [
+        {"sessionId": old, "tmuxPane": "%5"},
+        {"sessionId": E, "tmuxPane": "%5", "harness": "pi"},   # pi's own server: its %5 is another pane
+    ]) + "\n")
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(
+        {"session_id": new, "hook_event_name": "SessionStart", "source": "clear", "cwd": str(home)})))
+    context.main()
+    assert model.load_groups() == {new: A, C: new}
+    p = profiles.load(new)
+    assert (p["summary"], p["responsibility"], p["keywords"]) == ("Researches libraries", "Reports findings", ["research"])
+    assert p["description_editor"] == new
+
+
+def test_clear_outside_a_pengupool_pane_moves_nothing(home, monkeypatch):
+    monkeypatch.setattr(model, "PENGU", home)
+    monkeypatch.setattr(model, "GROUPS", home / "groups.json")
+    model.save_groups({B: A})
+    (home / "registry.jsonl").write_text(json.dumps({"sessionId": B, "tmuxPane": "%5"}) + "\n")
+    context.carry_over_clear(D, "")                    # not in a PenguPool pane: no link to an old id
+    assert model.load_groups() == {B: A}

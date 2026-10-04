@@ -354,6 +354,25 @@ def ask_role(tree: dict, sid: str) -> tuple[bool, bool]:
     return True, True
 
 
+def carry_over_clear(sid: str, pane: str) -> None:
+    """/clear restarts the conversation under a new id in the same process and pane. The pane's last
+    Claude registry line (pi writes its own, tagged) is the id it replaces: hand its group and role over."""
+    if not pane:
+        return  # outside a PenguPool pane there is no reliable link to the old id
+    old = ""
+    p = model.PENGU / "registry.jsonl"
+    for line in p.read_text().splitlines() if p.is_file() else []:
+        try:
+            d = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(d, dict) and d.get("tmuxPane") == pane and not d.get("harness"):
+            old = str(d.get("sessionId", ""))
+    if old and old != sid and model._SID.fullmatch(old):
+        model.rekey_groups(old, sid)
+        profiles.carry_over(old, sid)
+
+
 def main() -> None:
     try:
         inp = json.loads(sys.stdin.read() or "{}")
@@ -373,6 +392,8 @@ def main() -> None:
     if event == "SessionStart":  # registry line for the session -> tmux pane mapping
         profiles.register(sid, str(inp.get("cwd") or os.getcwd()))
         model.PENGU.mkdir(parents=True, exist_ok=True)
+        if inp.get("source") == "clear":
+            carry_over_clear(sid, os.environ.get("TMUX_PANE", ""))
         with (model.PENGU / "registry.jsonl").open("a") as fh:
             fh.write(json.dumps({"sessionId": sid, "cwd": os.getcwd(), "tmuxPane": os.environ.get("TMUX_PANE", ""),
                                  "ts": int(time.time())}) + "\n")

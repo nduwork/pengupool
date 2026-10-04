@@ -50,6 +50,7 @@ Open the PenguPool view (penguin icon in the Activity Bar). Claude Sessions list
 | `r`, `d` | Rename a session, or describe its role |
 | `x`, `c` | Close or compact a session |
 | `Shift+R` | Restart & resume, e.g. after a Claude Code or pi update |
+| `Shift+C` | Fresh context (`/clear`) for a Claude Code session; it keeps its place in the tree and its role |
 | `Shift+Enter` | New line in a Claude Code prompt, in the PenguPool terminal |
 | right-click | All session actions, including Reveal in Finder and Describe Role; the map offers the same menu on its nodes |
 

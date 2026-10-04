@@ -52,6 +52,7 @@ export const MENU_JS = `
     note: 'M3 2h10v12H3zM5.5 5h5M5.5 7.5h5M5.5 10h3',
     fold: 'M8 1.5v4M6 3.5l2 2 2-2M8 14.5v-4M6 12.5l2-2 2 2M3 8h10',
     restart: 'M13 8a5 5 0 1 1-1.5-3.6M12 1.5v3h-3',
+    clear: 'M2.5 4h11M2.5 8h7M2.5 12h4M11 10l3 3M14 10l-3 3',
     close: 'M4 4l8 8M12 4l-8 8',
   };
   function hideMenu(){ menu.classList.remove('open'); menu.innerHTML=''; }
@@ -85,6 +86,7 @@ export const MENU_JS = `
       addMenuItem('Describe Role…', 'pengupool.describe', 'note', 'D');
       menu.appendChild(document.createElement('hr'));
       addMenuItem('Compact (/compact)', 'pengupool.compact', 'fold', 'C');
+      addMenuItem('Fresh Context (/clear)', 'pengupool.clear', 'clear', '⇧C');
       addMenuItem('Restart & Resume', 'pengupool.restart', 'restart', '⇧R');
       menu.appendChild(document.createElement('hr'));
       addMenuItem('Close', 'pengupool.close', 'close', 'X', true);
@@ -116,7 +118,7 @@ const GLOBAL_COMMANDS = new Set(['pengupool.new', 'pengupool.add', 'pengupool.re
 /** Session menu items. `pengupool.switch` takes the id; the rest take the node, as they do everywhere. */
 const SESSION_COMMANDS = new Set([
   'pengupool.switch', 'pengupool.reveal', 'pengupool.group', 'pengupool.rename', 'pengupool.describe',
-  'pengupool.compact', 'pengupool.restart', 'pengupool.close',
+  'pengupool.compact', 'pengupool.clear', 'pengupool.restart', 'pengupool.close',
 ]);
 
 /** Run a command a webview's context menu asked for, and report whether it was allowed. The menu lives in
