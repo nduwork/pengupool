@@ -68,3 +68,8 @@ def test_guard_fails_closed_on_a_file_torn_in_a_fresh_process(tmp_path, monkeypa
     assert model.load_sessions() == [] and model.TORN
     with pytest.raises(RuntimeError, match="mid-write"):
         routing.live_tree()
+
+
+def test_slug_matches_claude_code_for_underscores_and_spaces():
+    assert model.slug("/Users/me/repos/research_agent") == "-Users-me-repos-research-agent"
+    assert model.slug("/a b/c.d") == "-a-b-c-d"

@@ -547,7 +547,7 @@ class Msg:
 
 
 def slug(cwd: str) -> str:
-    return re.sub(r"[/.]", "-", cwd)
+    return re.sub(r"[^A-Za-z0-9]", "-", cwd)  # Claude Code dashes every non-alphanumeric
 
 
 def transcript(sid: str, cwd: str, h: str = "cc") -> Path | None:
