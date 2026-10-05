@@ -550,8 +550,35 @@ def slug(cwd: str) -> str:
     return re.sub(r"[^A-Za-z0-9]", "-", cwd)  # Claude Code dashes every non-alphanumeric
 
 
+def _cc_dirs(cwd: str) -> list[Path]:
+    """Claude's transcript folders for a cwd. Past 200 chars Claude cuts the slug and appends a hash
+    of the path; match the prefix instead of copying the hash, and let _cc_cwd pick the owner."""
+    s = slug(cwd)
+    return [CLAUDE / "projects" / s] if len(s) <= 200 else sorted((CLAUDE / "projects").glob(f"{s[:200]}-*"))
+
+
+def _cc_cwd(f: Path) -> str | None:
+    """The cwd a Claude transcript records, or None if it does not say within its first lines."""
+    try:
+        with f.open() as fh:
+            for i, line in enumerate(fh):
+                if i > 50:
+                    break
+                if '"cwd"' in line:
+                    d = json.loads(line)
+                    if isinstance(d, dict) and isinstance(d.get("cwd"), str):
+                        return d["cwd"]
+    except Exception:
+        pass
+    return None
+
+
 def transcript(sid: str, cwd: str, h: str = "cc") -> Path | None:
-    return CLAUDE / "projects" / slug(cwd) / f"{sid}.jsonl" if h == "cc" else harness.pi_transcript(cwd, sid)
+    if h != "cc":
+        return harness.pi_transcript(cwd, sid)
+    dirs = _cc_dirs(cwd)
+    hits = [d / f"{sid}.jsonl" for d in dirs if (d / f"{sid}.jsonl").exists()]
+    return hits[0] if hits else (dirs[0] / f"{sid}.jsonl" if dirs else None)
 
 
 def resumable_transcript(sid: str, cwd: str, h: str = "cc") -> bool:
@@ -579,7 +606,8 @@ def past_sessions(cwd: str, limit: int = 20) -> list[tuple[str, str, str]]:
             return p.stat().st_mtime
         except OSError:
             return 0.0
-    files = [(f, "cc") for f in (CLAUDE / "projects" / slug(cwd)).glob("*.jsonl")] + \
+    # foo_bar and foo-bar share one Claude folder: keep only transcripts this cwd wrote
+    files = [(f, "cc") for d in _cc_dirs(cwd) for f in d.glob("*.jsonl") if _cc_cwd(f) in (cwd, None)] + \
             [(f, "pi") for f in harness.pi_dir(cwd).glob("*_*.jsonl")]
     files = sorted(files, key=lambda fh: mtime(fh[0]), reverse=True)[:limit]
     out = []

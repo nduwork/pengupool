@@ -73,3 +73,22 @@ def test_guard_fails_closed_on_a_file_torn_in_a_fresh_process(tmp_path, monkeypa
 def test_slug_matches_claude_code_for_underscores_and_spaces():
     assert model.slug("/Users/me/repos/research_agent") == "-Users-me-repos-research-agent"
     assert model.slug("/a b/c.d") == "-a-b-c-d"
+
+
+def test_past_sessions_skip_a_lookalike_repo_sharing_the_folder(tmp_path, monkeypatch):
+    monkeypatch.setattr(model, "CLAUDE", tmp_path)
+    monkeypatch.setattr(model.harness, "PI", tmp_path / "pi")
+    d = tmp_path / "projects" / model.slug("/r/foo_bar")  # foo-bar slugs the same
+    d.mkdir(parents=True)
+    (d / "mine-0000.jsonl").write_text('{"cwd":"/r/foo_bar","type":"user"}\n')
+    (d / "other-0000.jsonl").write_text('{"cwd":"/r/foo-bar","type":"user"}\n')
+    assert [s[0] for s in model.past_sessions("/r/foo_bar")] == ["mine-0000"]
+
+
+def test_long_cwd_finds_claudes_hashed_folder(tmp_path, monkeypatch):
+    monkeypatch.setattr(model, "CLAUDE", tmp_path)
+    cwd = "/" + "x" * 250
+    d = tmp_path / "projects" / f"{model.slug(cwd)[:200]}-abc123"  # Claude appends a path hash
+    d.mkdir(parents=True)
+    (d / "abcdef12-0000.jsonl").write_text(f'{{"cwd":"{cwd}","type":"user"}}\n')
+    assert model.resumable_transcript("abcdef12-0000", cwd)
