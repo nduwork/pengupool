@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.0
+
+- PenguPool 1.0 (#82)
+
+Ships with PenguPool v1.0.1.
+
 ## 0.7.0
 
 - PenguPool 1.0 (#82)

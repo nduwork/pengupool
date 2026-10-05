@@ -5,6 +5,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-04
+
+### Added
+- PenguPool 1.0 (#82)
+
+### Fixed
+- find the right Claude transcripts for any repo path (#84)
+
+- Editor extension: 0.8.0 (install both with `install.sh`; they ship together in this tag).
 ## [1.0.0] - 2026-10-04
 
 ### Added
