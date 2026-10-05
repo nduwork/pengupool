@@ -606,12 +606,14 @@ def past_sessions(cwd: str, limit: int = 20) -> list[tuple[str, str, str]]:
             return p.stat().st_mtime
         except OSError:
             return 0.0
-    # foo_bar and foo-bar share one Claude folder: keep only transcripts this cwd wrote
-    files = [(f, "cc") for d in _cc_dirs(cwd) for f in d.glob("*.jsonl") if _cc_cwd(f) in (cwd, None)] + \
+    files = [(f, "cc") for d in _cc_dirs(cwd) for f in d.glob("*.jsonl")] + \
             [(f, "pi") for f in harness.pi_dir(cwd).glob("*_*.jsonl")]
-    files = sorted(files, key=lambda fh: mtime(fh[0]), reverse=True)[:limit]
     out = []
-    for f, h in files:
+    for f, h in sorted(files, key=lambda fh: mtime(fh[0]), reverse=True):
+        if len(out) >= limit:
+            break
+        if h == "cc" and _cc_cwd(f) not in (cwd, None):  # foo_bar and foo-bar share one Claude folder
+            continue
         sid = f.stem if h == "cc" else f.stem.split("_", 1)[1]
         title, first = "", ""
         try:
