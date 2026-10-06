@@ -255,6 +255,15 @@ test('session terminal directly owns tmux and is transient across reloads', asyn
   assert.match(h.terminals[0].options.shellArgs.at(-1), /^exec tmux attach/);
 });
 
+test('session terminal is hidden from auto-activation, then shown', async () => {
+  // The Python extension types `source <venv>/bin/activate` into every new terminal it can see, which
+  // would land in the agent's prompt; it skips hideFromUser terminals, and show() surfaces ours.
+  const h = harness();
+  await h.manager.switchTo(node);
+  assert.equal(h.terminals[0].options.hideFromUser, true);
+  assert.ok(h.terminals[0].shows >= 1);
+});
+
 test('late-restored legacy session terminals are removed after the first snapshot', () => {
   const h = harness();
   const legacy = {
