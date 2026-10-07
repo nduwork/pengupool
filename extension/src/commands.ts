@@ -31,6 +31,9 @@ export async function rememberAddDirectory(context: vscode.ExtensionContext, dir
   await context.globalState.update(LAST_ADD_PATH_KEY, directory.fsPath);
 }
 
+/** What VS Code passes a command run from a webview's right-click menu: the tag on what was clicked. */
+interface MenuContext { webview?: string; sessionId?: string }
+
 interface Deps {
   provider: SessionsProvider;
   terminals: TerminalManager;
@@ -48,8 +51,11 @@ function descendants(node: SessionNode): Set<string> {
 /** Rebuild the pool after a reboot: the backend lists every session it can still resume, and the
  *  editor puts the ticked ones back on the tmux server (windows first, then one to look at). */
 export function registerCommands(context: vscode.ExtensionContext, d: Deps): void {
-  const sel = (node?: SessionNode | string): SessionNode | undefined =>
-    typeof node === 'string' ? d.provider.find(node) : node ?? d.tree.selection[0];
+  // A session arrives as its node, its id, or the right-click tag a webview put on it (`sessionId`).
+  const sel = (node?: SessionNode | string | MenuContext): SessionNode | undefined =>
+    typeof node === 'string' ? d.provider.find(node)
+      : node && 'sessionId' in node ? d.provider.find(node.sessionId ?? '')
+      : (node as SessionNode | undefined) ?? d.tree.selection[0];
   const defaultDir = (): vscode.Uri =>
     vscode.workspace.workspaceFolders?.[0]?.uri ?? vscode.Uri.file(process.env.HOME || '/');
 
@@ -67,6 +73,16 @@ export function registerCommands(context: vscode.ExtensionContext, d: Deps): voi
       void d.terminals.switchTo(n);
     }
   });
+
+  // Folding hides a session's children in the view the menu was opened in.
+  const fold = (on: boolean) => (ctx?: MenuContext) => {
+    if (!ctx?.sessionId) { return; }
+    if (ctx.webview === 'pengupoolMap') { MapPanel.showIfOpen()?.fold(ctx.sessionId, on); } else { SessionsView.fold(ctx.sessionId, on); }
+  };
+  reg('pengupool.fold', fold(true));
+  reg('pengupool.unfold', fold(false));
+  reg('pengupool.foldAll', () => MapPanel.showIfOpen()?.fold('', true));
+  reg('pengupool.unfoldAll', () => MapPanel.showIfOpen()?.fold('', false));
 
   reg('pengupool.reveal', async (node?: SessionNode | string) => {
     const n = sel(node);

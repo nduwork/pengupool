@@ -14,7 +14,7 @@ test('Shift+Enter uses Claude terminal setup sequence', () => {
 
 test('Reveal Session Folder is contributed for the command palette', () => {
   const command = manifest.contributes.commands.find((item) => item.command === 'pengupool.reveal');
-  assert.equal(command.title, 'PenguPool: Reveal Session Folder');
+  assert.equal(`${command.category}: ${command.title}`, 'PenguPool: Reveal Session Folder');
 });
 
 test('the Explorer follow is one boolean, and nothing else is configurable', () => {
@@ -26,7 +26,7 @@ test('the Explorer follow is one boolean, and nothing else is configurable', () 
 
 test('Resume Previous Sessions is a contributed title action next to Add Previous', () => {
   const command = manifest.contributes.commands.find((item) => item.command === 'pengupool.resumePrevious');
-  assert.equal(command.title, 'PenguPool: Resume Previous Sessions…');
+  assert.equal(`${command.category}: ${command.title}`, 'PenguPool: Resume Previous Sessions…');
   assert.equal(command.icon, '$(run-all)');
   const title = manifest.contributes.menus['view/title'];
   const groups = ['navigation@1', 'navigation@2', 'navigation@3', 'navigation@4', 'navigation@5', 'navigation@6'];
@@ -113,4 +113,27 @@ test('new session picks a harness instead of a free-text launch command', () => 
   assert.match(commands, /label: 'Use selected folder'/);
   // the quick pick pre-selects its first item: the folder as picked, a worktree only on request
   assert.ok(commands.indexOf("label: 'Use selected folder'") < commands.indexOf("label: 'Create a worktree'"));
+});
+
+test('every command is filed under PenguPool, so a right-click menu shows it without the prefix', () => {
+  for (const command of manifest.contributes.commands) {
+    assert.equal(command.category, 'PenguPool', command.command);
+    assert.doesNotMatch(command.title, /^PenguPool/, command.command);
+  }
+});
+
+test('the right-click menu of the list and the map is VS Code\'s own, for sessions and the background', () => {
+  const items = manifest.contributes.menus['webview/context'];
+  const on = (section) => items.filter((item) => item.when.includes(`webviewSection == ${section}`)).map((item) => item.command);
+  assert.deepEqual(on('session'), ['pengupool.fold', 'pengupool.unfold', 'pengupool.newChild', 'pengupool.addChild',
+    'pengupool.resumePrevious', 'pengupool.reveal', 'pengupool.copyPath', 'pengupool.compact', 'pengupool.clear',
+    'pengupool.restart', 'pengupool.group', 'pengupool.rename', 'pengupool.describe', 'pengupool.close']);
+  assert.deepEqual(on('pool'), ['pengupool.new', 'pengupool.add', 'pengupool.resumePrevious', 'pengupool.foldAll', 'pengupool.unfoldAll']);
+  for (const item of items) { assert.match(item.when, /webviewId == pengupoolSessions/); assert.match(item.when, /webviewId == pengupoolMap/); }
+  const when = (command) => items.find((item) => item.command === command).when;
+  assert.match(when('pengupool.fold'), /&& foldable && !folded$/, 'Fold only on a session with children, still unfolded');
+  assert.match(when('pengupool.unfold'), /&& folded$/);
+  assert.match(when('pengupool.foldAll'), /&& map$/, 'folding every group is a map action');
+  const contributed = new Set(manifest.contributes.commands.map((item) => item.command));
+  for (const item of items) { assert.ok(contributed.has(item.command), item.command); }
 });

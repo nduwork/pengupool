@@ -3,13 +3,12 @@ import { Harness, SessionNode, Snapshot } from './serveClient';
 import { SessionsProvider } from './sessionsTree';
 import { CTX_LEVEL_CSS, CTX_LEVEL_JS, SESSION_STATES, SESSION_STATE_CSS } from './sessionState';
 import { bothHarnesses, findNode, splitByHarness } from './harness';
-import { MENU_CSS, MENU_HTML, MENU_JS, runMenuCommand } from './webviewMenu';
-import { REVEAL_LABEL } from './util';
+import { SESSION_CONTEXT_JS, runMenuCommand } from './webviewMenu';
 
 type VisibilityEvent = { visible: boolean };
 
 /** Webview-backed Sessions list. VS Code's native TreeView discards context-menu events whose
- * target is empty space, so the view owns its background menu while preserving tree interactions.
+ * target is empty space; a webview gets VS Code's own menu on rows and background alike.
  * One instance per harness view: while both harnesses run each lists only its own harness; otherwise
  * the Claude Code (main) view lists everything and the pi view is hidden. */
 export class SessionsView implements vscode.WebviewViewProvider, vscode.Disposable {
@@ -73,6 +72,11 @@ export class SessionsView implements vscode.WebviewViewProvider, vscode.Disposab
     }));
   }
 
+  /** Fold or unfold a session's children in every list, from the right-click menu. */
+  static fold(id: string, on: boolean): void {
+    SessionsView.views.forEach((view) => { void view.view?.webview.postMessage({ type: 'fold', id, on }); });
+  }
+
   private async receive(message: any): Promise<void> {
     if (message?.type === 'ready') {
       this.ready = true;
@@ -134,20 +138,17 @@ export function sessionsHtml(): string {
   .desc { margin-left:auto; color:var(--vscode-descriptionForeground); overflow:hidden; text-overflow:ellipsis; }
   .children.collapsed { display:none; }
   #empty { padding:8px 20px; color:var(--vscode-descriptionForeground); }
-  ${MENU_CSS}
   ${SESSION_STATE_CSS}
   ${CTX_LEVEL_CSS}
 </style></head><body>
 <div id="tree" role="tree" aria-label="PenguPool sessions" tabindex="0"></div>
-${MENU_HTML}
 <script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
   const tree = document.getElementById('tree');
   const states = ${JSON.stringify(SESSION_STATES)};
-  const revealLabel = ${JSON.stringify(REVEAL_LABEL)};
   ${CTX_LEVEL_JS}
-  ${MENU_JS}
-  let selected = '', dragged = '';
+  ${SESSION_CONTEXT_JS}
+  let selected = '', dragged = '', shown = null;
   const collapsed = new Set();
 
   function rows(){ return [...tree.querySelectorAll('.row')]; }
@@ -177,11 +178,13 @@ ${MENU_HTML}
     const children=document.createElement('div'); children.className='children';
     if(collapsed.has(node.id)){ children.classList.add('collapsed'); twist.textContent='›'; }
     node.children.forEach(child=>children.appendChild(renderNode(child,depth+1))); wrap.appendChild(children);
+    const mark=()=>sessionContext(row,node.id,{foldable:node.children.length>0,folded:collapsed.has(node.id)});
+    mark();
     twist.addEventListener('click',event=>{ event.stopPropagation(); const closed=children.classList.toggle('collapsed');
       closed?collapsed.add(node.id):collapsed.delete(node.id);
-      twist.textContent=closed?'›':'⌄'; row.setAttribute('aria-expanded',String(!closed)); });
+      twist.textContent=closed?'›':'⌄'; row.setAttribute('aria-expanded',String(!closed)); mark(); });
     row.addEventListener('click',()=>{ select(node.id,false); vscode.postMessage({type:'open',id:node.id}); });
-    row.addEventListener('contextmenu',event=>{ select(node.id); showMenu(event,node.id,revealLabel); });
+    row.addEventListener('contextmenu',()=>select(node.id));   // the target is visible under VS Code's menu
     row.addEventListener('dragstart',event=>{ dragged=node.id; event.dataTransfer?.setData('text/plain',node.id); });
     row.addEventListener('dragover',event=>event.preventDefault());
     row.addEventListener('drop',event=>{ event.preventDefault(); event.stopPropagation();
@@ -199,12 +202,11 @@ ${MENU_HTML}
     tree.scrollTop=scroll;
   }
 
-  tree.addEventListener('contextmenu',event=>{ if(!event.target.closest('.row')) showMenu(event, null, revealLabel); });
+  poolContext(document.body);
   tree.addEventListener('dragover',event=>event.preventDefault());
   tree.addEventListener('drop',event=>{ if(event.target.closest('.row')) return; event.preventDefault();
     if(dragged) vscode.postMessage({type:'group',source:dragged,target:''}); dragged=''; });
   tree.addEventListener('keydown',event=>{
-    if(menu.style.display==='block') return;
     const list=rows(); let index=list.findIndex(row=>row.dataset.id===selected);
     if(event.key==='ArrowDown'||event.key==='ArrowUp'){
       event.preventDefault(); index=event.key==='ArrowDown'?Math.min(list.length-1,index+1):Math.max(0,index<0?0:index-1);
@@ -216,8 +218,10 @@ ${MENU_HTML}
     const cmd=shortcuts[event.key]; if(cmd&&(!['g','r','x','c','R'].includes(event.key)||selected)){
       event.preventDefault(); command(cmd,selected); }
   });
-  window.addEventListener('message',event=>{ if(event.data?.type!=='snapshot') return;
-    selected=event.data.selectedId||''; render(event.data.snapshot); if(event.data.focus) tree.focus(); });
+  window.addEventListener('message',event=>{
+    if(event.data?.type==='fold'){ event.data.on?collapsed.add(event.data.id):collapsed.delete(event.data.id); if(shown) render(shown); return; }
+    if(event.data?.type!=='snapshot') return;
+    selected=event.data.selectedId||''; shown=event.data.snapshot; render(shown); if(event.data.focus) tree.focus(); });
   vscode.postMessage({type:'ready'});
 </script></body></html>`;
 }

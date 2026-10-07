@@ -1,9 +1,9 @@
 import * as vscode from 'vscode';
 import { Snapshot } from './serveClient';
 import { CTX_LEVEL_CSS, CTX_LEVEL_JS, SESSION_STATES, SESSION_STATE_CSS } from './sessionState';
-import { findNode, HarnessTabs, HARNESS_TABS_CSS, HARNESS_TABS_HTML, HARNESS_TABS_JS } from './harness';
-import { MENU_CSS, MENU_HTML, MENU_JS, runMenuCommand } from './webviewMenu';
-import { REVEAL_LABEL, runCtl } from './util';
+import { HarnessTabs, HARNESS_TABS_CSS, HARNESS_TABS_HTML, HARNESS_TABS_JS } from './harness';
+import { SESSION_CONTEXT_JS } from './webviewMenu';
+import { runCtl } from './util';
 
 /**
  * Live map as an editor-area webview (an editor tab, so it can be moved into a new/floating window or
@@ -58,11 +58,6 @@ export class MapPanel {
       if (message?.type === 'select' && typeof message.id === 'string') {
         void vscode.commands.executeCommand('pengupool.switch', message.id);
       }
-      // Right-click menu: the same actions as the Sessions list, run through the shared allowlist so the
-      // webview can ask for those commands and no others.
-      if (message?.type === 'command') {
-        void runMenuCommand(message.command, message.id, (id) => findNode(this.last?.roots ?? [], id), (id) => this.select(id));
-      }
       // Refresh: redraw from the last snapshot now, and restart `pengupool serve` so a fresh process
       // rebuilds the whole model from disk (sessions, transcripts, roles, chains) and sends it in full.
       if (message?.type === 'refresh') { this.render(); void vscode.commands.executeCommand('pengupool.refresh'); }
@@ -85,6 +80,11 @@ export class MapPanel {
   update(snap: Snapshot): void {
     this.last = snap;
     this.render();
+  }
+
+  /** Fold or unfold a session's children on the map (`id` empty: every group), from the right-click menu. */
+  fold(id: string, on: boolean): void {
+    void this.panel.webview.postMessage({ type: 'fold', id, on });
   }
 
   select(id: string): void {
@@ -120,6 +120,7 @@ function html(webview: vscode.Webview, dagreUri: vscode.Uri): string {
   .emask { fill: var(--vscode-editor-background); }   /* keeps the line from bleeding through a label */
   .node.lone .box { stroke-dasharray:4,4; }
   .eyebrow { fill: var(--vscode-descriptionForeground); font-size:9px; letter-spacing:.14em; }
+  .hull { opacity:.07; } .hull rect { fill: var(--vscode-foreground); stroke:none; }
   .frame { fill: var(--vscode-editorWidget-background); fill-opacity:.35; stroke: var(--vscode-panel-border); rx:10; }
   .box { stroke:var(--state-color, var(--vscode-panel-border)); stroke-width:1.5; rx:6;
          fill: var(--vscode-editorWidget-background); transition: stroke 200ms; }
@@ -161,6 +162,9 @@ function html(webview: vscode.Webview, dagreUri: vscode.Uri): string {
   #tools button { cursor:pointer; padding:2px 8px; border-radius:3px;
              border:1px solid var(--vscode-button-border, transparent); font:inherit; font-size:11px;
              background:var(--vscode-button-secondaryBackground); color:var(--vscode-button-secondaryForeground); }
+  #tools select { font:inherit; font-size:11px; padding:1px 4px; border-radius:3px;
+             border:1px solid var(--vscode-dropdown-border, transparent);
+             background:var(--vscode-dropdown-background); color:var(--vscode-dropdown-foreground); }
   #tools button:hover { background:var(--vscode-button-secondaryHoverBackground); }
   #empty { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
            color: var(--vscode-descriptionForeground); }
@@ -176,7 +180,6 @@ function html(webview: vscode.Webview, dagreUri: vscode.Uri): string {
     border:1px solid var(--vscode-button-border, transparent); }
   #regroupBanner button.apply { background:var(--vscode-button-background); color:var(--vscode-button-foreground); }
   #regroupBanner button.discard { background:var(--vscode-button-secondaryBackground); color:var(--vscode-button-secondaryForeground); }
-  ${MENU_CSS}
   ${HARNESS_TABS_CSS}
   #tabs { position:absolute; top:0; left:0; right:0; z-index:1; height:28px; box-sizing:border-box; }
   body.tabbed #wrap, body.tabbed #empty { top:28px; }
@@ -195,7 +198,7 @@ ${HARNESS_TABS_HTML}
   <button class="discard" id="rgDiscard">Discard</button>
 </div>
 <div id="tools">
-  <button id="dir" title="Lay the map out top-down or left-right"></button>
+  <select id="layout" title="How each group is drawn"></select>
   <button id="spacing" title="Compact: tight spacing, chains in the tooltip. Roomy: wide spacing, chains on the cards"></button>
   <button id="foldAll" title="Fold every group to its lead, or unfold them all"></button>
   <button id="refresh" title="Reload all sessions from disk and redraw the map">⟳ Refresh</button>
@@ -208,7 +211,6 @@ ${HARNESS_TABS_HTML}
   <span><svg width="18" height="8"><path d="M0,4 H18" class="edge hot-up"/></svg>reply</span>
   <span><svg width="14" height="10"><rect x="1" y="1" width="12" height="8" rx="2" class="box" style="stroke:var(--vscode-descriptionForeground); stroke-dasharray:3,2"/></svg>ungrouped</span>
 </div>
-${MENU_HTML}
 <script nonce="${nonce}" src="${dagreUri}"></script>
 <script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
@@ -218,9 +220,8 @@ ${MENU_HTML}
   const SVGNS = 'http://www.w3.org/2000/svg';
   const HTMLNS = 'http://www.w3.org/1999/xhtml';
   const states = ${JSON.stringify(SESSION_STATES)};
-  const revealLabel = ${JSON.stringify(REVEAL_LABEL)};
   ${CTX_LEVEL_JS}
-  ${MENU_JS}
+  ${SESSION_CONTEXT_JS}
   let topo = null, sizes = '', last = null;
   let selected = '';
   const nodeEls = new Map(), edgeEls = new Map();   // edges keyed parent>child
@@ -243,15 +244,20 @@ ${MENU_HTML}
     }
     const e = pts[pts.length-1]; return d+' L'+e[0]+','+e[1];
   }
-  // Map options, kept per panel: direction, spacing, and which sessions are folded to hide their children.
-  const LAYOUTS = { TB:'↓ Top-down', LR:'→ Left-right' }, SPACINGS = { compact:'Compact', roomy:'Roomy' };
-  const opts = Object.assign({ dir:'TB', spacing:'roomy' }, vscode.getState?.()?.opts);
-  const folded = new Set(vscode.getState?.()?.folded || []);
+  // Map options, kept per panel: layout, spacing, and which sessions are folded to hide their children.
+  const LAYOUTS = { org:'Org chart', outline:'Outline', down:'Tree ↓', right:'Tree →' };
+  const SPACINGS = { compact:'Compact', roomy:'Roomy' };
+  const saved = vscode.getState?.() || {};
+  const opts = Object.assign({ layout:'org', spacing:'roomy' }, saved.opts);
+  if(!LAYOUTS[saved.opts?.layout]) opts.layout = saved.opts?.dir==='LR' ? 'right' : 'org';   // saved before layouts had names
+  const folded = new Set(saved.folded || []);
   function save(){ vscode.setState?.({ opts, folded:[...folded] }); }
-  // nodesep/ranksep inside a group, pad from a group's frame to its cards, gap between frames.
-  function spacing(){ const roomy = opts.spacing==='roomy', TB = opts.dir==='TB';
-    return roomy ? { nodesep: TB ? 40 : 24, ranksep: TB ? 72 : 180, pad: 20, gap: 32 }
-                 : { nodesep: TB ? 12 : 8, ranksep: TB ? 40 : 110, pad: 10, gap: 12 }; }  // LR: labels run along
+  // Inside a group: sib between siblings, rank between a parent and its children, stack between stacked
+  // cards. Roomy frames each group (pad inside, gap between frames); compact packs the groups as close as
+  // their cards and lines allow, gap apart.
+  function spacing(){ const roomy = opts.spacing==='roomy', across = opts.layout==='right';
+    return roomy ? { sib: across ? 24 : 32, rank: across ? 120 : 56, stack: 12, pad: 20, gap: 40 }
+                 : { sib: across ? 8 : 12, rank: across ? 80 : 36, stack: 8, pad: 0, gap: 16 }; }  // →: labels run along
   // The tree as drawn: a folded session keeps its card but loses its children, which \`hidden\` lists.
   function visible(roots){
     const hidden = {}, below = n => n.children.flatMap(c => [c, ...below(c)]);
@@ -259,13 +265,59 @@ ${MENU_HTML}
                                                            : { ...n, children: n.children.map(cut), folds: n.children.length > 0 };
     return { roots: roots.map(cut), hidden };
   }
-  function toggleFold(id){ folded.has(id) ? folded.delete(id) : folded.add(id); save(); redraw(); }
-  // Lines are routed on the laid-out cards: a tree edge leaves the parent, turns on a bus shared by its
-  // children and runs into each child. Parents side by side in one rank whose buses would overlap get
-  // their own lane, 8px further out, so one family's line never runs along another's.
-  // Card boxes in rank-axis terms: main runs along the tree's direction, side across it.
-  function geometry(boxes){
-    const H = opts.dir==='TB';
+  function setFold(id, on){ if(on === folded.has(id)) return; on ? folded.add(id) : folded.delete(id); save(); redraw(); }
+  function foldAll(on){ if(!last) return; folded.clear();
+    if(on) flat(last.roots).forEach(n => { if(n.children.length) folded.add(n.id); }); save(); redraw(); }
+
+  // Each layout turns one group into a block: cards { id: {x, y, width, height} } with x/y the card's
+  // centre, routes [[parent, child, points]] of right-angled lines, and the block's w and h. Every line
+  // leaves its parent, turns on a bus or spine and enters the child; none runs diagonally.
+  const bottomOf = c => c.y + c.height/2, topOf = c => c.y - c.height/2, leftOf = c => c.x - c.width/2;
+  function shift(b, dx, dy){
+    Object.values(b.cards).forEach(c => { c.x += dx; c.y += dy; });
+    b.routes.forEach(r => r[2] = r[2].map(([x, y]) => [x+dx, y+dy]));
+    return b;
+  }
+  // Org chart: subtrees side by side under their parent; a family of three or more sessions without
+  // children of their own stacks in a column on a spine, so a wide fan never stretches the map.
+  function org(n, S){
+    const me = cardSize(n), leaves = n.children.filter(c => !c.children.length);
+    const stack = leaves.length >= 3, row = [];
+    n.children.filter(c => !stack || c.children.length).forEach(c => row.push(org(c, S)));
+    if(stack){ const col = { cards: {}, routes: [], w: 0, h: 0, spine: 8 };
+      leaves.forEach(c => { const s = cardSize(c);
+        col.cards[c.id] = { ...s, x: 20 + s.width/2, y: col.h + s.height/2 };
+        col.h += s.height + S.stack; col.w = Math.max(col.w, 20 + s.width); });
+      col.h -= S.stack; row.push(col); }
+    const rowW = row.reduce((w, b) => w + b.w, 0) + S.sib * Math.max(0, row.length - 1);
+    const only = row.length === 1 && row[0].spine != null;   // just a column: it hangs from the parent's left
+    const w = only ? Math.max(me.width, 8 + row[0].w) : Math.max(me.width, rowW);
+    const P = { ...me, x: only ? me.width/2 : w/2, y: me.height/2 };
+    const out = { cards: { [n.id]: P }, routes: [], w, h: me.height };
+    if(!row.length) return out;
+    let x = only ? 8 : (w - rowW)/2; const y = me.height + S.rank, bus = me.height + S.rank/2;
+    row.forEach(b => { shift(b, x, y); Object.assign(out.cards, b.cards); out.routes.push(...b.routes);
+      if(b.spine != null){ const sx = x + b.spine, from = only ? [[sx, bottomOf(P)]] : [[P.x, bottomOf(P)], [P.x, bus], [sx, bus]];
+        Object.entries(b.cards).forEach(([id, c]) => out.routes.push([n.id, id, [...from, [sx, c.y], [leftOf(c), c.y]]])); }
+      else { const id = Object.keys(b.cards).find(k => !b.routes.some(r => r[1] === k)), c = b.cards[id];
+        out.routes.push([n.id, id, [[P.x, bottomOf(P)], [P.x, bus], [c.x, bus], [c.x, topOf(c)]]]); }
+      out.h = Math.max(out.h, y + b.h); x += b.w + S.sib; });
+    return out;
+  }
+  // Outline: one column per group, each child indented under its parent and hung off its spine.
+  function outline(r, S){
+    const out = { cards: {}, routes: [], w: 0, h: 0 };
+    const walk = (n, depth, parent) => { const s = cardSize(n), x = depth * 24;
+      const c = out.cards[n.id] = { ...s, x: x + s.width/2, y: out.h + s.height/2 };
+      if(parent){ const sx = leftOf(parent) + 12; out.routes.push([parent.id, n.id, [[sx, bottomOf(parent)], [sx, c.y], [leftOf(c), c.y]]]); }
+      out.h += s.height + S.stack; out.w = Math.max(out.w, x + s.width);
+      c.id = n.id; n.children.forEach(k => walk(k, depth + 1, c)); };
+    walk(r, 0, null); out.h -= S.stack;
+    return out;
+  }
+  // Tree ↓ / Tree →: dagre ranks the group; lines turn on a bus between the ranks. Parents side by side
+  // whose buses would overlap get their own lane, 8px further out, so no line runs along another family's.
+  function geometry(boxes, H){
     const at = id => { const n=boxes[id]; return { main:H?n.y:n.x, side:H?n.x:n.y, hm:(H?n.height:n.width)/2 }; };
     return { pt: (m, s) => H ? [s, m] : [m, s], at };
   }
@@ -276,13 +328,47 @@ ${MENU_HTML}
       (rank[Math.round(G.at(a).main)] ||= []).push({ a, lo: Math.min(...sides), hi: Math.max(...sides) }); });
     Object.values(rank).forEach(row => { const ends = [];   // ends[k]: where lane k is free again
       row.sort((p,q) => p.lo-q.lo).forEach(p => { let k = ends.findIndex(e => e + 8 < p.lo); if(k < 0) k = ends.length;
-        ends[k] = p.hi; const A = G.at(p.a), top = Math.min(...kids[p.a].map(b => G.at(b).main - G.at(b).hm));
-        bus[p.a] = Math.min(A.main + A.hm + 12 + 8*k, top - 8); }); });
+        ends[k] = p.hi; const A = G.at(p.a), near = Math.min(...kids[p.a].map(b => G.at(b).main - G.at(b).hm));
+        bus[p.a] = Math.min(A.main + A.hm + 12 + 8*k, near - 8); }); });
     return bus;
   }
-  function treeRoute(G, a, b, bus){
-    const A=G.at(a), B=G.at(b);
-    return [G.pt(A.main+A.hm, A.side), G.pt(bus, A.side), G.pt(bus, B.side), G.pt(B.main-B.hm, B.side)];
+  function ranked(r, S){
+    const H = opts.layout === 'down', g = new dagre.graphlib.Graph(); g.setDefaultEdgeLabel(()=>({}));
+    g.setGraph({ rankdir: H ? 'TB' : 'LR', nodesep: S.sib, ranksep: S.rank, marginx: 0, marginy: 0 });
+    flat([r]).forEach(n => g.setNode(n.id, cardSize(n)));
+    const tree = edges([r]); tree.forEach(([a,b]) => g.setEdge(a,b));
+    dagre.layout(g);
+    const cards = {}; g.nodes().forEach(id => { const n = g.node(id); cards[id] = { width:n.width, height:n.height, x:n.x, y:n.y }; });
+    const G = geometry(cards, H), bus = buses(G, tree);
+    const routes = tree.map(([a, b]) => { const A = G.at(a), B = G.at(b);
+      return [a, b, [G.pt(A.main+A.hm, A.side), G.pt(bus[a], A.side), G.pt(bus[a], B.side), G.pt(B.main-B.hm, B.side)]]; });
+    return { cards, routes, w: g.graph().width, h: g.graph().height };
+  }
+  const LAYOUT = { org, outline, down: ranked, right: ranked };
+
+  // Compact packing: a group's outline is a box per family, a parent with its children, so groups tuck
+  // under each other's shallow parts but never into a family's span. Each block takes the highest, then
+  // leftmost, spot where its outline stays gap clear of everything placed; spots are tried at the left
+  // margin and just past the edges already placed.
+  function rectsOf(b){
+    const box = cs => [Math.min(...cs.map(leftOf)), Math.min(...cs.map(topOf)),
+                       Math.max(...cs.map(c => leftOf(c) + c.width)), Math.max(...cs.map(bottomOf))];
+    const kids = {}; b.routes.forEach(([a, k]) => (kids[a] ||= [b.cards[a]]).push(b.cards[k]));
+    const fams = Object.values(kids);
+    return fams.length ? fams.map(box) : Object.values(b.cards).map(c => box([c]));
+  }
+  function pack(blocks, avail, gap){
+    const placed = [], spot = [];
+    const hit = (rs, x, y) => rs.some(([a, b, c, d]) => placed.some(([e, f, g, h]) =>
+      a + x < g + gap && c + x + gap > e && b + y < h + gap && d + y + gap > f));
+    blocks.forEach(b => { const rs = rectsOf(b);
+      const xs = [0, ...placed.map(r => r[2] + gap)].filter(x => x === 0 || x + b.w <= avail);
+      const ys = [0, ...placed.map(r => r[3] + gap)];
+      const cand = ys.flatMap(y => xs.map(x => [x, y])).sort((p, q) => p[1] - q[1] || p[0] - q[0]);
+      const [x, y] = cand.find(([x, y]) => !hit(rs, x, y)) || [0, Math.max(0, ...placed.map(r => r[3] + gap))];
+      // ponytail: candidate scan is O(spots² × rects); fine for a pool of dozens, grid-index it past hundreds
+      placed.push(...rs.map(([a, b2, c, d]) => [a + x, b2 + y, c + x, d + y])); spot.push([x, y]); });
+    return spot;
   }
   // Card size MEASURED from the real fonts (dagre needs sizes before layout): an offscreen card holds
   // the same content and styles. ctx% is sized as "100%" so a changing percentage never relayouts.
@@ -292,9 +378,8 @@ ${MENU_HTML}
   const chainOf = n => opts.spacing==='roomy' && n.status || '';
   function cardSize(n){
     const meta = (n.harness==='pi'?'pi · ':'') + (n.ctx_pct!=null?'100% · ':'') + (n.repo||'');
-    const chain = chainOf(n), fold = n.folds ? 16 : 0;
-    const width = Math.ceil(Math.min((chain ? 320 : 220) + fold, Math.max(140, textW(n.name,'nm')+22+fold,
-                                     textW(meta,'meta')+22+fold, Math.min(textW(chain,'chain'), 240)+22+fold)));
+    const chain = chainOf(n), fold = n.folds;
+    const width = chain ? 260 : 180;   // two widths only, so the cards of a row line up
     probe.className = 'content probe' + (fold ? ' has-fold' : '');
     probe.style.width = width+'px'; probe.innerHTML = '';
     [['state','● Active'], ['nm', n.name], ['meta', meta], ['chain', chain]].forEach(([cls, text]) => {
@@ -311,55 +396,58 @@ ${MENU_HTML}
     empty.style.display = nodes.length ? 'none' : 'flex';
     legend.style.display = nodes.length ? 'flex' : 'none';
     if(!nodes.length) return;
-    // Every group is its own block: laid out alone, so no family's lines cross another's, and framed.
-    // Sessions outside every group flow left to right in one last block, under an UNGROUPED heading.
-    // Blocks fill a row to the panel's width, then wrap.
-    const S = spacing(), M = 12, avail = Math.max(320, (wrap.clientWidth || 0) - 2*M);
+    // Every group is laid out alone, so no family's lines cross another's. Roomy frames each group and
+    // fills rows of frames to the panel's width, with the ungrouped sessions in a last row under a
+    // heading. Compact packs groups and ungrouped cards alike as tightly as they fit.
+    const S = spacing(), M = 12, roomy = opts.spacing === 'roomy';
+    const avail = Math.max(360, (wrap.clientWidth || 0) - 2*M);
     const lead = new Set(roots.filter(r => r.folds).map(r => r.id));
     const lone = new Set(lead.size ? roots.filter(r => !lead.has(r.id)).map(r => r.id) : []);
-    const boxes = {}, blocks = [];
-    const at = (pos, ox, oy) => Object.entries(pos).forEach(([id, b]) => { boxes[id] = { ...b, x: b.x+ox, y: b.y+oy }; });
-    roots.filter(r => lead.has(r.id)).forEach(r => {
-      const g = new dagre.graphlib.Graph(); g.setDefaultEdgeLabel(()=>({}));
-      g.setGraph({ rankdir:opts.dir, nodesep:S.nodesep, ranksep:S.ranksep, marginx:S.pad, marginy:S.pad });
-      flat([r]).forEach(n => g.setNode(n.id, cardSize(n)));
-      edges([r]).forEach(([a,b]) => g.setEdge(a,b));
-      dagre.layout(g);
-      const pos = {}; g.nodes().forEach(id => { const n = g.node(id); pos[id] = { width:n.width, height:n.height, x:n.x, y:n.y }; });
-      blocks.push({ w: g.graph().width, h: g.graph().height, frame: true, place: (x, y) => at(pos, x, y) });
-    });
+    const one = n => { const c = cardSize(n); return { cards: { [n.id]: { ...c, x: c.width/2, y: c.height/2 } }, routes: [], w: c.width, h: c.height }; };
+    const blocks = roots.filter(r => lead.has(r.id)).map(r => shift(LAYOUT[opts.layout](r, S), S.pad, S.pad));
+    blocks.forEach(b => { b.w += 2*S.pad; b.h += 2*S.pad; b.frame = roomy; });
     const rest = roots.filter(r => !lead.has(r.id));
-    if(rest.length){
-      const head = lead.size ? 20 : 0, pos = {}; let x = 0, y = head, rowH = 0, w = 0;
+    if(roomy && rest.length){   // one block: a heading, then the cards in rows
+      const head = lead.size ? 20 : 0, b = { cards: {}, routes: [], w: 0, h: 0, own: true, heading: head > 0 };
+      let x = 0, y = head, rowH = 0;
       rest.forEach(n => { const c = cardSize(n);
-        if(x && x + c.width > avail){ x = 0; y += rowH + S.gap; rowH = 0; }
-        pos[n.id] = { ...c, x: x + c.width/2, y: y + c.height/2 };
-        x += c.width + S.gap; w = Math.max(w, x - S.gap); rowH = Math.max(rowH, c.height); });
-      blocks.push({ w, h: y + rowH, own: true, heading: head > 0, place: (bx, by) => at(pos, bx, by) });
-    }
-    let x = M, y = M, rowH = 0, width = 0;
-    blocks.forEach(b => {
-      if(x > M && (b.own || x + b.w > M + avail)){ x = M; y += rowH + S.gap; rowH = 0; }
-      b.place(x, y);
+        if(x && x + c.width > avail){ x = 0; y += rowH + S.sib; rowH = 0; }
+        b.cards[n.id] = { ...c, x: x + c.width/2, y: y + c.height/2 };
+        x += c.width + S.sib; b.w = Math.max(b.w, x - S.sib); rowH = Math.max(rowH, c.height); });
+      b.h = y + rowH; blocks.push(b);
+    } else rest.forEach(n => blocks.push(one(n)));
+    let width = 0, height = 0;
+    if(roomy){ let x = 0, y = 0, rowH = 0;
+      blocks.forEach(b => { if(x && (b.own || x + b.w > avail)){ x = 0; y += rowH + S.gap; rowH = 0; }
+        b.at = [x, y]; x += b.w + S.gap; rowH = Math.max(rowH, b.h); }); }
+    else { // biggest groups first, so the small ones and the ungrouped cards fill the gaps they leave
+      const order = blocks.map((b, i) => i).sort((i, j) => (blocks[j].routes.length > 0) - (blocks[i].routes.length > 0)
+                                                     || blocks[j].w * blocks[j].h - blocks[i].w * blocks[i].h);
+      pack(order.map(i => blocks[i]), avail, S.gap).forEach((p, k) => { blocks[order[k]].at = p; }); }
+    const boxes = {}, routes = [];
+    blocks.forEach(b => { const [x, y] = [b.at[0] + M, b.at[1] + M]; shift(b, x, y);
       if(b.frame) scene.appendChild(el('rect', { class:'frame', x, y, width:b.w, height:b.h, rx:10 }));
+      // packed tight, a group is told apart by a faint tint under its cards and lines; the layer's
+      // opacity, not each rect's, keeps overlaps from showing darker
+      if(!roomy && b.routes.length){ const hull = el('g', { class:'hull' });
+        rectsOf(b).forEach(([a, t, c, d]) => hull.appendChild(el('rect', { x:a-6, y:t-6, width:c-a+12, height:d-t+12, rx:8 })));
+        scene.appendChild(hull); }
       if(b.heading){ const t = el('text', { class:'eyebrow', x, y:y+10 }); t.textContent = 'UNGROUPED'; scene.appendChild(t); }
-      x += b.w + S.gap; rowH = Math.max(rowH, b.h); width = Math.max(width, x - S.gap + M);
-    });
-    const height = y + rowH + M;
-    const tree = edges(roots);
-    const G = geometry(boxes);
+      Object.assign(boxes, b.cards); routes.push(...b.routes);
+      width = Math.max(width, x + b.w + M); height = Math.max(height, y + b.h + M); });
     // edges first (under nodes); restyle lights them up as messages travel
-    const bus = buses(G, tree);
-    const routes = tree.map(([a,b,l]) => { const pts=treeRoute(G, a, b, bus[a]), path=el('path', {class:'edge', d:rounded(pts)});
-      scene.appendChild(path); edgeEls.set(a+'>'+b, path); return [pts, l, boxes[b]]; });
-    // labels over the edges, each on a mask 6px off the last segment into the child, cut to the room there
-    routes.forEach(([pts, l, c]) => { if(!pts || !l) return;
-      const [j, end] = pts.slice(-2), H = opts.dir==='TB';
-      const room = H ? c.width/2 + 60 : Math.abs(end[0]-j[0]) - 12;
+    const label = {}; edges(roots).forEach(([a, b, l]) => { label[a+'>'+b] = l; });
+    routes.forEach(([a, b, pts]) => { const path = el('path', {class:'edge', d:rounded(pts)});
+      scene.appendChild(path); edgeEls.set(a+'>'+b, path); });
+    // labels over the edges, each on a mask 6px off the last segment into the child, cut to the room
+    // there: beside a drop, or above a run into the card's side (a short run leaves it to the tooltip)
+    routes.forEach(([a, b, pts]) => { const l = label[a+'>'+b], c = boxes[b]; if(!l) return;
+      const [j, end] = pts.slice(-2), drop = j[0] === end[0];
+      const room = drop ? c.width/2 + 60 : Math.abs(end[0]-j[0]) - 12;
       let text = l; while(text.length > 1 && textW(text,'elabel') > room) text = text.slice(0,-2)+'…';
       if(text.length < 3) return;
       const w = Math.ceil(textW(text,'elabel'));
-      const x = H ? j[0]+6 : Math.min(j[0],end[0])+6, y = H ? end[1]-18 : j[1]-18;   // 6px off the child (TB) or above the line (LR)
+      const x = drop ? j[0]+6 : Math.min(j[0],end[0])+6, y = drop ? end[1]-18 : j[1]-18;
       scene.appendChild(el('rect', {class:'emask', x, y, width:w+4, height:12, rx:2}));
       const t=el('text',{class:'elabel', x:x+2, y:y+9}); t.textContent=text; scene.appendChild(t);
       const tip=el('title',{}); tip.textContent=l; t.appendChild(tip); });
@@ -380,18 +468,19 @@ ${MENU_HTML}
       let fold = null;
       if(n.folds){ fold = hel('button',{class:'fold', type:'button', tabindex:'-1'}); content.appendChild(fold);
         fold.addEventListener('pointerdown', ev => ev.stopPropagation());   // a press on the toggle never starts a drag
-        fold.addEventListener('click', ev => { ev.stopPropagation(); toggleFold(n.id); }); }
+        fold.addEventListener('click', ev => { ev.stopPropagation(); setFold(n.id, !folded.has(n.id)); }); }
+      // the right-click menu is VS Code's own, so it draws over the terminal and every other panel
+      sessionContext(grp, n.id, { foldable: !!n.folds, folded: folded.has(n.id) });
       const select=()=>vscode.postMessage({type:'select', id:n.id});
       grp.addEventListener('click', select);
-      // Right-click opens the shared menu; the card highlights as if selected, without switching to it.
-      grp.addEventListener('contextmenu', event => {
+      // A right-click highlights the card as if selected, without switching to it, under the menu.
+      grp.addEventListener('contextmenu', () => {
         selected = n.id;
         nodeEls.forEach((e, id) => e.grp.classList.toggle('selected', id === n.id));
-        showMenu(event, n.id, revealLabel);
       });
       grp.addEventListener('keydown', ev=>{ if(ev.key==='Enter'||ev.key===' '){ ev.preventDefault(); select(); }
         if(n.folds && (ev.key==='ArrowLeft' ? !folded.has(n.id) : ev.key==='ArrowRight' && folded.has(n.id))){
-          ev.preventDefault(); toggleFold(n.id); document.querySelector('.node[data-id="'+n.id+'"]')?.focus(); } });
+          ev.preventDefault(); setFold(n.id, !folded.has(n.id)); document.querySelector('.node[data-id="'+n.id+'"]')?.focus(); } });
       grp.appendChild(ring);
       if(folded.has(n.id)) grp.appendChild(el('rect',{class:'box stack', x:4, y:4, width:nd.width, height:nd.height, rx:6}));
       grp.appendChild(rect); grp.appendChild(title); grp.appendChild(body); scene.appendChild(grp);
@@ -425,9 +514,9 @@ ${MENU_HTML}
   function restyle(snap, now = Date.now()){
     restyleEdges(snap, now);
     const { hidden } = visible(snap.roots), groups = flat(snap.roots).filter(n => n.children.length);
-    const foldAll = document.getElementById('foldAll');
-    foldAll.style.display = groups.length ? '' : 'none';
-    foldAll.textContent = groups.some(n => !folded.has(n.id)) ? '▸ Fold all' : '▾ Unfold all';
+    const fb = document.getElementById('foldAll');
+    fb.style.display = groups.length ? '' : 'none';
+    fb.textContent = groups.some(n => !folded.has(n.id)) ? '▸ Fold all' : '▾ Unfold all';
     flat(snap.roots).forEach(n => {
       const e = nodeEls.get(n.id); if(!e) return;
       const visual=states[n.state]||{symbol:'·',label:n.state};
@@ -454,6 +543,7 @@ ${MENU_HTML}
   ${HARNESS_TABS_JS}
   window.addEventListener('message', ev => {
     if(ev.data?.type==='tabs') return;
+    if(ev.data?.type==='fold'){ ev.data.id ? setFold(ev.data.id, ev.data.on) : foldAll(ev.data.on); return; }
     if(ev.data?.type==='selection'){
       selected=ev.data.id;
       nodeEls.forEach((e,id)=>e.grp.classList.toggle('selected', id===selected));
@@ -470,16 +560,16 @@ ${MENU_HTML}
   let fresh = false;
   function redraw(){ topo = null; sizes = ''; if(last){ relayout(last); restyle(last); } }
   function showOpts(){
-    document.getElementById('dir').textContent = LAYOUTS[opts.dir];
+    document.getElementById('layout').value = opts.layout;
     document.getElementById('spacing').textContent = SPACINGS[opts.spacing];
   }
   function setOpt(k, v){ opts[k] = v; save(); showOpts(); redraw(); }
-  document.getElementById('dir').addEventListener('click', () => setOpt('dir', opts.dir==='TB' ? 'LR' : 'TB'));
+  const layoutPick = document.getElementById('layout');
+  Object.entries(LAYOUTS).forEach(([k, label]) => { const o = hel('option', { value: k }); o.textContent = label; layoutPick.appendChild(o); });
+  layoutPick.addEventListener('change', () => setOpt('layout', layoutPick.value));
   document.getElementById('spacing').addEventListener('click', () => setOpt('spacing', opts.spacing==='compact' ? 'roomy' : 'compact'));
-  document.getElementById('foldAll').addEventListener('click', () => { if(!last) return;
-    const groups = flat(last.roots).filter(n => n.children.length).map(n => n.id);
-    if(groups.some(id => !folded.has(id))) groups.forEach(id => folded.add(id)); else folded.clear();
-    save(); redraw(); });
+  document.getElementById('foldAll').addEventListener('click', () => {
+    if(last) foldAll(flat(last.roots).some(n => n.children.length && !folded.has(n.id))); });
   showOpts();
   document.getElementById('refresh').addEventListener('click', () => { fresh = true; redraw(); vscode.postMessage({type:'refresh'}); });
   document.getElementById('rgApply').addEventListener('click', () => vscode.postMessage({type:'applyGroupPlan'}));
@@ -508,9 +598,8 @@ ${MENU_HTML}
     if(t.id ? t.id!==d.id : t.canvas) vscode.postMessage({type:'group', source:d.id, target:t.id}); });
   wrap.addEventListener('pointercancel', endDrag);
   wrap.addEventListener('click', ev => { if(justDragged){ ev.stopPropagation(); justDragged=false; } }, true);
-  // Empty canvas: the pool actions, exactly as a right-click on the list's background.
-  document.getElementById('wrap').addEventListener('contextmenu', event => {
-    if(!event.target.closest('.node')) showMenu(event, null, revealLabel); });
+  // Empty canvas: the pool actions, as on the list's background, and folding every group.
+  poolContext(document.body, { map: true });
   // snapshots arrive only when something changes, so a quiet pool still needs its lit lines to go out
   window.setInterval?.(() => { if(last) restyleEdges(last, Date.now()); }, 5000);
   document.fonts?.ready.then(redraw);
