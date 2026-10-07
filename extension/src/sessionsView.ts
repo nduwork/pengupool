@@ -84,6 +84,11 @@ export class SessionsView implements vscode.WebviewViewProvider, vscode.Disposab
       await Promise.all([...SessionsView.views].map((view) => view.postState()));
       return;
     }
+    // Opening is not a menu item, so it has its own message rather than going through the menu allowlist.
+    if (message?.type === 'open' && typeof message.id === 'string' && this.provider.find(message.id)) {
+      await vscode.commands.executeCommand('pengupool.switch', message.id);
+      return;
+    }
     if (message?.type === 'group' && typeof message.source === 'string') {
       await this.provider.group(message.source, typeof message.target === 'string' ? message.target : '');
       return;
@@ -175,7 +180,7 @@ ${MENU_HTML}
     twist.addEventListener('click',event=>{ event.stopPropagation(); const closed=children.classList.toggle('collapsed');
       closed?collapsed.add(node.id):collapsed.delete(node.id);
       twist.textContent=closed?'›':'⌄'; row.setAttribute('aria-expanded',String(!closed)); });
-    row.addEventListener('click',()=>command('pengupool.switch',node.id));
+    row.addEventListener('click',()=>{ select(node.id,false); vscode.postMessage({type:'open',id:node.id}); });
     row.addEventListener('contextmenu',event=>{ select(node.id); showMenu(event,node.id,revealLabel); });
     row.addEventListener('dragstart',event=>{ dragged=node.id; event.dataTransfer?.setData('text/plain',node.id); });
     row.addEventListener('dragover',event=>event.preventDefault());
@@ -205,7 +210,7 @@ ${MENU_HTML}
       event.preventDefault(); index=event.key==='ArrowDown'?Math.min(list.length-1,index+1):Math.max(0,index<0?0:index-1);
       if(list[index]){ select(list[index].dataset.id); list[index].scrollIntoView({block:'nearest'}); } return;
     }
-    if(event.key==='Enter'&&selected){ event.preventDefault(); command('pengupool.switch',selected); return; }
+    if(event.key==='Enter'&&selected){ event.preventDefault(); vscode.postMessage({type:'open',id:selected}); return; }
     if(event.ctrlKey||event.metaKey||event.altKey) return;  // Cmd/Ctrl+C is copy, not compact
     const shortcuts={n:'pengupool.new',a:'pengupool.add',g:'pengupool.group',r:'pengupool.rename',d:'pengupool.describe',x:'pengupool.close',c:'pengupool.compact',C:'pengupool.clear',R:'pengupool.restart'};
     const cmd=shortcuts[event.key]; if(cmd&&(!['g','r','x','c','R'].includes(event.key)||selected)){

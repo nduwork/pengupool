@@ -150,3 +150,21 @@ test('Sessions webview forwards Reveal with the session node, like the other row
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(view.commands.at(-1), ['pengupool.reveal', node]);
 });
+
+test('clicking a Sessions row opens that session', async () => {
+  const view = loadSessionsView();
+  const node = { id: 's1', name: 'lead', children: [] };
+  const sessions = new view.SessionsView({ find: (id) => (id === 's1' ? node : undefined) });
+  let receive;
+  sessions.resolveWebviewView({
+    visible: true,
+    webview: { onDidReceiveMessage: (callback) => { receive = callback; return { dispose() {} }; } },
+    onDidChangeVisibility: () => ({ dispose() {} }),
+  });
+  // the row posts `open`, not a menu command: switching is not on the menu's allowlist
+  assert.match(view.sessionsHtml(), /row\.addEventListener\('click',\(\)=>\{ select\(node\.id,false\); vscode\.postMessage\(\{type:'open',id:node\.id\}\); \}\)/);
+  receive({ type: 'open', id: 's1' });
+  receive({ type: 'open', id: 'gone' });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(view.commands, [['pengupool.switch', 's1']]);
+});

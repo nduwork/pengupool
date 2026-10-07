@@ -329,12 +329,13 @@ function fakeDagre(at) {
   return { graphlib: { Graph }, layout() {} };
 }
 
-function drawMap(snap, at) {
+function drawMap(snap, at, width = 2000) {
   const h = loadPanel('mapPanel');
   h.exports.MapPanel.show({ extensionUri: 'extension' }, snapshot, 1);
   const script = [...h.html().matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].at(-1)[1];
   const dom = fakeDom(); const scene = dom.getElementById('scene');
-  dom.getElementById = (id) => (id === 'scene' ? scene : fakeDom().body);
+  const wrap = { ...fakeDom().body, clientWidth: width };
+  dom.getElementById = (id) => (id === 'scene' ? scene : id === 'wrap' ? wrap : fakeDom().body);
   const sandbox = { acquireVsCodeApi: () => ({ postMessage() {} }), document: dom, window: { addEventListener() {} }, dagre: fakeDagre(at) };
   vm.createContext(sandbox);
   vm.runInContext(script, sandbox);
@@ -421,19 +422,72 @@ test('map options switch direction and spacing, and stay across redraws', () => 
   const paths = scene.children.filter((e) => e.className === 'edge');
   assert.equal(paths.length, 2);
   for (const p of paths) assert.ok(rightAngled(p.attrs.d), p.attrs.d);
-  assert.match(paths[0].attrs.d, /^M\d+(\.\d+)?,150 /, 'starts on the lead card, at its centre line');
+  assert.match(paths[0].attrs.d, /^M\d+(\.\d+)?,162 /, 'starts on the lead card, at its centre line (12px margin)');
   vm.runInContext("setOpt('spacing', 'roomy')", sandbox);
   assert.equal(state.opts.spacing, 'roomy', 'saved in the webview state');
   assert.equal(state.opts.dir, 'LR');
 });
 
-test('map stacks ungrouped sessions in one aligned column right of the trees', () => {
+const pos = (out, n) => out.find((c) => c.attrs['aria-label'] === 'Open ' + n)
+  .attrs.transform.match(/translate\(([-\d.]+),([-\d.]+)\)/).slice(1).map(Number);
+
+test('map frames each group and flows ungrouped sessions in a row below them', () => {
   const out = drawMap({ roots: [lead, cc('p', 'payments'), cc('q', 'billing')], cross: [] }, at);
-  const card = (n) => out.find((c) => c.attrs['aria-label'] === 'Open ' + n);
-  const pos = (n) => card(n).attrs.transform.match(/translate\(([-\d.]+),([-\d.]+)\)/).slice(1).map(Number);
-  const [px, py] = pos('payments'), [qx, qy] = pos('billing');
-  assert.equal(px, qx, 'one column');
-  assert.ok(px > 300, 'right of the tree');
-  assert.ok(qy - py >= 16, 'stacked with gaps');
+  assert.equal(out.filter((e) => e.className === 'frame').length, 1, 'one frame per group');
+  const [px, py] = pos(out, 'payments'), [qx, qy] = pos(out, 'billing');
+  assert.equal(py, qy, 'one row');
+  assert.ok(qx > px, 'left to right');
+  assert.ok(py > 300, 'below the group');
   assert.ok(out.some((e) => e.className === 'eyebrow' && e.textContent === 'UNGROUPED'));
 });
+
+test('map groups share a row while they fit the panel, and wrap when they do not', () => {
+  const other = cc('m', 'mono', [cc('k', 'keys')]);
+  const spots = { ...at, m: { x: 200, y: 30 }, k: { x: 200, y: 130 } };
+  const wide = drawMap({ roots: [lead, other], cross: [] }, spots, 2000);
+  assert.equal(pos(wide, 'mono')[1], pos(wide, 'lead')[1], 'side by side');
+  const narrow = drawMap({ roots: [lead, other], cross: [] }, spots, 500);
+  assert.equal(pos(narrow, 'mono')[0], pos(narrow, 'lead')[0], 'wrapped under, left-aligned');
+  assert.ok(pos(narrow, 'mono')[1] > pos(narrow, 'lead')[1] + 300);
+});
+
+test('a folded group shows only its lead, as a stack, counting what it hides', () => {
+  const waiting = { ...lead, children: [lead.children[0], { ...lead.children[1], state: 'waiting' }] };
+  drawMap({ roots: [cc('p', 'payments')], cross: [] }, at);
+  const sb = drawMap.sandbox;
+  sb.snap = { roots: [waiting], cross: [] };
+  vm.runInContext("folded.add('l'); relayout(snap); restyle(snap)", sb);
+  const scene = vm.runInContext("document.getElementById('scene')", sb).children;
+  const cards = scene.filter((e) => /\bnode\b/.test(e.className));
+  assert.deepEqual(cards.map((c) => c.attrs['aria-label']), ['Open lead, Active']);
+  assert.ok(cards[0].children.some((e) => e.className === 'box stack'));
+  assert.equal(scene.filter((e) => e.className === 'edge').length, 0);
+  const fold = vm.runInContext("nodeEls.get('l').fold", sb);
+  assert.equal(fold.textContent, '▸ 2');
+  assert.match(fold.className, /urgent state-waiting/, 'a waiting session folded away still shows');
+  vm.runInContext("folded.clear(); relayout(snap); restyle(snap)", sb);
+  assert.equal(vm.runInContext("nodeEls.get('l').fold.textContent", sb), '▾');
+});
+
+test('parents side by side in a rank get their own bus lane when their families overlap', () => {
+  drawMap({ roots: [lead], cross: [] }, at);
+  const bus = vm.runInContext(`buses(geometry({
+    a: { x: 100, y: 50, width: 80, height: 40 }, b: { x: 300, y: 50, width: 80, height: 40 },
+    a1: { x: 250, y: 200, width: 80, height: 40 }, b1: { x: 150, y: 200, width: 80, height: 40 },
+    c: { x: 600, y: 50, width: 80, height: 40 }, c1: { x: 600, y: 200, width: 80, height: 40 } }),
+    [['a', 'a1'], ['b', 'b1'], ['c', 'c1']])`, drawMap.sandbox);
+  assert.equal(bus.a, 82);
+  assert.equal(bus.b, 90, 'overlaps a, so one lane out');
+  assert.equal(bus.c, 82, 'clear of both, back in the first lane');
+});
+
+test('compact spacing is visibly tighter and leaves the chain to the tooltip', () => {
+  drawMap({ roots: [lead], cross: [] }, at);
+  const sb = drawMap.sandbox;
+  const roomy = vm.runInContext("opts.spacing='roomy'; spacing()", sb);
+  const compact = vm.runInContext("opts.spacing='compact'; spacing()", sb);
+  for (const k of ['nodesep', 'ranksep', 'pad', 'gap']) assert.ok(compact[k] * 1.5 <= roomy[k], k);
+  assert.equal(vm.runInContext("chainOf({ status: 'plan ● → fix ○' })", sb), '');
+  assert.equal(vm.runInContext("opts.spacing='roomy'; chainOf({ status: 'plan ● → fix ○' })", sb), 'plan ● → fix ○');
+});
+

@@ -8,7 +8,10 @@ import { SessionNode } from './serveClient';
  * `runMenuCommand`, so a webview can ask for these commands and no others.
  */
 export const MENU_CSS = `
-  #menu { position:fixed; z-index:10; min-width:230px; padding:4px; display:none;
+  /* Above everything in the webview, and scrolls when the view is shorter than the menu: a webview
+     cannot draw past its own frame, so a menu taller than a short sidebar view would be cut off. */
+  #menu { position:fixed; z-index:2147483647; min-width:230px; padding:4px; display:none;
+    max-height:calc(100vh - 4px); overflow-y:auto; box-sizing:border-box;
     color:var(--vscode-menu-foreground); background:var(--vscode-menu-background);
     border:1px solid var(--vscode-menu-border, var(--vscode-widget-border)); border-radius:6px;
     box-shadow:0 4px 16px var(--vscode-widget-shadow); }
