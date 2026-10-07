@@ -45,6 +45,10 @@ selfcheck() {
   CLAUDE_SETTINGS="$d/w.json" bash "$s" | grep -q "status line restored: echo X" || fail old-wrapped
   python3 -c "import json;assert json.load(open('$d/w.json'))['statusLine']=={'type':'command','command':'echo X'}" || fail old-wrapped-shape
   [[ -e "$STEP_STATUS_HOME/prev-statusline.json" ]] && fail prev-left
+  # ours inside PenguPool's wrapper: unwrap ours, keep theirs
+  HERE="$HERE" python3 -c "import json,os,shlex;o='bash \"'+os.environ['HERE']+'/statusline.sh\" -- '+shlex.quote('echo X');q=shlex.quote(o);json.dump({'statusLine':{'type':'command','command':'[ -x /py ] && exec /py -P -m pengupool.statusline -- '+q+' || eval '+q}},open('$d/p.json','w'))"
+  CLAUDE_SETTINGS="$d/p.json" bash "$s" | grep -q "restored inside PenguPool" || fail pengupool-wrapped
+  python3 -c "import json;assert json.load(open('$d/p.json'))['statusLine']['command']==\"[ -x /py ] && exec /py -P -m pengupool.statusline -- 'echo X' || eval 'echo X'\"" || fail pengupool-wrapped-shape
   HERE="$HERE" python3 -c "import json,os;json.dump({'statusLine':{'type':'command','command':'bash \"'+os.environ['HERE']+'/statusline.sh\"'}},open('$d/t.json','w'))"
   CLAUDE_SETTINGS="$d/t.json" bash "$s" --unwire | grep -q "status line removed" || fail old-standalone
   [[ "$(python3 -c "import json;print(json.load(open('$d/t.json')))")" == "{}" ]] || fail old-standalone-clean
@@ -73,16 +77,31 @@ notes = []
 HOOKS = (("SessionStart", "hook_session_start.sh", "startup|resume|clear|compact"), ("UserPromptSubmit", "hook_prompt.sh", None))
 def ours(cmd, script): return f'"{here}/{script}"' in cmd          # exactly this install (AGENTS.md: only touch our own entries)
 
-# The status line older versions wired: only a command that starts with our own script is ours.
+# The status line older versions wired: only a command that starts with our own script is ours. PenguPool
+# wraps whatever status line it finds, so ours may sit inside its wrapper
+# (`[ -x PY ] && exec PY -P -m pengupool.statusline -- '<ours>' || eval '<ours>'`): take ours out of
+# that layer and keep the wrapper, or the wrapper would go on running a script this install deletes.
+def unwrapped(cmd):
+    """The inner command of our old status line ('' = none), or None when `cmd` is not it."""
+    if not cmd.startswith(f'bash "{here}/statusline.sh"'): return None
+    parts = shlex.split(cmd)
+    return parts[parts.index("--") + 1] if "--" in parts[:-1] else ""
 sl = data.get("statusLine")
 cmd = sl.get("command") if isinstance(sl, dict) else None
-if isinstance(cmd, str) and cmd.startswith(f'bash "{here}/statusline.sh"'):
-    parts = shlex.split(cmd)
-    inner = parts[parts.index("--") + 1] if "--" in parts[:-1] else ""
+if isinstance(cmd, str) and (inner := unwrapped(cmd)) is not None:
     if inner:
         data["statusLine"] = {"type": "command", "command": inner}; notes.append(f"status line restored: {inner}")
     else:
         del data["statusLine"]; notes.append("status line removed")
+elif isinstance(cmd, str) and "-m pengupool.statusline -- " in cmd:
+    try: argv = shlex.split(cmd)
+    except ValueError: argv = []
+    wrapped = argv[argv.index("--") + 1] if "--" in argv[:-1] else ""
+    inner = unwrapped(wrapped)
+    q = shlex.quote(wrapped)
+    if inner is not None and f" -- {q} || eval {q}" in cmd:
+        rest = f" -- {shlex.quote(inner)} || eval {shlex.quote(inner)}" if inner else " || true"
+        sl["command"] = cmd.replace(f" -- {q} || eval {q}", rest); notes.append(f"status line restored inside PenguPool's: {inner or '(standalone)'}")
 if os.path.exists(prev): os.remove(prev)
 
 if mode == "wire":
