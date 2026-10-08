@@ -415,7 +415,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
-    "@types/vscode": "^1.85.0",
+    "@types/vscode": "^1.140.0",
     "@vscode/vsce": "^4.0.0",
     "dagre": "^0.8.5",
     "typescript": "^5.4.0"
