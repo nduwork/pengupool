@@ -5,6 +5,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-07
+
+### Added
+- map layouts, folding groups, and VS Code's own right-click menu (#88)
+
+- Editor extension: 0.9.0 (install both with `install.sh`; they ship together in this tag).
 ## [1.0.1] - 2026-10-04
 
 ### Added
