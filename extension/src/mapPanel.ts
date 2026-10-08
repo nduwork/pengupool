@@ -73,8 +73,17 @@ export class MapPanel {
       // session may propose a regroup but never apply one.
       if (message?.type === 'applyGroupPlan') { void vscode.commands.executeCommand('pengupool.groupPlan'); }
       if (message?.type === 'discardGroupPlan') { void vscode.commands.executeCommand('pengupool.groupPlan.discard'); }
+      // The background menu offers Fold All or Unfold All, whichever the map's fold state calls for, and neither
+      // on a map with no groups; the webview is the only side that knows it, so it reports each change.
+      if (message?.type === 'foldState' && ['none', 'open', 'folded'].includes(message.fold)) {
+        void vscode.commands.executeCommand('setContext', 'pengupool.mapFold', message.fold);
+      }
     });
-    this.panel.onDidDispose(() => { if (MapPanel.current === this) { MapPanel.current = undefined; } });
+    this.panel.onDidDispose(() => {
+      // the key is window-wide, so a closed map must not hand its state to the next one
+      void vscode.commands.executeCommand('setContext', 'pengupool.mapFold', 'none');
+      if (MapPanel.current === this) { MapPanel.current = undefined; }
+    });
   }
 
   update(snap: Snapshot): void {
@@ -511,12 +520,15 @@ ${HARNESS_TABS_HTML}
     banner.classList.add('shown');
   }
   const URGENT = ['blocked', 'waiting'];
+  let reportedFold = '';
   function restyle(snap, now = Date.now()){
     restyleEdges(snap, now);
     const { hidden } = visible(snap.roots), groups = flat(snap.roots).filter(n => n.children.length);
     const fb = document.getElementById('foldAll');
+    const fold = !groups.length ? 'none' : groups.every(n => folded.has(n.id)) ? 'folded' : 'open';
     fb.style.display = groups.length ? '' : 'none';
-    fb.textContent = groups.some(n => !folded.has(n.id)) ? '▸ Fold all' : '▾ Unfold all';
+    fb.textContent = fold === 'folded' ? '▾ Unfold all' : '▸ Fold all';
+    if(fold !== reportedFold){ reportedFold = fold; vscode.postMessage({type:'foldState', fold}); }
     flat(snap.roots).forEach(n => {
       const e = nodeEls.get(n.id); if(!e) return;
       const visual=states[n.state]||{symbol:'·',label:n.state};
@@ -569,7 +581,7 @@ ${HARNESS_TABS_HTML}
   layoutPick.addEventListener('change', () => setOpt('layout', layoutPick.value));
   document.getElementById('spacing').addEventListener('click', () => setOpt('spacing', opts.spacing==='compact' ? 'roomy' : 'compact'));
   document.getElementById('foldAll').addEventListener('click', () => {
-    if(last) foldAll(flat(last.roots).some(n => n.children.length && !folded.has(n.id))); });
+    if(last) foldAll(reportedFold !== 'folded'); });
   showOpts();
   document.getElementById('refresh').addEventListener('click', () => { fresh = true; redraw(); vscode.postMessage({type:'refresh'}); });
   document.getElementById('rgApply').addEventListener('click', () => vscode.postMessage({type:'applyGroupPlan'}));
@@ -602,11 +614,11 @@ ${HARNESS_TABS_HTML}
   poolContext(document.body, { map: true });
   // snapshots arrive only when something changes, so a quiet pool still needs its lit lines to go out
   window.setInterval?.(() => { if(last) restyleEdges(last, Date.now()); }, 5000);
-  document.fonts?.ready.then(redraw);
+  document.fonts?.ready.then(redraw);   // sizes measured before the editor font loaded are wrong
   // the blocks wrap to the panel's width, so a resize that changes it lays them out again
   let laidW = 0, resizing;
   if(window.ResizeObserver) new window.ResizeObserver(() => { if(Math.abs(wrap.clientWidth - laidW) < 24) return; laidW = wrap.clientWidth;
-    clearTimeout(resizing); resizing = setTimeout(redraw, 120); }).observe(wrap);   // sizes measured before the editor font loaded are wrong
+    clearTimeout(resizing); resizing = setTimeout(redraw, 120); }).observe(wrap);
   vscode.postMessage({type:'ready'});
 </script></body></html>`;
 }
