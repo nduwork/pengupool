@@ -73,6 +73,11 @@ export class MapPanel {
       // session may propose a regroup but never apply one.
       if (message?.type === 'applyGroupPlan') { void vscode.commands.executeCommand('pengupool.groupPlan'); }
       if (message?.type === 'discardGroupPlan') { void vscode.commands.executeCommand('pengupool.groupPlan.discard'); }
+      // The background menu offers Fold All or Unfold All, whichever the map's fold state calls for; the
+      // webview is the only side that knows it, so it reports each change and the menu follows.
+      if (message?.type === 'foldState' && typeof message.allFolded === 'boolean') {
+        void vscode.commands.executeCommand('setContext', 'pengupool.allFolded', message.allFolded);
+      }
     });
     this.panel.onDidDispose(() => { if (MapPanel.current === this) { MapPanel.current = undefined; } });
   }
@@ -511,12 +516,14 @@ ${HARNESS_TABS_HTML}
     banner.classList.add('shown');
   }
   const URGENT = ['blocked', 'waiting'];
+  let reportedAllFolded = null;
   function restyle(snap, now = Date.now()){
     restyleEdges(snap, now);
     const { hidden } = visible(snap.roots), groups = flat(snap.roots).filter(n => n.children.length);
-    const fb = document.getElementById('foldAll');
+    const fb = document.getElementById('foldAll'), allFolded = groups.length > 0 && groups.every(n => folded.has(n.id));
     fb.style.display = groups.length ? '' : 'none';
-    fb.textContent = groups.some(n => !folded.has(n.id)) ? '▸ Fold all' : '▾ Unfold all';
+    fb.textContent = allFolded ? '▾ Unfold all' : '▸ Fold all';
+    if(allFolded !== reportedAllFolded){ reportedAllFolded = allFolded; vscode.postMessage({type:'foldState', allFolded}); }
     flat(snap.roots).forEach(n => {
       const e = nodeEls.get(n.id); if(!e) return;
       const visual=states[n.state]||{symbol:'·',label:n.state};
@@ -602,11 +609,11 @@ ${HARNESS_TABS_HTML}
   poolContext(document.body, { map: true });
   // snapshots arrive only when something changes, so a quiet pool still needs its lit lines to go out
   window.setInterval?.(() => { if(last) restyleEdges(last, Date.now()); }, 5000);
-  document.fonts?.ready.then(redraw);
+  document.fonts?.ready.then(redraw);   // sizes measured before the editor font loaded are wrong
   // the blocks wrap to the panel's width, so a resize that changes it lays them out again
   let laidW = 0, resizing;
   if(window.ResizeObserver) new window.ResizeObserver(() => { if(Math.abs(wrap.clientWidth - laidW) < 24) return; laidW = wrap.clientWidth;
-    clearTimeout(resizing); resizing = setTimeout(redraw, 120); }).observe(wrap);   // sizes measured before the editor font loaded are wrong
+    clearTimeout(resizing); resizing = setTimeout(redraw, 120); }).observe(wrap);
   vscode.postMessage({type:'ready'});
 </script></body></html>`;
 }

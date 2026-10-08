@@ -133,7 +133,8 @@ test('the right-click menu of the list and the map is VS Code\'s own, for sessio
   const when = (command) => items.find((item) => item.command === command).when;
   assert.match(when('pengupool.fold'), /&& foldable && !folded$/, 'Fold only on a session with children, still unfolded');
   assert.match(when('pengupool.unfold'), /&& folded$/);
-  assert.match(when('pengupool.foldAll'), /&& map$/, 'folding every group is a map action');
+  assert.match(when('pengupool.foldAll'), /&& map && !pengupool\.allFolded$/, 'Fold All only while a group is still unfolded');
+  assert.match(when('pengupool.unfoldAll'), /&& map && pengupool\.allFolded$/, 'Unfold All only while every group is folded');
   const contributed = new Set(manifest.contributes.commands.map((item) => item.command));
   for (const item of items) { assert.ok(contributed.has(item.command), item.command); }
 });

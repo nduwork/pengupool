@@ -81,6 +81,18 @@ test('a command message from the map is no longer run: the menu is VS Code\'s', 
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(map.commands, []);
 });
+test('the map reports its fold state so the background menu offers only one of the pair', async () => {
+  const map = openMap({ topo_hash: 'h', roots: [] });
+  map.receive({ type: 'foldState', allFolded: true });
+  map.receive({ type: 'foldState', allFolded: 'everything' });   // not a boolean: no context to set
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(map.commands, [['setContext', 'pengupool.allFolded', true]]);
+  const source = fs.readFileSync(path.join(__dirname, '../src/mapPanel.ts'), 'utf8');
+  assert.match(source, /allFolded = groups\.length > 0 && groups\.every\(n => folded\.has\(n\.id\)\)/,
+    'folding every group means every group with children is folded');
+  assert.match(source, /if\(allFolded !== reportedAllFolded\)\{ reportedAllFolded = allFolded; vscode\.postMessage\(\{type:'foldState', allFolded\}\); \}/,
+    'report each change, not every tick');
+});
 
 /** commands.ts against stubs, recording what Fold and the session commands reach. */
 function commandsWith(record) {
