@@ -5,6 +5,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-10-07
+
+### Fixed
+- offer Fold All or Unfold All, not both, in the map's menu (#90)
+
+- Editor extension: 0.9.1 (install both with `install.sh`; they ship together in this tag).
 ## [1.1.0] - 2026-10-07
 
 ### Added

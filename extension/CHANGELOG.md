@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.1
+
+- offer Fold All or Unfold All, not both, in the map's menu (#90)
+
+Ships with PenguPool v1.1.1.
+
 ## 0.9.0
 
 - map layouts, folding groups, and VS Code's own right-click menu (#88)
