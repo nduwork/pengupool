@@ -61,90 +61,130 @@
     "commands": [
       {
         "command": "pengupool.switch",
-        "title": "PenguPool: Open / Focus Session"
+        "title": "Open / Focus Session",
+        "category": "PenguPool"
       },
       {
         "command": "pengupool.reveal",
-        "title": "PenguPool: Reveal Session Folder"
+        "title": "Reveal Session Folder",
+        "category": "PenguPool"
       },
       {
         "command": "pengupool.quickSwitch",
-        "title": "PenguPool: Quick Switch Session…"
+        "title": "Quick Switch Session…",
+        "category": "PenguPool"
       },
       {
         "command": "pengupool.new",
-        "title": "PenguPool: New Session",
-        "icon": "$(add)"
+        "title": "New Session",
+        "icon": "$(add)",
+        "category": "PenguPool"
       },
       {
         "command": "pengupool.add",
-        "title": "PenguPool: Add Previous Session…",
-        "icon": "$(history)"
+        "title": "Add Previous Session…",
+        "icon": "$(history)",
+        "category": "PenguPool"
       },
       {
         "command": "pengupool.resumePrevious",
-        "title": "PenguPool: Resume Previous Sessions…",
-        "icon": "$(run-all)"
+        "title": "Resume Previous Sessions…",
+        "icon": "$(run-all)",
+        "category": "PenguPool"
       },
       {
         "command": "pengupool.group",
-        "title": "PenguPool: Group Under…"
+        "title": "Group Under…",
+        "category": "PenguPool"
       },
       {
         "command": "pengupool.rename",
-        "title": "PenguPool: Rename"
+        "title": "Rename",
+        "category": "PenguPool"
       },
       {
         "command": "pengupool.describe",
-        "title": "PenguPool: Describe Role…"
+        "title": "Describe Role…",
+        "category": "PenguPool"
       },
       {
         "command": "pengupool.close",
-        "title": "PenguPool: Close"
+        "title": "Close",
+        "category": "PenguPool"
       },
       {
         "command": "pengupool.compact",
-        "title": "PenguPool: Compact (/compact)"
+        "title": "Compact (/compact)",
+        "category": "PenguPool"
       },
       {
         "command": "pengupool.clear",
-        "title": "PenguPool: Fresh Context (/clear)"
+        "title": "Fresh Context (/clear)",
+        "category": "PenguPool"
       },
       {
         "command": "pengupool.newChild",
-        "title": "PenguPool: New Child Session…"
+        "title": "New Child Session…",
+        "category": "PenguPool"
       },
       {
         "command": "pengupool.addChild",
-        "title": "PenguPool: Add Previous Session as Child…"
+        "title": "Add Previous Session as Child…",
+        "category": "PenguPool"
       },
       {
         "command": "pengupool.copyPath",
-        "title": "PenguPool: Copy Path"
+        "title": "Copy Path",
+        "category": "PenguPool"
       },
       {
         "command": "pengupool.groupPlan",
-        "title": "PenguPool: Apply Regrouping",
-        "icon": "$(list-unordered)"
+        "title": "Apply Regrouping",
+        "icon": "$(list-unordered)",
+        "category": "PenguPool"
       },
       {
         "command": "pengupool.restart",
-        "title": "PenguPool: Restart & Resume"
+        "title": "Restart & Resume",
+        "category": "PenguPool"
       },
       {
         "command": "pengupool.showMap",
-        "title": "PenguPool: Show Map",
-        "icon": "$(type-hierarchy)"
+        "title": "Show Map",
+        "icon": "$(type-hierarchy)",
+        "category": "PenguPool"
       },
       {
         "command": "pengupool.showLog",
-        "title": "PenguPool: Show Log",
-        "icon": "$(output)"
+        "title": "Show Log",
+        "icon": "$(output)",
+        "category": "PenguPool"
       },
       {
         "command": "pengupool.refresh",
-        "title": "PenguPool: Refresh",
-        "icon": "$(refresh)"
+        "title": "Refresh",
+        "icon": "$(refresh)",
+        "category": "PenguPool"
+      },
+      {
+        "command": "pengupool.fold",
+        "title": "Fold Group",
+        "category": "PenguPool"
+      },
+      {
+        "command": "pengupool.unfold",
+        "title": "Unfold Group",
+        "category": "PenguPool"
+      },
+      {
+        "command": "pengupool.foldAll",
+        "title": "Fold All Groups",
+        "category": "PenguPool"
+      },
+      {
+        "command": "pengupool.unfoldAll",
+        "title": "Unfold All Groups",
+        "category": "PenguPool"
       }
     ],
     "menus": {
@@ -185,6 +225,113 @@
           "command": "pengupool.groupPlan",
           "when": "webview == pengupoolMap && pengupool.groupPlanPending",
           "group": "navigation@1"
+        }
+      ],
+      "webview/context": [
+        {
+          "command": "pengupool.fold",
+          "when": "(webviewId == pengupoolSessions || webviewId == pengupoolPiSessions || webviewId == pengupoolMap) && webviewSection == session && foldable && !folded",
+          "group": "0_fold@1"
+        },
+        {
+          "command": "pengupool.unfold",
+          "when": "(webviewId == pengupoolSessions || webviewId == pengupoolPiSessions || webviewId == pengupoolMap) && webviewSection == session && folded",
+          "group": "0_fold@2"
+        },
+        {
+          "command": "pengupool.newChild",
+          "when": "(webviewId == pengupoolSessions || webviewId == pengupoolPiSessions || webviewId == pengupoolMap) && webviewSection == session",
+          "group": "1_add@1"
+        },
+        {
+          "command": "pengupool.addChild",
+          "when": "(webviewId == pengupoolSessions || webviewId == pengupoolPiSessions || webviewId == pengupoolMap) && webviewSection == session",
+          "group": "1_add@2"
+        },
+        {
+          "command": "pengupool.resumePrevious",
+          "when": "(webviewId == pengupoolSessions || webviewId == pengupoolPiSessions || webviewId == pengupoolMap) && webviewSection == session",
+          "group": "1_add@3"
+        },
+        {
+          "command": "pengupool.reveal",
+          "when": "(webviewId == pengupoolSessions || webviewId == pengupoolPiSessions || webviewId == pengupoolMap) && webviewSection == session",
+          "group": "2_folder@1"
+        },
+        {
+          "command": "pengupool.copyPath",
+          "when": "(webviewId == pengupoolSessions || webviewId == pengupoolPiSessions || webviewId == pengupoolMap) && webviewSection == session",
+          "group": "2_folder@2"
+        },
+        {
+          "command": "pengupool.compact",
+          "when": "(webviewId == pengupoolSessions || webviewId == pengupoolPiSessions || webviewId == pengupoolMap) && webviewSection == session",
+          "group": "3_context@1"
+        },
+        {
+          "command": "pengupool.clear",
+          "when": "(webviewId == pengupoolSessions || webviewId == pengupoolPiSessions || webviewId == pengupoolMap) && webviewSection == session",
+          "group": "3_context@2"
+        },
+        {
+          "command": "pengupool.restart",
+          "when": "(webviewId == pengupoolSessions || webviewId == pengupoolPiSessions || webviewId == pengupoolMap) && webviewSection == session",
+          "group": "3_context@3"
+        },
+        {
+          "command": "pengupool.group",
+          "when": "(webviewId == pengupoolSessions || webviewId == pengupoolPiSessions || webviewId == pengupoolMap) && webviewSection == session",
+          "group": "4_place@1"
+        },
+        {
+          "command": "pengupool.rename",
+          "when": "(webviewId == pengupoolSessions || webviewId == pengupoolPiSessions || webviewId == pengupoolMap) && webviewSection == session",
+          "group": "4_place@2"
+        },
+        {
+          "command": "pengupool.describe",
+          "when": "(webviewId == pengupoolSessions || webviewId == pengupoolPiSessions || webviewId == pengupoolMap) && webviewSection == session",
+          "group": "4_place@3"
+        },
+        {
+          "command": "pengupool.close",
+          "when": "(webviewId == pengupoolSessions || webviewId == pengupoolPiSessions || webviewId == pengupoolMap) && webviewSection == session",
+          "group": "9_close@1"
+        },
+        {
+          "command": "pengupool.new",
+          "when": "(webviewId == pengupoolSessions || webviewId == pengupoolPiSessions || webviewId == pengupoolMap) && webviewSection == pool",
+          "group": "1_add@1"
+        },
+        {
+          "command": "pengupool.add",
+          "when": "(webviewId == pengupoolSessions || webviewId == pengupoolPiSessions || webviewId == pengupoolMap) && webviewSection == pool",
+          "group": "1_add@2"
+        },
+        {
+          "command": "pengupool.resumePrevious",
+          "when": "(webviewId == pengupoolSessions || webviewId == pengupoolPiSessions || webviewId == pengupoolMap) && webviewSection == pool",
+          "group": "1_add@3"
+        },
+        {
+          "command": "pengupool.foldAll",
+          "when": "(webviewId == pengupoolSessions || webviewId == pengupoolPiSessions || webviewId == pengupoolMap) && webviewSection == pool && map",
+          "group": "0_fold@1"
+        },
+        {
+          "command": "pengupool.unfoldAll",
+          "when": "(webviewId == pengupoolSessions || webviewId == pengupoolPiSessions || webviewId == pengupoolMap) && webviewSection == pool && map",
+          "group": "0_fold@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "pengupool.fold",
+          "when": "false"
+        },
+        {
+          "command": "pengupool.unfold",
+          "when": "false"
         }
       ]
     },

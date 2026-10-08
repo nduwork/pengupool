@@ -51,7 +51,7 @@ function loadPanel(sourceName) {
         CTX_LEVEL_JS: load('sessionState').CTX_LEVEL_JS,   // the real level rule, so tests check it
         CTX_LEVEL_CSS: '',
       };
-      if (id === './webviewMenu') return { MENU_CSS: '', MENU_HTML: '', MENU_JS: '', runMenuCommand: async () => true };
+      if (id === './webviewMenu') return { SESSION_CONTEXT_JS: 'function sessionContext(){} function poolContext(){} const command=()=>{};', runMenuCommand: async () => true };
       if (id === './util') return {
         runCtl: async (args) => { ctl.push(args); return { code: 0, stdout: '', stderr: '' }; },
       };
@@ -310,10 +310,11 @@ test('map cards stay compact without a chain and grow with its length', () => {
   const size = (status, ctx = 12) => vm.runInContext(
     `cardSize({name:'worker', repo:'repo', ctx_pct:${ctx}, status:${JSON.stringify(status)}, children:[]})`, sandbox);
   const compact = size(''), short = size('[fix] a ●'), long = size('[harness-tabs] ext ● → tui ○ → verify ○ → pr ○ → release ○');
-  assert.deepEqual({ ...compact }, { width: 140, height: 3 * 14 + 12 + 2 }, 'state, name and meta lines only (+2px slack)');
+  assert.deepEqual({ ...compact }, { width: 180, height: 3 * 14 + 12 + 2 }, 'state, name and meta lines only (+2px slack)');
+  assert.equal(short.width, 260, 'two widths only: a card with a chain is the wide one');
+  assert.equal(long.width, 260);
   assert.ok(short.height > compact.height);
-  assert.ok(long.width > short.width || long.height > short.height);
-  assert.ok(long.width * long.height > short.width * short.height);
+  assert.ok(long.height >= short.height, 'a longer chain grows the card down, never wider');
   assert.deepEqual({ ...size('', 100) }, { ...size('', 2) }, 'ctx % changes never resize a card');
 });
 
@@ -329,12 +330,13 @@ function fakeDagre(at) {
   return { graphlib: { Graph }, layout() {} };
 }
 
-function drawMap(snap, at) {
+function drawMap(snap, at, width = 2000) {
   const h = loadPanel('mapPanel');
   h.exports.MapPanel.show({ extensionUri: 'extension' }, snapshot, 1);
   const script = [...h.html().matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].at(-1)[1];
   const dom = fakeDom(); const scene = dom.getElementById('scene');
-  dom.getElementById = (id) => (id === 'scene' ? scene : fakeDom().body);
+  const wrap = { ...fakeDom().body, clientWidth: width };
+  dom.getElementById = (id) => (id === 'scene' ? scene : id === 'wrap' ? wrap : fakeDom().body);
   const sandbox = { acquireVsCodeApi: () => ({ postMessage() {} }), document: dom, window: { addEventListener() {} }, dagre: fakeDagre(at) };
   vm.createContext(sandbox);
   vm.runInContext(script, sandbox);
@@ -421,19 +423,107 @@ test('map options switch direction and spacing, and stay across redraws', () => 
   const paths = scene.children.filter((e) => e.className === 'edge');
   assert.equal(paths.length, 2);
   for (const p of paths) assert.ok(rightAngled(p.attrs.d), p.attrs.d);
-  assert.match(paths[0].attrs.d, /^M\d+(\.\d+)?,150 /, 'starts on the lead card, at its centre line');
-  vm.runInContext("setOpt('spacing', 'roomy')", sandbox);
-  assert.equal(state.opts.spacing, 'roomy', 'saved in the webview state');
-  assert.equal(state.opts.dir, 'LR');
+  assert.match(paths[0].attrs.d, /^M\d+(\.\d+)?,182 /, 'starts on the lead card, at its centre line (12px margin + 20px frame pad)');
+  vm.runInContext("setOpt('spacing', 'compact')", sandbox);
+  assert.equal(state.opts.spacing, 'compact', 'saved in the webview state');
+  assert.equal(state.opts.layout, 'right', 'a left-right map saved before layouts had names stays left-right');
 });
 
-test('map stacks ungrouped sessions in one aligned column right of the trees', () => {
+const pos = (out, n) => out.find((c) => c.attrs['aria-label'] === 'Open ' + n)
+  .attrs.transform.match(/translate\(([-\d.]+),([-\d.]+)\)/).slice(1).map(Number);
+
+const frames = (out) => out.filter((e) => e.className === 'frame').map((f) => ['x', 'y', 'width', 'height'].map((k) => Number(f.attrs[k])));
+
+test('map frames each group and flows ungrouped sessions in a row below them', () => {
   const out = drawMap({ roots: [lead, cc('p', 'payments'), cc('q', 'billing')], cross: [] }, at);
-  const card = (n) => out.find((c) => c.attrs['aria-label'] === 'Open ' + n);
-  const pos = (n) => card(n).attrs.transform.match(/translate\(([-\d.]+),([-\d.]+)\)/).slice(1).map(Number);
-  const [px, py] = pos('payments'), [qx, qy] = pos('billing');
-  assert.equal(px, qx, 'one column');
-  assert.ok(px > 300, 'right of the tree');
-  assert.ok(qy - py >= 16, 'stacked with gaps');
+  const [frame, ...more] = frames(out);
+  assert.equal(more.length, 0, 'one frame per group');
+  const [px, py] = pos(out, 'payments'), [qx, qy] = pos(out, 'billing');
+  assert.equal(py, qy, 'one row');
+  assert.ok(qx > px, 'left to right');
+  assert.ok(py > frame[1] + frame[3], 'below the group');
   assert.ok(out.some((e) => e.className === 'eyebrow' && e.textContent === 'UNGROUPED'));
+});
+
+test('map groups share a row while they fit the panel, and wrap when they do not', () => {
+  const other = cc('m', 'mono', [cc('k', 'keys')]);
+  const wide = frames(drawMap({ roots: [lead, other], cross: [] }, at, 2000));
+  assert.equal(wide[1][1], wide[0][1], 'side by side');
+  assert.ok(wide[1][0] >= wide[0][0] + wide[0][2] + 40, 'roomy keeps 40px between frames');
+  const narrow = frames(drawMap({ roots: [lead, other], cross: [] }, at, 500));
+  assert.equal(narrow[1][0], narrow[0][0], 'wrapped under, left-aligned');
+  assert.ok(narrow[1][1] >= narrow[0][1] + narrow[0][3] + 40);
+});
+
+test('a folded group shows only its lead, as a stack, counting what it hides', () => {
+  const waiting = { ...lead, children: [lead.children[0], { ...lead.children[1], state: 'waiting' }] };
+  drawMap({ roots: [cc('p', 'payments')], cross: [] }, at);
+  const sb = drawMap.sandbox;
+  sb.snap = { roots: [waiting], cross: [] };
+  vm.runInContext("folded.add('l'); relayout(snap); restyle(snap)", sb);
+  const scene = vm.runInContext("document.getElementById('scene')", sb).children;
+  const cards = scene.filter((e) => /\bnode\b/.test(e.className));
+  assert.deepEqual(cards.map((c) => c.attrs['aria-label']), ['Open lead, Active']);
+  assert.ok(cards[0].children.some((e) => e.className === 'box stack'));
+  assert.equal(scene.filter((e) => e.className === 'edge').length, 0);
+  const fold = vm.runInContext("nodeEls.get('l').fold", sb);
+  assert.equal(fold.textContent, '▸ 2');
+  assert.match(fold.className, /urgent state-waiting/, 'a waiting session folded away still shows');
+  vm.runInContext("folded.clear(); relayout(snap); restyle(snap)", sb);
+  assert.equal(vm.runInContext("nodeEls.get('l').fold.textContent", sb), '▾');
+});
+
+test('parents side by side in a rank get their own bus lane when their families overlap', () => {
+  drawMap({ roots: [lead], cross: [] }, at);
+  const bus = vm.runInContext(`buses(geometry({
+    a: { x: 100, y: 50, width: 80, height: 40 }, b: { x: 300, y: 50, width: 80, height: 40 },
+    a1: { x: 250, y: 200, width: 80, height: 40 }, b1: { x: 150, y: 200, width: 80, height: 40 },
+    c: { x: 600, y: 50, width: 80, height: 40 }, c1: { x: 600, y: 200, width: 80, height: 40 } }, true),
+    [['a', 'a1'], ['b', 'b1'], ['c', 'c1']])`, drawMap.sandbox);
+  assert.equal(bus.a, 82);
+  assert.equal(bus.b, 90, 'overlaps a, so one lane out');
+  assert.equal(bus.c, 82, 'clear of both, back in the first lane');
+});
+
+test('compact spacing is visibly tighter and leaves the chain to the tooltip', () => {
+  drawMap({ roots: [lead], cross: [] }, at);
+  const sb = drawMap.sandbox;
+  const roomy = vm.runInContext("opts.spacing='roomy'; spacing()", sb);
+  const compact = vm.runInContext("opts.spacing='compact'; spacing()", sb);
+  for (const k of ['sib', 'rank', 'stack', 'gap']) assert.ok(compact[k] * 1.5 <= roomy[k], k);
+  assert.equal(compact.pad, 0, 'no frames when compact');
+  assert.equal(vm.runInContext("chainOf({ status: 'plan ● → fix ○' })", sb), '');
+  assert.equal(vm.runInContext("opts.spacing='roomy'; chainOf({ status: 'plan ● → fix ○' })", sb), 'plan ● → fix ○');
+});
+
+
+test('org chart stacks a family of three or more leaves in a column on a spine', () => {
+  const wide = cc('g', 'gateway', ['a', 'b', 'c', 'd'].map((k) => cc(k, 'kid-' + k)));
+  const out = drawMap({ roots: [wide], cross: [] }, {});
+  const xs = ['a', 'b', 'c', 'd'].map((k) => pos(out, 'kid-' + k)[0]), ys = ['a', 'b', 'c', 'd'].map((k) => pos(out, 'kid-' + k)[1]);
+  assert.equal(new Set(xs).size, 1, 'one column');
+  assert.ok(ys.every((y, i) => !i || y > ys[i - 1]), 'stacked top to bottom');
+  const paths = out.filter((e) => e.className === 'edge');
+  assert.equal(paths.length, 4);
+  for (const p of paths) assert.ok(rightAngled(p.attrs.d), p.attrs.d);
+});
+
+test('compact packs groups closer than roomy, and no group reaches into another family', () => {
+  const groups = ['p', 'q', 'r'].map((g) => cc(g, 'lead-' + g, [cc(g + '1', g + '-one'), cc(g + '2', g + '-two')]));
+  drawMap({ roots: groups, cross: [] }, {}, 900);
+  const sb = drawMap.sandbox;
+  sb.snap = { roots: groups, cross: [] };
+  const svgOf = (spacing) => { vm.runInContext(`opts.spacing='${spacing}'`, sb);
+    const scene = vm.runInContext("document.getElementById('scene')", sb);
+    vm.runInContext('relayout(snap)', sb); return scene.children; };
+  const area = (out) => { const ps = out.filter((e) => /\bnode\b/.test(e.className)).map((c) => c.attrs.transform.match(/([-\d.]+),([-\d.]+)/).slice(1).map(Number));
+    return (Math.max(...ps.map((p) => p[0])) + 180) * (Math.max(...ps.map((p) => p[1])) + 56); };
+  assert.ok(area(svgOf('compact')) < area(svgOf('roomy')));
+  const blocks = vm.runInContext("['p','q','r'].map(g => rectsOf(LAYOUT.org(visible(snap.roots).roots.find(r => r.id === g), spacing())))", sb);
+  const placed = vm.runInContext("pack(['p','q','r'].map(g => LAYOUT.org(visible(snap.roots).roots.find(r => r.id === g), spacing())), 876, 16)", sb);
+  const moved = blocks.map((rs, i) => rs.map(([a, b, c, d]) => [a + placed[i][0], b + placed[i][1], c + placed[i][0], d + placed[i][1]]));
+  for (let i = 0; i < 3; i++) for (let j = i + 1; j < 3; j++) for (const r of moved[i]) for (const s of moved[j]) {
+    const apart = r[2] + 16 <= s[0] || s[2] + 16 <= r[0] || r[3] + 16 <= s[1] || s[3] + 16 <= r[1];
+    assert.ok(apart, `group ${i} and ${j} come within 16px`);
+  }
 });
