@@ -315,12 +315,12 @@
         },
         {
           "command": "pengupool.foldAll",
-          "when": "(webviewId == pengupoolSessions || webviewId == pengupoolPiSessions || webviewId == pengupoolMap) && webviewSection == pool && map && !pengupool.allFolded",
+          "when": "(webviewId == pengupoolSessions || webviewId == pengupoolPiSessions || webviewId == pengupoolMap) && webviewSection == pool && map && pengupool.mapFold == open",
           "group": "0_fold@1"
         },
         {
           "command": "pengupool.unfoldAll",
-          "when": "(webviewId == pengupoolSessions || webviewId == pengupoolPiSessions || webviewId == pengupoolMap) && webviewSection == pool && map && pengupool.allFolded",
+          "when": "(webviewId == pengupoolSessions || webviewId == pengupoolPiSessions || webviewId == pengupoolMap) && webviewSection == pool && map && pengupool.mapFold == folded",
           "group": "0_fold@2"
         }
       ],

@@ -24,7 +24,8 @@ function openMap(snapshot) {
     postMessage: async () => true,
     onDidReceiveMessage: (callback) => { receive = callback; return { dispose() {} }; },
   };
-  const panel = { webview, reveal() {}, dispose() {}, onDidDispose: () => ({ dispose() {} }) };
+  let disposed;
+  const panel = { webview, reveal() {}, dispose() {}, onDidDispose: (callback) => { disposed = callback; return { dispose() {} }; } };
   const vscode = {
     ViewColumn: { One: 1, Beside: -2 },
     Uri: { joinPath: (...parts) => parts.join('/') },
@@ -52,7 +53,7 @@ function openMap(snapshot) {
     throw new Error('Unexpected dependency: ' + id);
   }
   load('mapPanel').MapPanel.show({ extensionUri: 'ext' }, snapshot);
-  return { receive, commands, html: webview.html };
+  return { receive, commands, html: webview.html, dispose: () => disposed() };
 }
 
 test('the map webview script parses with the session tags in place', () => {
@@ -83,15 +84,21 @@ test('a command message from the map is no longer run: the menu is VS Code\'s', 
 });
 test('the map reports its fold state so the background menu offers only one of the pair', async () => {
   const map = openMap({ topo_hash: 'h', roots: [] });
-  map.receive({ type: 'foldState', allFolded: true });
-  map.receive({ type: 'foldState', allFolded: 'everything' });   // not a boolean: no context to set
+  map.receive({ type: 'foldState', fold: 'folded' });
+  map.receive({ type: 'foldState', fold: 'everything' });   // not a known state: no context to set
   await new Promise((resolve) => setImmediate(resolve));
-  assert.deepEqual(map.commands, [['setContext', 'pengupool.allFolded', true]]);
+  assert.deepEqual(map.commands, [['setContext', 'pengupool.mapFold', 'folded']]);
   const source = fs.readFileSync(path.join(__dirname, '../src/mapPanel.ts'), 'utf8');
-  assert.match(source, /allFolded = groups\.length > 0 && groups\.every\(n => folded\.has\(n\.id\)\)/,
-    'folding every group means every group with children is folded');
-  assert.match(source, /if\(allFolded !== reportedAllFolded\)\{ reportedAllFolded = allFolded; vscode\.postMessage\(\{type:'foldState', allFolded\}\); \}/,
+  assert.match(source, /const fold = !groups\.length \? 'none' : groups\.every\(n => folded\.has\(n\.id\)\) \? 'folded' : 'open';/,
+    'no groups offers neither; folding every group means every group with children is folded');
+  assert.match(source, /if\(fold !== reportedFold\)\{ reportedFold = fold; vscode\.postMessage\(\{type:'foldState', fold\}\); \}/,
     'report each change, not every tick');
+});
+test('closing the map clears its fold state, so the next map does not inherit it', async () => {
+  const map = openMap({ topo_hash: 'h', roots: [] });
+  map.dispose();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(map.commands, [['setContext', 'pengupool.mapFold', 'none']]);
 });
 
 /** commands.ts against stubs, recording what Fold and the session commands reach. */

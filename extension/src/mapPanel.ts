@@ -73,13 +73,17 @@ export class MapPanel {
       // session may propose a regroup but never apply one.
       if (message?.type === 'applyGroupPlan') { void vscode.commands.executeCommand('pengupool.groupPlan'); }
       if (message?.type === 'discardGroupPlan') { void vscode.commands.executeCommand('pengupool.groupPlan.discard'); }
-      // The background menu offers Fold All or Unfold All, whichever the map's fold state calls for; the
-      // webview is the only side that knows it, so it reports each change and the menu follows.
-      if (message?.type === 'foldState' && typeof message.allFolded === 'boolean') {
-        void vscode.commands.executeCommand('setContext', 'pengupool.allFolded', message.allFolded);
+      // The background menu offers Fold All or Unfold All, whichever the map's fold state calls for, and neither
+      // on a map with no groups; the webview is the only side that knows it, so it reports each change.
+      if (message?.type === 'foldState' && ['none', 'open', 'folded'].includes(message.fold)) {
+        void vscode.commands.executeCommand('setContext', 'pengupool.mapFold', message.fold);
       }
     });
-    this.panel.onDidDispose(() => { if (MapPanel.current === this) { MapPanel.current = undefined; } });
+    this.panel.onDidDispose(() => {
+      // the key is window-wide, so a closed map must not hand its state to the next one
+      void vscode.commands.executeCommand('setContext', 'pengupool.mapFold', 'none');
+      if (MapPanel.current === this) { MapPanel.current = undefined; }
+    });
   }
 
   update(snap: Snapshot): void {
@@ -516,14 +520,15 @@ ${HARNESS_TABS_HTML}
     banner.classList.add('shown');
   }
   const URGENT = ['blocked', 'waiting'];
-  let reportedAllFolded = null;
+  let reportedFold = '';
   function restyle(snap, now = Date.now()){
     restyleEdges(snap, now);
     const { hidden } = visible(snap.roots), groups = flat(snap.roots).filter(n => n.children.length);
-    const fb = document.getElementById('foldAll'), allFolded = groups.length > 0 && groups.every(n => folded.has(n.id));
+    const fb = document.getElementById('foldAll');
+    const fold = !groups.length ? 'none' : groups.every(n => folded.has(n.id)) ? 'folded' : 'open';
     fb.style.display = groups.length ? '' : 'none';
-    fb.textContent = allFolded ? '▾ Unfold all' : '▸ Fold all';
-    if(allFolded !== reportedAllFolded){ reportedAllFolded = allFolded; vscode.postMessage({type:'foldState', allFolded}); }
+    fb.textContent = fold === 'folded' ? '▾ Unfold all' : '▸ Fold all';
+    if(fold !== reportedFold){ reportedFold = fold; vscode.postMessage({type:'foldState', fold}); }
     flat(snap.roots).forEach(n => {
       const e = nodeEls.get(n.id); if(!e) return;
       const visual=states[n.state]||{symbol:'·',label:n.state};
@@ -576,7 +581,7 @@ ${HARNESS_TABS_HTML}
   layoutPick.addEventListener('change', () => setOpt('layout', layoutPick.value));
   document.getElementById('spacing').addEventListener('click', () => setOpt('spacing', opts.spacing==='compact' ? 'roomy' : 'compact'));
   document.getElementById('foldAll').addEventListener('click', () => {
-    if(last) foldAll(flat(last.roots).some(n => n.children.length && !folded.has(n.id))); });
+    if(last) foldAll(reportedFold !== 'folded'); });
   showOpts();
   document.getElementById('refresh').addEventListener('click', () => { fresh = true; redraw(); vscode.postMessage({type:'refresh'}); });
   document.getElementById('rgApply').addEventListener('click', () => vscode.postMessage({type:'applyGroupPlan'}));
