@@ -2,13 +2,14 @@
 Real temp git repos; origin is a bare repo reached through a github.com URL (insteadOf), and `gh` is a
 fake on PATH whose PR state lives in files."""
 import datetime
+import json
 import os
 import subprocess
 from pathlib import Path
 
 import pytest
 
-from pengupool import model, skillpool, tmux
+from pengupool import ctl, model, skillpool, tmux
 
 FAKE_GH = r"""#!/bin/sh
 echo "$*" >> "$FAKE_GH/calls"
@@ -239,3 +240,19 @@ def test_release_versions_changelog_and_refusals(env, monkeypatch):
     git(top, "checkout", "-q", "-b", "side")
     with pytest.raises(skillpool.Refused, match="main"):
         skillpool.release(top)
+
+
+def test_ctl_verbs_and_exit_codes(env, monkeypatch, capsys):
+    top = make_repo(env)
+    assert ctl.main(["pool", "add", top]) == 0 and capsys.readouterr().out.strip() == top
+    assert ctl.main(["pool", "ls"]) == 0
+    assert json.loads(capsys.readouterr().out)[0]["repo"] == top
+    assert ctl.main(["pool", "add", str(env)]) == 3 and "not a git repo" in capsys.readouterr().err
+    assert ctl.main(["pool", "frob"]) == 2
+    wt, _ = wt_with_commit(top)
+    assert ctl.main(["worktree-rm", wt]) == 4 and "not merged" in capsys.readouterr().err
+    assert ctl.main(["worktree-rm", wt, "--force"]) == 2
+    assert ctl.main(["pool", "rm", top]) == 0 and skillpool.load() == []
+    monkeypatch.setattr(skillpool, "release", lambda d: "v2026.10.10")
+    capsys.readouterr()
+    assert ctl.main(["release", top]) == 0 and capsys.readouterr().out.strip() == "v2026.10.10"
