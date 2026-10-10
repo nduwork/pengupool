@@ -24,6 +24,12 @@ Verbs:
                                   for the user to review (any session may propose; nothing moves yet)
     group-apply [--discard]       apply the pending proposal to the group tree, or drop it (user only)
     worktree-add <dir> <name>     git worktree for a session; print the path (or <dir>)
+    worktree-rm <path> [--merge]  remove a pengupool/* worktree and its branch once its PR is merged;
+                                  exit 4 when it is not, --merge squash-merges it and releases the repo
+                                  (pool repos only); refuses when ignored files would go
+    pool ls | add <dir> | rm <dir>  the skill-repo pool (JSON for ls); add needs a GitHub origin
+    pool clone <owner/repo|url> <parent>  clone a GitHub repo into <parent>/<repo> and add it
+    release <repo>                release a pool repo from main: date tag, CHANGELOG, GitHub release
     past <dir>                    JSON [[sessionId, title, harness], …] of resumable past sessions
     past-all                      JSON [[sessionId, title, harness, cwd, updated], …] of every resumable
                                   session the pool knows, newest first (a reboot leaves them here)
@@ -340,6 +346,39 @@ def _worktree_add(directory: str, name: str) -> int:
     return 0
 
 
+def _skill(fn) -> int:
+    """Run a skillpool call: its result on stdout; a refusal's reason on stderr, exit 4 if unmerged else 3."""
+    from . import skillpool
+    try:
+        out = fn(skillpool)
+    except skillpool.Unmerged as e:
+        print(e, file=sys.stderr)
+        return 4
+    except skillpool.Refused as e:
+        print(e, file=sys.stderr)
+        return 3
+    print(out)
+    return 0
+
+
+def _pool(verb: str, d: str = "", parent: str = "") -> int:
+    if verb == "ls" and not d:
+        return _skill(lambda s: json.dumps(s.ls()))
+    if verb in ("add", "rm") and d:
+        return _skill(lambda s: s.add(d) if verb == "add" else s.remove(d))
+    if verb == "clone" and d and parent:
+        return _skill(lambda s: s.clone(d, parent))
+    print("usage: pengupool ctl pool ls | add <dir> | rm <dir> | clone <owner/repo|url> <parent-dir>", file=sys.stderr)
+    return 2
+
+
+def _worktree_rm(path: str, flag: str = "") -> int:
+    if flag not in ("", "--merge"):
+        print("usage: pengupool ctl worktree-rm <path> [--merge]", file=sys.stderr)
+        return 2
+    return _skill(lambda s: s.worktree_rm(path, flag == "--merge"))
+
+
 def _past(directory: str) -> int:
     print(json.dumps(model.past_sessions(directory)))
     return 0
@@ -473,7 +512,7 @@ def main(argv: list[str] | None = None) -> int:
     if json_output:
         argv.pop(0)
     if not argv:
-        print("usage: pengupool ctl new|resume|restart|adopt|attach|close|group|worktree-add|past|past-all|context|describe|profile|tree|route|authorize|clear-logs …", file=sys.stderr)
+        print("usage: pengupool ctl new|resume|restart|adopt|attach|close|group|worktree-add|worktree-rm|pool|release|past|past-all|context|describe|profile|tree|route|authorize|clear-logs …", file=sys.stderr)
         return 2
     verb, a = argv[0], argv[1:]
     if verb == "describe" and a:
@@ -499,6 +538,12 @@ def main(argv: list[str] | None = None) -> int:
         ("group-apply", 0): _group_apply,
         ("group-apply", 1): lambda: _group_apply(a[0]),
         ("worktree-add", 2): lambda: _worktree_add(a[0], a[1]),
+        ("worktree-rm", 1): lambda: _worktree_rm(a[0]),
+        ("worktree-rm", 2): lambda: _worktree_rm(a[0], a[1]),
+        ("pool", 1): lambda: _pool(a[0]),
+        ("pool", 2): lambda: _pool(a[0], a[1]),
+        ("pool", 3): lambda: _pool(a[0], a[1], a[2]),
+        ("release", 1): lambda: _skill(lambda s: s.release(a[0])),
         ("past", 1): lambda: _past(a[0]),
         ("past-all", 0): _past_all,
         ("context", 1): lambda: _context(a[0]),
