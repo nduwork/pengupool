@@ -162,7 +162,8 @@ function fakeDom() {
     const e = {
       style: {}, children: [], textContent: '', className: '',
       attrs: {}, setAttribute(k, v) { e.attrs[k] = v; if (k === 'class') { e.className = v; } }, appendChild(c) { e.children.push(c); },
-      addEventListener() {}, set innerHTML(_) { e.children = []; },
+      addEventListener() {}, set innerHTML(_) { e.children = []; }, replaceChildren() { e.children = []; },
+      classList: { toggle() {}, add() {}, remove() {} }, dataset: {},
       getBoundingClientRect: () => (/\bprobe\b/.test(e.className)
         ? { height: e.children.length * 14 + 12 } : { width: e.textContent.length * 6 }),
     };

@@ -104,9 +104,9 @@ export function registerCommands(context: vscode.ExtensionContext, d: Deps): voi
   });
 
   // From a session's right-click menu the new session becomes its child, so it runs the parent's harness:
-  // harnesses never share a tree.
-  const newSession = async (parent?: SessionNode) => {
-    const dir = await vscode.window.showOpenDialog({
+  // harnesses never share a tree. A repo dropped from the map's skill-repo drawer comes with its folder.
+  const newSession = async (parent?: SessionNode, preset?: string) => {
+    const dir = preset ? [vscode.Uri.file(preset)] : await vscode.window.showOpenDialog({
       canSelectFolders: true, canSelectFiles: false, canSelectMany: false,
       defaultUri: defaultDir(), openLabel: 'New session here',
     });
@@ -127,6 +127,7 @@ export function registerCommands(context: vscode.ExtensionContext, d: Deps): voi
   };
   reg('pengupool.new', () => newSession());
   reg('pengupool.newChild', (node?: SessionNode) => { const n = sel(node); return n && newSession(n); });
+  reg('pengupool.newIn', (dir: string) => newSession(undefined, dir));
 
   const addPrevious = async (parent?: SessionNode) => {
     const dir = await vscode.window.showOpenDialog({
