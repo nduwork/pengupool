@@ -137,7 +137,16 @@ export class MapPanel {
 
   // Remove a skill-repo worktree. Unmerged (exit 4) asks first; the user's yes is the merge approval:
   // squash-merge its PR, remove the worktree, release the repo.
+  // One removal per worktree at a time: a second click during a slow merge would race the first.
+  private readonly removing = new Set<string>();
+
   private async worktreeRm(wt: string): Promise<void> {
+    if (this.removing.has(wt)) { return; }
+    this.removing.add(wt);
+    try { await this.removeWorktree(wt); } finally { this.removing.delete(wt); }
+  }
+
+  private async removeWorktree(wt: string): Promise<void> {
     let r = await this.poolRun(['worktree-rm', wt]);
     if (r.code === 4) {
       const go = 'Squash-merge, release, and remove';

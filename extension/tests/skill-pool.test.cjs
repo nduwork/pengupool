@@ -117,3 +117,14 @@ test('newSession takes a preset folder and skips the folder picker', () => {
   assert.match(source, /const newSession = async \(parent\?: SessionNode, preset\?: string\)/);
   assert.match(source, /reg\('pengupool\.newIn', \(dir: string\) => newSession\(undefined, dir\)\)/);
 });
+
+test('a second Remove while the first still runs is ignored', async () => {
+  const map = openMap({ 'worktree-rm /wt': { code: 4, stdout: '', stderr: 'pengupool/x is not merged to main' } }, true);
+  map.receive({ type: 'worktreeRm', path: '/wt' });
+  map.receive({ type: 'worktreeRm', path: '/wt' });
+  await settle();
+  assert.deepEqual(map.ctl.filter((c) => c.startsWith('worktree-rm')), ['worktree-rm /wt', 'worktree-rm /wt --merge']);
+  map.receive({ type: 'worktreeRm', path: '/wt' });   // done: a later click runs again
+  await settle();
+  assert.equal(map.ctl.filter((c) => c === 'worktree-rm /wt').length, 2);
+});
