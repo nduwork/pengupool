@@ -7,6 +7,7 @@ from __future__ import annotations
 import datetime
 import json
 import os
+import re
 import subprocess
 
 from . import model
@@ -75,6 +76,18 @@ def add(d: str) -> str:
     if top not in repos:
         _save(repos + [top])
     return top
+
+
+def clone(src: str, parent: str) -> str:
+    """Clone a GitHub repo (owner/repo, https or ssh URL) into `parent`/<repo> and add it to the pool."""
+    m = re.fullmatch(r"(?:(?:https://|git@)?github\.com[/:])?([\w.-]+)/([\w.-]+?)(?:\.git)?/?", src.strip())
+    if not m:
+        raise Refused(f"{src} is not a GitHub repo; use owner/repo or a github.com URL")
+    dest = os.path.join(os.path.realpath(parent), m[2])
+    if os.path.exists(dest):
+        raise Refused(f"{dest} already exists; add it as a local folder instead")
+    _git(parent, "clone", "-q", f"https://github.com/{m[1]}/{m[2]}", dest)
+    return add(dest)
 
 
 def remove(d: str) -> str:

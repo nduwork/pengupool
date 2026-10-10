@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { Snapshot } from './serveClient';
 import { CTX_LEVEL_CSS, CTX_LEVEL_JS, SESSION_STATES, SESSION_STATE_CSS } from './sessionState';
-import { HarnessTabs, HARNESS_TABS_CSS, HARNESS_TABS_HTML, HARNESS_TABS_JS } from './harness';
+import { findNode, HarnessTabs, HARNESS_TABS_CSS, HARNESS_TABS_HTML, HARNESS_TABS_JS } from './harness';
 import { SESSION_CONTEXT_JS } from './webviewMenu';
 import { runCtl } from './util';
 
@@ -82,6 +82,11 @@ export class MapPanel {
       // The skill-repo drawer. A repo dropped on the map starts a session there through the usual prompts.
       if (message?.type === 'poolDrop' && typeof message.dir === 'string') { void vscode.commands.executeCommand('pengupool.newIn', message.dir); }
       if (message?.type === 'poolAdd') { void this.poolAdd(); }
+      if (message?.type === 'poolSession' && typeof message.id === 'string') {
+        // A session card dropped on the drawer adds its repo (a worktree registers its main checkout).
+        const cwd = this.last && findNode(this.last.roots, message.id)?.cwd;
+        if (cwd) { void this.poolRun(['pool', 'add', cwd]); }
+      }
       if (message?.type === 'poolRm' && typeof message.dir === 'string') { void this.poolRun(['pool', 'rm', message.dir]); }
       if (message?.type === 'worktreeRm' && typeof message.path === 'string') { void this.worktreeRm(message.path); }
     });
@@ -130,9 +135,25 @@ export class MapPanel {
     return r;
   }
 
+  // Two ways in: a local checkout, or a GitHub repo cloned into a folder the user picks.
   private async poolAdd(): Promise<void> {
-    const dir = await vscode.window.showOpenDialog({ canSelectFolders: true, canSelectFiles: false, canSelectMany: false, openLabel: 'Add skill repo' });
-    if (dir?.length) { await this.poolRun(['pool', 'add', dir[0].fsPath]); }
+    const pick = await vscode.window.showQuickPick(
+      [{ label: 'From a local folder…' }, { label: 'From GitHub…', description: 'clone owner/repo or a github.com URL' }],
+      { placeHolder: 'Add a skill repo' });
+    if (!pick) { return; }
+    const folder = async (openLabel: string) => (await vscode.window.showOpenDialog(
+      { canSelectFolders: true, canSelectFiles: false, canSelectMany: false, openLabel }))?.[0]?.fsPath;
+    if (pick.label.startsWith('From a local')) {
+      const dir = await folder('Add skill repo');
+      if (dir) { await this.poolRun(['pool', 'add', dir]); }
+      return;
+    }
+    const src = (await vscode.window.showInputBox({ prompt: 'GitHub repo to clone', placeHolder: 'owner/repo or https://github.com/owner/repo' }))?.trim();
+    const parent = src && await folder('Clone here');
+    if (src && parent) {
+      await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Cloning ${src}…` },
+        () => this.poolRun(['pool', 'clone', src, parent]));
+    }
   }
 
   // Remove a skill-repo worktree. Unmerged (exit 4) asks first; the user's yes is the merge approval:
@@ -268,6 +289,7 @@ function html(webview: vscode.Webview, dagreUri: vscode.Uri): string {
              color:var(--vscode-button-secondaryForeground); background:var(--vscode-button-secondaryBackground); border:none; }
   #poolEmpty { padding:4px; font-size:11px; color:var(--vscode-descriptionForeground); }
   body.pooldrag, body.pooldrag * { cursor:copy !important; }
+  body.dragging #poolToggle, body.dragging #poolBody { outline:1px dashed var(--vscode-focusBorder); cursor:copy; }
 </style></head><body>
 ${HARNESS_TABS_HTML}
 <div id="regroupBanner">
@@ -284,7 +306,7 @@ ${HARNESS_TABS_HTML}
 </div>
 <div id="empty">no sessions</div>
 <div id="wrap"><svg id="svg" width="100%" height="100%"><g id="scene"></g></svg></div>
-<div id="pool"><button id="poolToggle" aria-expanded="false" title="Skill repos: drag one onto the map to start a session in it">Skill repos</button>
+<div id="pool"><button id="poolToggle" aria-expanded="false" title="Skill repos: drag one onto the map to start a session in it; drop a session here to add its repo">Skill repos</button>
 <div id="poolBody"><div id="poolList"></div><button id="poolAdd">+ Add skill repo…</button></div></div>
 <div id="legend">
   <span><svg width="18" height="8"><path d="M0,4 H18" class="edge"/></svg>parent → child</span>
@@ -680,6 +702,7 @@ ${HARNESS_TABS_HTML}
   wrap.addEventListener('pointerup', ev => {
     const d = drag; endDrag(); if(!d?.on) return;
     justDragged = true; setTimeout(() => { justDragged = false; });
+    if(document.elementFromPoint(ev.clientX, ev.clientY)?.closest('#pool')){ vscode.postMessage({type:'poolSession', id:d.id}); return; }
     const t = under(ev);
     if(t.id ? t.id!==d.id : t.canvas) vscode.postMessage({type:'group', source:d.id, target:t.id}); });
   wrap.addEventListener('pointercancel', endDrag);

@@ -28,6 +28,7 @@ Verbs:
                                   exit 4 when it is not, --merge squash-merges it and releases the repo
                                   (pool repos only); refuses when ignored files would go
     pool ls | add <dir> | rm <dir>  the skill-repo pool (JSON for ls); add needs a GitHub origin
+    pool clone <owner/repo|url> <parent>  clone a GitHub repo into <parent>/<repo> and add it
     release <repo>                release a pool repo from main: date tag, CHANGELOG, GitHub release
     past <dir>                    JSON [[sessionId, title, harness], …] of resumable past sessions
     past-all                      JSON [[sessionId, title, harness, cwd, updated], …] of every resumable
@@ -360,12 +361,14 @@ def _skill(fn) -> int:
     return 0
 
 
-def _pool(verb: str, d: str = "") -> int:
+def _pool(verb: str, d: str = "", parent: str = "") -> int:
     if verb == "ls" and not d:
         return _skill(lambda s: json.dumps(s.ls()))
     if verb in ("add", "rm") and d:
         return _skill(lambda s: s.add(d) if verb == "add" else s.remove(d))
-    print("usage: pengupool ctl pool ls | add <dir> | rm <dir>", file=sys.stderr)
+    if verb == "clone" and d and parent:
+        return _skill(lambda s: s.clone(d, parent))
+    print("usage: pengupool ctl pool ls | add <dir> | rm <dir> | clone <owner/repo|url> <parent-dir>", file=sys.stderr)
     return 2
 
 
@@ -539,6 +542,7 @@ def main(argv: list[str] | None = None) -> int:
         ("worktree-rm", 2): lambda: _worktree_rm(a[0], a[1]),
         ("pool", 1): lambda: _pool(a[0]),
         ("pool", 2): lambda: _pool(a[0], a[1]),
+        ("pool", 3): lambda: _pool(a[0], a[1], a[2]),
         ("release", 1): lambda: _skill(lambda s: s.release(a[0])),
         ("past", 1): lambda: _past(a[0]),
         ("past-all", 0): _past_all,

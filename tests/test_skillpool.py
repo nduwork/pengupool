@@ -328,3 +328,31 @@ def test_rejected_push_undoes_the_release_so_it_can_be_retried(env, monkeypatch)
     assert not os.path.exists(os.path.join(top, "CHANGELOG.md"))
     hook.unlink()
     assert skillpool.release(top) == "v2026.10.10"
+
+
+@pytest.mark.parametrize("src", ["me/skills", "https://github.com/me/skills", "https://github.com/me/skills.git",
+                                 "git@github.com:me/skills.git", "github.com/me/skills/"])
+def test_clone_from_github_adds_it(env, monkeypatch, src):
+    make_repo(env)
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "1")   # the clone reaches the bare origin the way make_repo's does
+    monkeypatch.setenv("GIT_CONFIG_KEY_0", f"url.{env / 'skills.git'}.insteadOf")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_0", "https://github.com/me/skills")
+    (env / "clones").mkdir()
+    top = skillpool.clone(src, str(env / "clones"))
+    assert top == os.path.realpath(env / "clones" / "skills") and skillpool.load() == [top]
+    assert git(top, "config", "--get", "remote.origin.url") == "https://github.com/me/skills"
+
+
+def test_clone_refusals(env):
+    with pytest.raises(skillpool.Refused, match="not a GitHub repo"):
+        skillpool.clone("https://gitlab.com/me/skills", str(env))
+    (env / "skills").mkdir()
+    with pytest.raises(skillpool.Refused, match="already exists"):
+        skillpool.clone("me/skills", str(env))
+    assert skillpool.load() == []
+
+
+def test_ctl_pool_clone(env, monkeypatch, capsys):
+    monkeypatch.setattr(skillpool, "clone", lambda src, parent: f"/x/{src}@{parent}")
+    assert ctl.main(["pool", "clone", "me/skills", "/p"]) == 0
+    assert capsys.readouterr().out.strip() == "/x/me/skills@/p"
