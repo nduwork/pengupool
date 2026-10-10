@@ -12,7 +12,7 @@ function transpile(name) {
 }
 
 /** The map panel against a stubbed host; ctl answers from `answers` (keyed by the joined args). */
-function openMap(answers, warningPick) {
+function openMap(answers, warningPick, ui = {}) {
   const commands = [], ctl = [], posted = [], shown = [];
   let receive;
   const webview = {
@@ -30,7 +30,9 @@ function openMap(answers, warningPick) {
       showErrorMessage: async (m) => { shown.push(['error', m]); },
       showInformationMessage: async (m) => { shown.push(['info', m]); },
       showWarningMessage: async (m, opts, ...items) => { shown.push(['warn', m]); return warningPick ? items[0] : undefined; },
-      showOpenDialog: async () => [{ fsPath: '/repos/skills' }],
+      showOpenDialog: async () => [{ fsPath: ui.folder || '/repos/skills' }],
+      showQuickPick: async (items) => items.find((i) => i.label.includes(ui.pick || 'local')),
+      showInputBox: async () => ui.input,
       withProgress: async (o, task) => task(),
     },
   };
@@ -55,7 +57,8 @@ function openMap(answers, warningPick) {
     }
     throw new Error('Unexpected dependency: ' + id);
   }
-  load('mapPanel').MapPanel.show({ extensionUri: 'ext' }, { topo_hash: 'h', roots: [] });
+  const snap = { topo_hash: 'h', roots: [{ id: 's1', name: 'a', cwd: '/repos/skills/wt', children: [] }], cross: [], msgs: [] };
+  load('mapPanel').MapPanel.show({ extensionUri: 'ext' }, snap);
   return { receive, commands, ctl, posted, shown, html: () => webview.html };
 }
 const settle = async () => { for (let i = 0; i < 8; i++) { await new Promise((r) => setTimeout(r, 0)); } };
@@ -127,4 +130,28 @@ test('a second Remove while the first still runs is ignored', async () => {
   map.receive({ type: 'worktreeRm', path: '/wt' });   // done: a later click runs again
   await settle();
   assert.equal(map.ctl.filter((c) => c === 'worktree-rm /wt').length, 2);
+});
+
+test('Add skill repo from GitHub asks for the repo and a parent folder, then clones it', async () => {
+  const map = openMap({ 'pool ls': LS }, false, { pick: 'GitHub', input: 'me/skills', folder: '/repos' });
+  map.receive({ type: 'poolAdd' });
+  await settle();
+  assert.deepEqual(map.ctl, ['pool clone me/skills /repos', 'pool ls']);
+});
+
+test('Add from GitHub cancelled at the repo prompt does nothing', async () => {
+  const map = openMap({}, false, { pick: 'GitHub' });
+  map.receive({ type: 'poolAdd' });
+  await settle();
+  assert.deepEqual(map.ctl, []);
+});
+
+test('a session card dropped on the drawer adds its repo', async () => {
+  const map = openMap({ 'pool ls': LS });
+  map.receive({ type: 'poolSession', id: 's1' });
+  map.receive({ type: 'poolSession', id: 'gone' });
+  await settle();
+  assert.deepEqual(map.ctl, ['pool add /repos/skills/wt', 'pool ls']);
+  const script = [...map.html().matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].at(-1)[1];
+  assert.match(script, /type:'poolSession', id:d\.id/);
 });
