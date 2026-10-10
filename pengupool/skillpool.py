@@ -105,12 +105,28 @@ def ls() -> list[dict]:
     return out
 
 
-def _pr_state(cwd: str, branch: str) -> str:
-    """MERGED / OPEN / CLOSED, or '' when there is no PR or gh cannot say (missing, logged out)."""
+def _pr(cwd: str, branch: str) -> tuple[str, str]:
+    """(state, head commit) of the PR gh finds for this branch name — MERGED / OPEN / CLOSED — or ('', '')
+    when there is none or gh cannot say (missing, logged out). The name can be reused, so the PR found may
+    be an older one: callers compare its head with the branch."""
     try:
-        return _run(cwd, "gh", "pr", "view", branch, "--json", "state", "-q", ".state", timeout=60)
+        out = _run(cwd, "gh", "pr", "view", branch, "--json", "state,headRefOid", "-q", '.state + " " + .headRefOid', timeout=60)
     except Refused:
-        return ""
+        return "", ""
+    state, _, oid = out.partition(" ")
+    return state, oid
+
+
+def _pr_merged(path: str, branch: str) -> bool:
+    """The branch's PR is merged AND carries every commit on the branch: no work was added after it."""
+    state, oid = _pr(path, branch)
+    if state != "MERGED" or not oid:
+        return False
+    tip = _git(path, "rev-parse", branch)
+    try:
+        return tip == oid or _git(path, "merge-base", "--is-ancestor", tip, oid) == ""
+    except Refused:   # not an ancestor, or the PR's head is not known locally
+        return False
 
 
 def _landed(path: str, branch: str) -> bool:
@@ -132,10 +148,10 @@ def _inside(cwd: str, path: str) -> bool:
 def _merge(path: str, branch: str) -> None:
     """Push the branch, open its PR if it has none, squash-merge it. The user confirmed this."""
     _git(path, "push", "-q", "-u", "origin", branch)
-    if not _pr_state(path, branch):
+    if _pr(path, branch)[0] != "OPEN":   # none, or an older merged/closed PR from a reused branch name
         _run(path, "gh", "pr", "create", "--fill", "--head", branch)
     _run(path, "gh", "pr", "merge", branch, "--squash")
-    if _pr_state(path, branch) != "MERGED":   # queued or awaiting checks: not on main yet
+    if not _pr_merged(path, branch):   # queued or awaiting checks: not on main yet
         raise Refused(f"{branch}: merge requested but the PR is not merged yet; remove it once it is")
 
 
@@ -146,17 +162,23 @@ def worktree_rm(path: str, merge: bool = False) -> str:
     top = _main_top(path)
     if path == top:
         raise Refused("that is the repo's main checkout, not a worktree")
+    if merge:
+        _in_pool(top)
     branch = _git(path, "branch", "--show-current")
     if not branch.startswith("pengupool/"):
         raise Refused(f"{branch or 'a detached HEAD'} is not a pengupool/* branch")
     if _git(path, "status", "--porcelain"):
         raise Refused("the worktree has uncommitted changes")
+    # `git worktree remove` deletes ignored files too, and a skill repo's owner MEMORY.md is gitignored.
+    ignored = [ln[3:] for ln in _git(path, "status", "--porcelain", "--ignored").splitlines()
+               if ln.startswith("!! ") and os.path.basename(ln[3:].rstrip("/")) != ".DS_Store"]
+    if ignored:
+        raise Refused("removing it would delete ignored files: " + ", ".join(ignored) + "; move them out first")
     live = [s.get("name") or s.get("sessionId", "?") for s in model.load_sessions() if _inside(s.get("cwd", ""), path)]
     if live:
         raise Refused("a live session runs there: " + ", ".join(live))
     merged_now = False
-    state = _pr_state(path, branch)
-    if state != "MERGED" and not (state == "" and _landed(path, branch)):
+    if not (_pr_merged(path, branch) or _landed(path, branch)):
         if not merge:
             raise Unmerged(f"{branch} is not merged to main")
         _merge(path, branch)
@@ -171,6 +193,12 @@ def worktree_rm(path: str, merge: bool = False) -> str:
         except Refused as e:
             msg += f"; release skipped: {e} (run `pengupool ctl release {top}`)"
     return msg
+
+
+def _in_pool(top: str) -> None:
+    """Merging and releasing act on a repo's main; only repos the user put in the pool get that."""
+    if top not in load():
+        raise Refused(f"{top} is not in the skill pool; merging and releasing are only for pool repos")
 
 
 def _today() -> datetime.date:
@@ -202,6 +230,7 @@ def release(d: str) -> str:
     """Release a skill repo from its main checkout: date version, CHANGELOG section from the commit
     subjects since the last tag, commit, tag, push, GitHub release. PenguPool owns this for every pool repo."""
     top = _main_top(d)
+    _in_pool(top)
     if _git(top, "branch", "--show-current") != "main":
         raise Refused("release from main: the main checkout is on another branch")
     if _git(top, "status", "--porcelain"):
@@ -224,6 +253,15 @@ def release(d: str) -> str:
     _git(top, "add", "CHANGELOG.md")
     _git(top, "commit", "-q", "-m", f"chore: release {version}")
     _git(top, "tag", version)
-    _git(top, "push", "-q", "origin", "main", version)
-    _run(top, "gh", "release", "create", version, "--title", version, "--notes", "\n".join(f"- {n}" for n in notes))
+    try:
+        _git(top, "push", "-q", "--atomic", "origin", "main", version)
+    except Refused as e:   # nothing reached origin: undo our commit and tag so the release can be retried
+        _git(top, "tag", "-d", version)
+        _git(top, "reset", "-q", "--hard", "HEAD~1")
+        raise Refused(f"push refused, release undone: {e}") from None
+    try:
+        _run(top, "gh", "release", "create", version, "--title", version, "--notes", "\n".join(f"- {n}" for n in notes))
+    except Refused as e:
+        raise Refused(f"{version} is tagged and pushed, but the GitHub release failed: {e}; "
+                      f"finish it with `gh release create {version} --generate-notes`") from None
     return version

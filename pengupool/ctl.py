@@ -26,8 +26,9 @@ Verbs:
     worktree-add <dir> <name>     git worktree for a session; print the path (or <dir>)
     worktree-rm <path> [--merge]  remove a pengupool/* worktree and its branch once its PR is merged;
                                   exit 4 when it is not, --merge squash-merges it and releases the repo
+                                  (pool repos only); refuses when ignored files would go
     pool ls | add <dir> | rm <dir>  the skill-repo pool (JSON for ls); add needs a GitHub origin
-    release <repo>                release a skill repo from main: date tag, CHANGELOG, GitHub release
+    release <repo>                release a pool repo from main: date tag, CHANGELOG, GitHub release
     past <dir>                    JSON [[sessionId, title, harness], …] of resumable past sessions
     past-all                      JSON [[sessionId, title, harness, cwd, updated], …] of every resumable
                                   session the pool knows, newest first (a reboot leaves them here)

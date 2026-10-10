@@ -17,9 +17,10 @@ key() { echo "$1" | tr / _; }
 case "$1 $2" in
   "pr view") f="$FAKE_GH/$(key "$3")"; [ -f "$f" ] && cat "$f" && exit 0
              echo "no pull requests found for branch $3" >&2; exit 1;;
-  "pr create") echo OPEN > "$FAKE_GH/$(key "$(git branch --show-current)")"; exit 0;;
+  "pr create") b="$(git branch --show-current)"; echo "OPEN $(git rev-parse "$b")" > "$FAKE_GH/$(key "$b")"; exit 0;;
   "pr merge") [ -n "$GH_MERGE_FAILS" ] && { echo "required checks are failing" >&2; exit 1; }
-              echo MERGED > "$FAKE_GH/$(key "$3")"; exit 0;;
+              grep -q '^OPEN ' "$FAKE_GH/$(key "$3")" || { echo "pull request is closed" >&2; exit 1; }
+              echo "MERGED $(git rev-parse "$3")" > "$FAKE_GH/$(key "$3")"; exit 0;;
   "release create") exit 0;;
 esac
 echo "unexpected: gh $*" >&2; exit 1
@@ -112,8 +113,9 @@ def wt_with_commit(top, name="log run"):
     return os.path.realpath(wt), git(wt, "branch", "--show-current")
 
 
-def merged(tmp, branch):
-    (tmp / "gh" / branch.replace("/", "_")).write_text("MERGED\n")
+def merged(tmp, branch, wt):
+    """gh reports the branch's PR as merged at the branch's current tip."""
+    (tmp / "gh" / branch.replace("/", "_")).write_text(f"MERGED {git(wt, 'rev-parse', branch)}\n")
 
 
 def test_refusals_leave_the_worktree(env):
@@ -127,7 +129,7 @@ def test_refusals_leave_the_worktree(env):
         skillpool.worktree_rm(str(other))
     with pytest.raises(skillpool.Unmerged, match="not merged"):
         skillpool.worktree_rm(wt)
-    merged(env, branch)
+    merged(env, branch, wt)
     Path(wt, "scratch.txt").write_text("x")
     with pytest.raises(skillpool.Refused, match="uncommitted"):
         skillpool.worktree_rm(wt)
@@ -137,7 +139,7 @@ def test_refusals_leave_the_worktree(env):
 def test_live_session_blocks_only_inside(env, monkeypatch):
     top = make_repo(env)
     wt, branch = wt_with_commit(top)
-    merged(env, branch)
+    merged(env, branch, wt)
     monkeypatch.setattr(model, "load_sessions", lambda: [{"sessionId": "s1", "name": "logger", "cwd": wt + "/logs"}])
     with pytest.raises(skillpool.Refused, match="logger"):
         skillpool.worktree_rm(wt)
@@ -148,7 +150,7 @@ def test_live_session_blocks_only_inside(env, monkeypatch):
 def test_merged_worktree_is_removed_with_its_branch(env):
     top = make_repo(env)
     wt, branch = wt_with_commit(top)
-    merged(env, branch)
+    merged(env, branch, wt)
     assert skillpool.worktree_rm(wt) == f"removed {wt}"
     assert not os.path.exists(wt)
     assert branch not in git(top, "branch")
@@ -158,7 +160,7 @@ def test_merged_worktree_is_removed_with_its_branch(env):
 def test_rm_vanished_path_refuses(env):
     top = make_repo(env)
     wt, branch = wt_with_commit(top)
-    merged(env, branch)
+    merged(env, branch, wt)
     skillpool.worktree_rm(wt)
     with pytest.raises(skillpool.Refused):
         skillpool.worktree_rm(wt)
@@ -167,6 +169,7 @@ def test_rm_vanished_path_refuses(env):
 def test_merge_pushes_merges_removes_and_releases(env, monkeypatch):
     monkeypatch.setattr(skillpool, "_today", lambda: datetime.date(2026, 10, 10))
     top = make_repo(env)
+    skillpool.add(top)
     wt, branch = wt_with_commit(top)
     msg = skillpool.worktree_rm(wt, merge=True)
     assert msg == f"removed {wt}; released v2026.10.10"
@@ -180,6 +183,7 @@ def test_merge_pushes_merges_removes_and_releases(env, monkeypatch):
 def test_merge_failure_removes_nothing(env, monkeypatch):
     monkeypatch.setenv("GH_MERGE_FAILS", "1")
     top = make_repo(env)
+    skillpool.add(top)
     wt, _ = wt_with_commit(top)
     with pytest.raises(skillpool.Refused, match="checks are failing"):
         skillpool.worktree_rm(wt, merge=True)
@@ -188,6 +192,7 @@ def test_merge_failure_removes_nothing(env, monkeypatch):
 
 def test_release_skipped_when_main_checkout_dirty(env):
     top = make_repo(env)
+    skillpool.add(top)
     wt, _ = wt_with_commit(top)
     Path(top, "wip.txt").write_text("x")
     msg = skillpool.worktree_rm(wt, merge=True)
@@ -204,6 +209,7 @@ def _no_gh(monkeypatch):
 
 def test_no_gh_is_unmerged_then_refused(env, monkeypatch):
     top = make_repo(env)
+    skillpool.add(top)
     wt, _ = wt_with_commit(top)
     _no_gh(monkeypatch)
     with pytest.raises(skillpool.Unmerged):
@@ -226,6 +232,7 @@ def test_no_gh_but_landed_on_main_is_removed(env, monkeypatch):
 def test_release_versions_changelog_and_refusals(env, monkeypatch):
     monkeypatch.setattr(skillpool, "_today", lambda: datetime.date(2026, 10, 10))
     top = make_repo(env)
+    skillpool.add(top)
     assert skillpool.release(top) == "v2026.10.10"
     text = open(os.path.join(top, "CHANGELOG.md")).read()
     assert text == "# Changelog\n\n## v2026.10.10 — 2026-10-10\n\n- root\n"
@@ -256,3 +263,68 @@ def test_ctl_verbs_and_exit_codes(env, monkeypatch, capsys):
     monkeypatch.setattr(skillpool, "release", lambda d: "v2026.10.10")
     capsys.readouterr()
     assert ctl.main(["release", top]) == 0 and capsys.readouterr().out.strip() == "v2026.10.10"
+
+
+def test_stale_merged_pr_on_a_reused_branch_keeps_new_work(env):
+    top = make_repo(env)
+    wt, branch = wt_with_commit(top)
+    merged(env, branch, wt)                       # an earlier PR from this branch name was merged
+    Path(wt, "logs", "b.md").write_text("new\n")
+    git(wt, "add", "-A")
+    git(wt, "commit", "-q", "-m", "log: b")       # new work after that merge
+    with pytest.raises(skillpool.Unmerged):
+        skillpool.worktree_rm(wt)
+    assert os.path.isdir(wt)
+
+
+def test_merge_after_a_stale_merged_pr_opens_a_new_one(env, monkeypatch):
+    monkeypatch.setattr(skillpool, "_today", lambda: datetime.date(2026, 10, 10))
+    top = make_repo(env)
+    skillpool.add(top)
+    wt, branch = wt_with_commit(top)
+    merged(env, branch, wt)
+    git(wt, "commit", "-q", "--allow-empty", "-m", "log: b")
+    assert skillpool.worktree_rm(wt, merge=True).startswith(f"removed {wt}; released")
+    assert "pr create" in gh_calls(env)
+
+
+def test_ignored_files_block_removal_except_ds_store(env):
+    top = make_repo(env)
+    with open(os.path.join(top, ".git", "info", "exclude"), "a") as f:
+        f.write("/MEMORY.md\n.DS_Store\n")
+    wt, branch = wt_with_commit(top)
+    merged(env, branch, wt)
+    Path(wt, ".DS_Store").write_text("x")
+    Path(wt, "MEMORY.md").write_text("owner memory\n")
+    with pytest.raises(skillpool.Refused, match="MEMORY.md"):
+        skillpool.worktree_rm(wt)
+    assert Path(wt, "MEMORY.md").exists()
+    os.remove(os.path.join(wt, "MEMORY.md"))
+    assert skillpool.worktree_rm(wt) == f"removed {wt}"   # .DS_Store alone does not block
+
+
+def test_merge_and_release_only_for_pool_repos(env):
+    top = make_repo(env)
+    wt, _ = wt_with_commit(top)
+    with pytest.raises(skillpool.Refused, match="not in the skill pool"):
+        skillpool.worktree_rm(wt, merge=True)
+    with pytest.raises(skillpool.Refused, match="not in the skill pool"):
+        skillpool.release(top)
+    assert os.path.isdir(wt) and "pr " not in gh_calls(env)
+
+
+def test_rejected_push_undoes_the_release_so_it_can_be_retried(env, monkeypatch):
+    monkeypatch.setattr(skillpool, "_today", lambda: datetime.date(2026, 10, 10))
+    top = make_repo(env)
+    skillpool.add(top)
+    hook = env / "skills.git" / "hooks" / "pre-receive"
+    hook.write_text("#!/bin/sh\necho protected branch >&2\nexit 1\n")
+    hook.chmod(0o755)
+    git(env / "skills.git", "config", "core.hooksPath", str(hook.parent))   # over any global hooksPath
+    head = git(top, "rev-parse", "HEAD")
+    with pytest.raises(skillpool.Refused, match="protected branch"):
+        skillpool.release(top)
+    assert git(top, "rev-parse", "HEAD") == head and git(top, "tag") == ""
+    assert not os.path.exists(os.path.join(top, "CHANGELOG.md"))
+    hook.unlink()
+    assert skillpool.release(top) == "v2026.10.10"
