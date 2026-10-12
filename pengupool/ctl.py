@@ -195,6 +195,15 @@ def _restart(sid: str, json_output: bool = False, view_id: str = "") -> int:
 
 
 def _attach(sid: str, name: str, json_output: bool = False, view_id: str = "") -> int:
+    from . import tmux
+    pending = tmux.pending_pane(sid)
+    if pending:   # a card for a pane whose session has no file yet (waiting on folder trust): show the pane
+        pane, h = pending
+        hit = next((p for p in tmux.starting_panes(h) if p["pane"] == pane), None)
+        if not hit:
+            print(f"{name} is no longer starting; refresh to see its session", file=sys.stderr)
+            return 1   # not 2: there is no outside session to adopt
+        return _emit_view(pane, name, hit["cwd"], json_output, view_id, h)
     reg, sessions = _index()
     pane = _session_pane(sid, reg, sessions)
     if not pane:
@@ -205,6 +214,9 @@ def _attach(sid: str, name: str, json_output: bool = False, view_id: str = "") -
 
 def _select(sid: str, view_id: str) -> int:
     from . import tmux
+    pending = tmux.pending_pane(sid)
+    if pending:   # select_view reports 3 when the pane or view is gone, and the caller re-attaches
+        return 0 if tmux.select_view(pending[0], view_id, pending[1]) else 3
     reg, sessions = _index()
     pane = _session_pane(sid, reg, sessions)
     if not pane:
@@ -214,6 +226,10 @@ def _select(sid: str, view_id: str) -> int:
 
 def _close(sid: str) -> int:
     from . import tmux
+    pending = tmux.pending_pane(sid)
+    if pending:   # cancel a start that never got a session; only a pane that is still starting
+        hit = next((p for p in tmux.starting_panes(pending[1]) if p["pane"] == pending[0]), None)
+        return 0 if hit and tmux.kill(hit["pane"], hit["pid"], pending[1]) else 1
     reg, sess = _index()
     s = sess.get(sid, {})
     ok = tmux.kill(_session_pane(sid, reg, sess), int(s.get("pid", 0) or 0), harness.of(s))

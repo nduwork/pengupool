@@ -5,6 +5,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- a session started with `ctl new` shows as a card while it waits on Claude Code's folder-trust question
+  ("waiting for folder trust"), instead of staying invisible until it is answered; open the card to answer
+  it, or close it to cancel the start
+
 ## [1.1.1] - 2026-10-07
 
 ### Fixed

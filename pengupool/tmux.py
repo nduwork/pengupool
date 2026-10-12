@@ -66,6 +66,40 @@ def panes(h: str = "cc") -> dict[str, tuple[int, str]]:
     return out
 
 
+def starting_panes(h: str = "cc") -> list[dict]:
+    """Live agent panes on harness `h`'s server: {pane, pid, name, cwd}. The caller matches them against
+    session files; a new session's pane exists before its file (the agent waits on folder trust first).
+    Grouped view sessions list a pane once per view, so each pane is kept once."""
+    out, seen = [], set()
+    fmt = "#{pane_id}\t#{pane_dead}\t#{pane_current_command}\t#{pane_pid}\t#{window_name}\t#{pane_current_path}\t#{pane_start_command}"
+    for line in _cached("starting", 0.4, "list-panes", "-a", "-F", fmt, h=h).splitlines():
+        p = line.split("\t", 6)
+        if len(p) == 7 and p[0] not in seen and p[1] == "0" and p[2] not in SHELLS and p[3].isdigit() \
+                and harness.CLI[h] in p[6]:
+            seen.add(p[0])
+            out.append({"pane": p[0], "pid": int(p[3]), "name": p[4], "cwd": p[5]})
+    return out
+
+
+_TRUST = re.compile(r"Yes, I trust this folder|Do you trust the files in this folder\?")
+
+
+def trust_prompt(pane: str, h: str = "cc") -> bool:
+    """The pane shows Claude Code's folder-trust question (the screen's own wording, not typed text)."""
+    return bool(_TRUST.search(_run("capture-pane", "-p", "-t", pane, h=h)))
+
+
+def pending_id(pane: str, h: str = "cc") -> str:
+    """Card id for a pane with no session yet: `pane-66` (cc), `pi-pane-3` (pi). Pane ids are per server."""
+    return ("" if h == "cc" else h + "-") + "pane-" + pane.lstrip("%")
+
+
+def pending_pane(card_id: str) -> tuple[str, str] | None:
+    """(pane, harness) back from a pending card id, or None when it is not one."""
+    m = re.fullmatch(r"(?:(\w+)-)?pane-(\d+)", card_id)
+    return ("%" + m[2], m[1] or "cc") if m and (m[1] or "cc") in harness.SOCK else None
+
+
 def pane_exists(pane: str, h: str = "cc") -> bool:
     """Registry panes can be stale (tmux restarted, ids recycled): only act on a pane tmux still lists."""
     return bool(pane) and pane in panes(h)
