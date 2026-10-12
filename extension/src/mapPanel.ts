@@ -80,7 +80,9 @@ export class MapPanel {
         void vscode.commands.executeCommand('setContext', 'pengupool.mapFold', message.fold);
       }
       // The skill-repo drawer. A repo dropped on the map starts a session there through the usual prompts.
-      if (message?.type === 'poolDrop' && typeof message.dir === 'string') { void this.newIn(message.dir); }
+      if (message?.type === 'poolDrop' && typeof message.dir === 'string') {
+        void this.newIn(message.dir, typeof message.parent === 'string' ? message.parent : '');
+      }
       if (message?.type === 'poolRm' && typeof message.dir === 'string') { void this.poolRun(['pool', 'rm', message.dir]); }
       if (message?.type === 'poolMenu' && typeof message.dir === 'string') { void this.poolMenu(message.dir, message.skill === true); }
       if (message?.type === 'poolAdd') { void this.poolAdd(); }
@@ -137,8 +139,9 @@ export class MapPanel {
   }
 
   // A new session may have made a worktree: reload the drawer once it has started.
-  private async newIn(dir: string): Promise<void> {
-    await vscode.commands.executeCommand('pengupool.newIn', dir);
+  /** A repo dropped on a session's card becomes that session's child. */
+  private async newIn(dir: string, parent = ''): Promise<void> {
+    await vscode.commands.executeCommand('pengupool.newIn', dir, ...(parent ? [parent] : []));
     await this.sendPool();
   }
 
@@ -810,7 +813,7 @@ ${HARNESS_TABS_HTML}
   poolList.addEventListener('pointerup', ev => {
     const d = poolDrag; endPoolDrag(); if(!d?.on) return;
     const t = document.elementFromPoint(ev.clientX, ev.clientY);
-    if(t && (wrap.contains(t) || t.id==='empty')) vscode.postMessage({type:'poolDrop', dir:d.dir}); });
+    if(t && (wrap.contains(t) || t.id==='empty')) vscode.postMessage({type:'poolDrop', dir:d.dir, parent:t.closest('.node')?.dataset.id || ''}); });
   poolList.addEventListener('pointercancel', endPoolDrag);
   // The panel's left edge resizes it (drag, or arrow keys when focused); double-click goes back to 220px.
   const poolBody = document.getElementById('poolBody'), poolGrip = document.getElementById('poolGrip');

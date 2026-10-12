@@ -118,7 +118,7 @@ test('the drawer script parses, and a drop counts on the empty map too', () => {
 test('newSession takes a preset folder and skips the folder picker', () => {
   const source = fs.readFileSync(path.join(__dirname, '../src/commands.ts'), 'utf8');
   assert.match(source, /const newSession = async \(parent\?: SessionNode, preset\?: string\)/);
-  assert.match(source, /reg\('pengupool\.newIn', \(dir: string\) => newSession\(undefined, dir\)\)/);
+  assert.match(source, /reg\('pengupool\.newIn', \(dir: string, parent\?: string\) =>\s+newSession\(parent \? d\.provider\.all\.find\(\(n\) => n\.id === parent\) : undefined, dir\)\)/);
 });
 
 test('a second Remove while the first still runs is ignored', async () => {
@@ -161,6 +161,14 @@ test('a pool repo that is not a skill repo is tagged, and its worktree × says m
   assert.match(script, /const plain = r\.skill === false && !r\.missing/);
   assert.match(script, /never merges or releases it/);
   assert.match(script, /once its PR is merged on GitHub/);
+});
+
+test('a repo dropped on a session card starts a child of that session', async () => {
+  const map = openMap({ 'pool ls': LS });
+  map.receive({ type: 'poolDrop', dir: '/repos/skills', parent: 'sid-1' });
+  await settle();
+  assert.deepEqual(map.commands.at(-1), ['pengupool.newIn', '/repos/skills', 'sid-1']);
+  assert.match(map.html(), /type:'poolDrop', dir:d\.dir, parent:/);
 });
 
 test('a drop reloads the pool once the session has started, so a new worktree shows', async () => {
