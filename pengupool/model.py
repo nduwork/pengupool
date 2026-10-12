@@ -607,7 +607,7 @@ def past_sessions(cwd: str, limit: int = 20) -> list[tuple[str, str, str]]:
         except OSError:
             return 0.0
     files = [(f, "cc") for d in _cc_dirs(cwd) for f in d.glob("*.jsonl")] + \
-            [(f, "pi") for f in harness.pi_dir(cwd).glob("*_*.jsonl")]
+            [(f, "pi") for d in harness.pi_dirs(cwd) for f in d.glob("*_*.jsonl")]
     out = []
     for f, h in sorted(files, key=lambda fh: mtime(fh[0]), reverse=True):
         if len(out) >= limit:
@@ -666,7 +666,7 @@ def _transcript_cwd(d: Path, h: str) -> str:
 def _transcript_dirs(window: float) -> list[tuple[str, str]]:
     """(cwd, harness) for every transcript directory touched inside the window, newest first."""
     found = []
-    dirs = [(d, "pi") for d in (harness.PI / "sessions").glob("*")] + \
+    dirs = [(d, "pi") for root in harness.pi_roots() for d in (root / "sessions").glob("*")] + \
            [(d, "cc") for d in (CLAUDE / "projects").glob("*")]
     for d, h in dirs:
         if not d.is_dir() or time.time() - max((_mtime(f) for f in d.glob("*.jsonl")), default=0.0) > window:

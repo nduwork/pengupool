@@ -166,3 +166,19 @@ def test_pi_harness_runs_oh_my_pi(monkeypatch):
     # omp has no --name: the PenguPool extension names the session from the env on its first start
     assert harness.argv_new("pi", "notes") == ["env", "PENGUPOOL_SESSION_NAME=notes", "omp"]
     assert harness.argv_resume("pi", "notes", SID) == ["omp", "--resume", SID]
+
+
+def test_sessions_from_plain_pi_still_resume_under_omp(tmp_path, monkeypatch):
+    # sessions started before 1.3.0 live in ~/.pi/agent; omp resumes them by transcript path
+    monkeypatch.setattr(harness, "LEGACY_PI", tmp_path / "legacy")
+    old = harness.LEGACY_PI / "sessions" / harness.pi_dir("/r").name / f"2026-09-22T10-00-00-000Z_{SID}.jsonl"
+    old.parent.mkdir(parents=True)
+    old.write_text(j({"type": "session", "id": SID, "cwd": "/r"}) + "\n")
+    assert harness.pi_transcript("/r", SID) == old
+    assert harness.argv_resume("pi", "notes", SID) == ["omp", "--resume", str(old)]
+    assert model.harness_of_past(SID, "/r") == "pi"
+    assert [s[0] for s in model.past_sessions("/r")] == [SID]
+    new = harness.pi_dir("/r") / f"2026-10-12T10-00-00-000Z_{SID}.jsonl"   # once omp has its own copy
+    new.parent.mkdir(parents=True)
+    new.write_text(old.read_text())
+    assert harness.argv_resume("pi", "notes", SID) == ["omp", "--resume", SID]

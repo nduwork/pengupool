@@ -22,6 +22,8 @@ TOOL = {"cc": "SendMessage", "pi": "the intercom tool (action send or ask)"}
 RENAME = {"cc": "/rename", "pi": "/alias"}
 
 PI = Path(os.environ.get("PI_CODING_AGENT_DIR", Path.home() / ".omp" / "agent"))
+# plain pi's dir, where sessions started before 1.3.0 keep their transcripts; omp resumes them by path
+LEGACY_PI = Path.home() / ".pi" / "agent"
 
 
 def check(h: str) -> str:
@@ -52,7 +54,8 @@ def argv_resume(h: str, name: str, sid: str) -> list[str]:
     # omp keeps the session's name in the session file itself
     if check(h) == "cc":
         return [CLI["cc"], *CC_FLAGS, "--name", name, "--resume", sid]
-    return [CLI["pi"], "--resume", sid]
+    hit = _pi_file(sid)
+    return [CLI["pi"], "--resume", str(hit) if hit and not hit.is_relative_to(PI) else sid]
 
 
 def pi_dir(cwd: str) -> Path:
@@ -60,7 +63,24 @@ def pi_dir(cwd: str) -> Path:
     return PI / "sessions" / ("--" + re.sub(r"[/\\:]", "-", re.sub(r"^[/\\]", "", cwd)) + "--")
 
 
-def pi_transcript(cwd: str, sid: str) -> Path | None:
-    """pi names files `<timestamp>_<uuid>.jsonl`; newest wins if a session was ever re-created."""
-    hits = sorted(pi_dir(cwd).glob(f"*_{sid}.jsonl"))
+def pi_dirs(cwd: str) -> list[Path]:
+    """The cwd's session folders: omp's, then plain pi's from before 1.3.0."""
+    return [root / "sessions" / pi_dir(cwd).name for root in pi_roots()]
+
+
+def pi_roots() -> list[Path]:
+    return [PI] if LEGACY_PI == PI else [PI, LEGACY_PI]
+
+
+def _newest(paths) -> Path | None:
+    """Files are named `<timestamp>_<uuid>.jsonl`; omp's own copy wins over a plain-pi one."""
+    hits = sorted(paths, key=lambda p: (p.is_relative_to(PI), p.name))
     return hits[-1] if hits else None
+
+
+def pi_transcript(cwd: str, sid: str) -> Path | None:
+    return _newest(f for d in pi_dirs(cwd) for f in d.glob(f"*_{sid}.jsonl"))
+
+
+def _pi_file(sid: str) -> Path | None:
+    return _newest(f for root in pi_roots() for f in (root / "sessions").glob(f"*/*_{sid}.jsonl"))

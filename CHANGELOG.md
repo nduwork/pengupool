@@ -9,7 +9,8 @@ All notable changes to this project are documented here. The format follows
 - pi sessions now run in **oh-my-pi** (`omp`), a pi fork. New pi sessions start with `omp` and resume with
   `omp --resume`. omp has no `--name` flag, so `ctl new` passes the name in `PENGUPOOL_SESSION_NAME` and the
   PenguPool extension sets it when the session first starts. Extensions, skills and transcripts live in
-  `~/.omp/agent`. The editor labels the harness "oh-my-pi"
+  `~/.omp/agent`. The editor labels the harness "oh-my-pi". Sessions started in plain pi still list as past
+  sessions, and they resume in omp from their `~/.pi/agent` transcript
 - `pengupool setup pi` installs Bun if it is missing and then omp (`bun install -g
   @oh-my-pi/pi-coding-agent`), each after a y/N prompt. It installs pi-intercom as an omp plugin and removes
   the old PenguPool extension from `~/.pi/agent`. `setup --check pi` also checks that omp starts: it needs

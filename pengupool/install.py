@@ -25,8 +25,6 @@ CLI_INSTALL = {  # official installers
 }
 BUN_INSTALL = "curl -fsSL https://bun.sh/install | bash"
 INTERCOM = "pi-intercom"
-# where plain pi kept PenguPool's extension before 1.3.0; setup clears it so pi and omp never both load it
-LEGACY_PI = Path.home() / ".pi" / "agent"
 EXTENSION = Path(__file__).with_name("pi_extension.ts")
 
 
@@ -106,7 +104,7 @@ def wire(h: str) -> bool:
         if subprocess.run([harness.CLI["pi"], "plugin", "install", INTERCOM]).returncode != 0:
             print(f"  could not install pi-intercom: run `omp plugin install {INTERCOM}` and re-run")
             return False
-    legacy = LEGACY_PI / "extensions" / "pengupool.ts"
+    legacy = harness.LEGACY_PI / "extensions" / "pengupool.ts"  # plain pi's copy: never load it twice
     if legacy.exists():
         legacy.unlink()
         print(f"removed the plain-pi PenguPool extension → {legacy} (pi sessions now run in oh-my-pi)")

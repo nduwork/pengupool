@@ -52,7 +52,7 @@ def test_accepted_install_runs_the_official_installer(env, monkeypatch):
 def test_pi_setup_installs_intercom_and_the_extension(env, tmp_path, monkeypatch):
     have, ran = env
     legacy = tmp_path / "legacy-pi"
-    monkeypatch.setattr(install, "LEGACY_PI", legacy)
+    monkeypatch.setattr(install.harness, "LEGACY_PI", legacy)
     (legacy / "extensions").mkdir(parents=True)
     (legacy / "extensions" / "pengupool.ts").write_text("// plain pi wiring\n")
     assert install.main(["setup", "pi"]) == 0
