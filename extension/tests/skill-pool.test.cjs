@@ -155,3 +155,10 @@ test('a session card dropped on the drawer adds its repo', async () => {
   const script = [...map.html().matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].at(-1)[1];
   assert.match(script, /type:'poolSession', id:d\.id/);
 });
+
+test('a pool repo that is not a skill repo is tagged, and its worktree × says merge first on GitHub', () => {
+  const script = [...openMap({}).html().matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].at(-1)[1];
+  assert.match(script, /const plain = r\.skill === false && !r\.missing/);
+  assert.match(script, /never merges or releases it/);
+  assert.match(script, /once its PR is merged on GitHub/);
+});

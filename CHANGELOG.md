@@ -11,7 +11,9 @@ All notable changes to this project are documented here. The format follows
   the map to start a session there, and remove a skill-repo worktree once its PR is merged — or, on your
   confirm, squash-merge it and release the repo first (`ctl worktree-rm`, `ctl release`). A release keeps
   the repo's version scheme (semver repos get the next minor and a matching `package.json`) and its CHANGELOG
-  heading style
+  heading style. Only skill repos (with `skills/*/SKILL.md`) are ever merged or released: any other repo in
+  the pool, such as one running live services from its checkout, gets sessions and merged-worktree removal,
+  and is tagged `repo` in the drawer
 
 ## [1.1.2] - 2026-10-12
 

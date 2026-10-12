@@ -5,6 +5,7 @@ its GitHub PR is MERGED: repos squash-merge, so git's own ancestry check cannot 
 from __future__ import annotations
 
 import datetime
+import glob
 import json
 import os
 import re
@@ -109,7 +110,7 @@ def worktrees(top: str) -> list[dict]:
 def ls() -> list[dict]:
     out = []
     for r in load():
-        e = {"repo": r, "name": os.path.basename(r), "worktrees": []}
+        e = {"repo": r, "name": os.path.basename(r), "worktrees": [], "skill": _is_skill(r)}
         try:
             e["worktrees"] = worktrees(r)
         except Refused:
@@ -177,6 +178,7 @@ def worktree_rm(path: str, merge: bool = False) -> str:
         raise Refused("that is the repo's main checkout, not a worktree")
     if merge:
         _in_pool(top)
+        _skill_repo(top)
     branch = _git(path, "branch", "--show-current")
     if not branch.startswith("pengupool/"):
         raise Refused(f"{branch or 'a detached HEAD'} is not a pengupool/* branch")
@@ -193,6 +195,7 @@ def worktree_rm(path: str, merge: bool = False) -> str:
     merged_now = False
     if not (_pr_merged(path, branch) or _landed(path, branch)):
         if not merge:
+            _skill_repo(top, f"{branch} is not merged to main, and ")   # a plain repo is never asked to merge
             raise Unmerged(f"{branch} is not merged to main")
         _merge(path, branch)
         merged_now = True
@@ -206,6 +209,18 @@ def worktree_rm(path: str, merge: bool = False) -> str:
         except Refused as e:
             msg += f"; release skipped: {e} (run `pengupool ctl release {top}`)"
     return msg
+
+
+def _is_skill(top: str) -> bool:
+    return bool(glob.glob(os.path.join(glob.escape(top), "skills", "*", "SKILL.md")))
+
+
+def _skill_repo(top: str, lead: str = "") -> None:
+    """Only skill repos are merged and released by PenguPool. Any other pool repo (git-runners-setup runs
+    live runners from its main checkout) keeps sessions and merged-worktree removal, nothing more."""
+    if not _is_skill(top):
+        raise Refused(f"{lead}{os.path.basename(top)} is not a skill repo (no skills/*/SKILL.md): PenguPool "
+                      "never merges or releases it; merge its PR on GitHub, then remove the worktree")
 
 
 def _in_pool(top: str) -> None:
@@ -291,6 +306,7 @@ def release(d: str) -> str:
     every pool repo."""
     top = _main_top(d)
     _in_pool(top)
+    _skill_repo(top)
     if _git(top, "branch", "--show-current") != "main":
         raise Refused("release from main: the main checkout is on another branch")
     if _git(top, "status", "--porcelain"):

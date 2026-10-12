@@ -287,6 +287,8 @@ function html(webview: vscode.Webview, dagreUri: vscode.Uri): string {
   #pool button.x { cursor:pointer; border:none; background:none; color:inherit; padding:0 4px; }
   #poolAdd { margin-top:6px; width:100%; cursor:pointer; padding:3px; border-radius:3px; font:inherit; font-size:11px;
              color:var(--vscode-button-secondaryForeground); background:var(--vscode-button-secondaryBackground); border:none; }
+  .poolRepo .tag { font-size:10px; padding:0 3px; border:1px solid var(--vscode-descriptionForeground); border-radius:3px;
+    color:var(--vscode-descriptionForeground); }
   #poolEmpty { padding:4px; font-size:11px; color:var(--vscode-descriptionForeground); }
   body.pooldrag, body.pooldrag * { cursor:copy !important; }
   body.dragging #poolToggle, body.dragging #poolBody { outline:1px dashed var(--vscode-focusBorder); cursor:copy; }
@@ -722,14 +724,19 @@ ${HARNESS_TABS_HTML}
     poolList.replaceChildren();
     if(!repos.length){ const e = hel('div', { id:'poolEmpty' }); e.textContent = 'No skill repos yet.'; poolList.appendChild(e); }
     repos.forEach(r => {
+      // a plain repo (git-runners-setup) gets sessions and merged-worktree removal; PenguPool never merges or releases it
+      const plain = r.skill === false && !r.missing;
       const row = poolRow('poolRepo' + (r.missing ? ' missing' : ''), r.name,
-        r.missing ? r.repo + ' is gone' : r.repo + '\\nDrag onto the map to start a session here');
+        r.missing ? r.repo + ' is gone' : r.repo + '\\nDrag onto the map to start a session here' +
+        (plain ? '\\nNot a skill repo: PenguPool never merges or releases it' : ''));
       row.dataset.dir = r.repo;
+      if(plain){ const tag = hel('span', { class:'tag' }); tag.textContent = 'repo'; row.appendChild(tag); }
       row.appendChild(xButton('Remove ' + r.name + ' from the pool', {type:'poolRm', dir:r.repo}));
       poolList.appendChild(row);
       (r.worktrees || []).forEach(w => {
         const wt = poolRow('poolWt', w.branch.replace(/^pengupool\\//, ''), w.path);
-        wt.appendChild(xButton('Remove this worktree', {type:'worktreeRm', path:w.path}));
+        wt.appendChild(xButton(plain ? 'Remove this worktree once its PR is merged on GitHub' : 'Remove this worktree',
+          {type:'worktreeRm', path:w.path}));
         poolList.appendChild(wt);
       });
     });

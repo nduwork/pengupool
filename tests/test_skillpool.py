@@ -48,8 +48,9 @@ def env(tmp_path, monkeypatch):
     return tmp_path
 
 
-def make_repo(tmp, name="skills"):
-    """A repo on main, pushed to a bare origin that answers at https://github.com/me/<name>."""
+def make_repo(tmp, name="skills", skill=True):
+    """A repo on main, pushed to a bare origin that answers at https://github.com/me/<name>. A skill repo
+    has skills/<task>/SKILL.md; skill=False is an ordinary repo (git-runners-setup's shape)."""
     origin = tmp / f"{name}.git"
     subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(origin)], check=True)
     top = tmp / name
@@ -57,6 +58,10 @@ def make_repo(tmp, name="skills"):
     git(top, "init", "-q", "-b", "main")
     git(top, "config", f"url.{origin}.insteadOf", f"https://github.com/me/{name}")
     git(top, "remote", "add", "origin", f"https://github.com/me/{name}")
+    if skill:
+        (top / "skills" / "task").mkdir(parents=True)
+        (top / "skills" / "task" / "SKILL.md").write_text("---\nname: task\n---\n")
+        git(top, "add", ".")
     git(top, "commit", "-q", "--allow-empty", "-m", "root")
     git(top, "push", "-q", "-u", "origin", "main")
     return os.path.realpath(top)
@@ -101,7 +106,7 @@ def test_ls_flags_a_missing_repo(env):
     top = make_repo(env)
     skillpool.add(top)
     subprocess.run(["rm", "-rf", top], check=True)
-    assert skillpool.ls() == [{"repo": top, "name": "skills", "worktrees": [], "missing": True}]
+    assert skillpool.ls() == [{"repo": top, "name": "skills", "worktrees": [], "skill": False, "missing": True}]
 
 
 def wt_with_commit(top, name="log run"):
@@ -409,3 +414,27 @@ def test_unknown_tag_scheme_or_taken_version_refuses(env):
     with pytest.raises(skillpool.Refused, match="v1.1.0 already exists"):
         _released(top)
     assert git(top, "log", "-1", "--format=%s") == "feat: more"   # nothing committed
+
+
+def test_a_plain_repo_in_the_pool_is_never_merged_or_released(env):
+    """git-runners-setup runs live runners from its main checkout: it may sit in the pool for sessions and
+    for removing merged worktrees, but PenguPool never merges, releases, or asks to."""
+    top = make_repo(env, "runners", skill=False)
+    skillpool.add(top)
+    assert [(e["name"], e["skill"]) for e in skillpool.ls()] == [("runners", False)]
+    wt, branch = wt_with_commit(top, "tweak")
+    with pytest.raises(skillpool.Refused, match="not a skill repo") as e:
+        skillpool.worktree_rm(wt)
+    assert not isinstance(e.value, skillpool.Unmerged)        # a refusal, never the merge question
+    with pytest.raises(skillpool.Refused, match="not a skill repo"):
+        skillpool.worktree_rm(wt, merge=True)
+    with pytest.raises(skillpool.Refused, match="not a skill repo"):
+        skillpool.release(top)
+    assert os.path.isdir(wt) and "pr create" not in gh_calls(env) and git(top, "tag") == ""
+    merged(env, branch, wt)                                     # merged on GitHub by its owner
+    assert skillpool.worktree_rm(wt) == f"removed {wt}"        # plain removal still works
+
+
+def test_ls_marks_skill_repos(env):
+    skillpool.add(make_repo(env))
+    assert skillpool.ls()[0]["skill"] is True
