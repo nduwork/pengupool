@@ -29,7 +29,8 @@ Verbs:
                                   (pool repos only); refuses when ignored files would go
     pool ls | add <dir> | rm <dir>  the skill-repo pool (JSON for ls); add needs a GitHub origin
     pool clone <owner/repo|url> <parent>  clone a GitHub repo into <parent>/<repo> and add it
-    release <repo>                release a pool repo from main: date tag, CHANGELOG, GitHub release
+    release <repo>                release a pool repo from main in its own version scheme (semver: next minor;
+                                  else a date), CHANGELOG + package.json, tag, GitHub release
     past <dir>                    JSON [[sessionId, title, harness], …] of resumable past sessions
     past-all                      JSON [[sessionId, title, harness, cwd, updated], …] of every resumable
                                   session the pool knows, newest first (a reboot leaves them here)

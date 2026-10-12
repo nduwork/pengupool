@@ -9,7 +9,9 @@ All notable changes to this project are documented here. The format follows
 - skill-repo pool: register repos from a local folder, from GitHub (`ctl pool clone`), or by dropping a
   session card on the drawer (`pengupool ctl pool`), list them in a drawer on the map, drag one onto
   the map to start a session there, and remove a skill-repo worktree once its PR is merged — or, on your
-  confirm, squash-merge it and release the repo first (`ctl worktree-rm`, `ctl release`)
+  confirm, squash-merge it and release the repo first (`ctl worktree-rm`, `ctl release`). A release keeps
+  the repo's version scheme (semver repos get the next minor and a matching `package.json`) and its CHANGELOG
+  heading style
 
 ## [1.1.1] - 2026-10-07
 

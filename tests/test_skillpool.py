@@ -235,15 +235,15 @@ def test_release_versions_changelog_and_refusals(env, monkeypatch):
     skillpool.add(top)
     assert skillpool.release(top) == "v2026.10.10"
     text = open(os.path.join(top, "CHANGELOG.md")).read()
-    assert text == "# Changelog\n\n## v2026.10.10 — 2026-10-10\n\n- root\n"
+    assert text == "# Changelog\n\n## 2026.10.10 — 2026-10-10\n\n- root\n"
     with pytest.raises(skillpool.Refused, match="nothing to release"):
         skillpool.release(top)
     git(top, "commit", "-q", "--allow-empty", "-m", "log: b")
     git(env / "skills.git", "tag", "v2026.10.10-1", "main")        # taken on origin only
     assert skillpool.release(top) == "v2026.10.10-2"
     text = open(os.path.join(top, "CHANGELOG.md")).read()
-    assert text.index("v2026.10.10-2") < text.index("## v2026.10.10 —")   # newest first
-    assert "- log: b\n" in text and "chore: release" not in text.split("## v2026.10.10 —")[0]
+    assert text.index("2026.10.10-2") < text.index("## 2026.10.10 —")   # newest first
+    assert "- log: b\n" in text and "chore: release" not in text.split("## 2026.10.10 —")[0]
     git(top, "checkout", "-q", "-b", "side")
     with pytest.raises(skillpool.Refused, match="main"):
         skillpool.release(top)
@@ -356,3 +356,52 @@ def test_ctl_pool_clone(env, monkeypatch, capsys):
     monkeypatch.setattr(skillpool, "clone", lambda src, parent: f"/x/{src}@{parent}")
     assert ctl.main(["pool", "clone", "me/skills", "/p"]) == 0
     assert capsys.readouterr().out.strip() == "/x/me/skills@/p"
+
+
+def _released(top):
+    git(top, "commit", "-q", "--allow-empty", "-m", "feat: more")
+    return skillpool.release(top), open(os.path.join(top, "CHANGELOG.md")).read()
+
+
+def test_semver_repo_keeps_semver_and_its_heading_style(env, monkeypatch):
+    """A repo tagged v0.1 / v0.2 gets v0.3 (same number of parts), headed like its own CHANGELOG."""
+    monkeypatch.setattr(skillpool, "_today", lambda: datetime.date(2026, 10, 12))
+    top = make_repo(env)
+    skillpool.add(top)
+    Path(top, "CHANGELOG.md").write_text("# Changelog\n\n## 0.2 — 2026-10-04\n\n- b\n")
+    git(top, "add", "."), git(top, "commit", "-q", "-m", "docs: log"), git(top, "tag", "v0.2")
+    version, text = _released(top)
+    assert version == "v0.3" and git(top, "describe", "--tags") == "v0.3"
+    assert text.startswith("# Changelog\n\n## 0.3 — 2026-10-12\n\n- feat: more\n\n## 0.2 — 2026-10-04")
+
+
+def test_keep_a_changelog_repo_bumps_minor_and_package_json(env, monkeypatch):
+    """research_agent's shape: v0.3.0 tags, package.json 0.3.0, Keep a Changelog with curated Unreleased notes."""
+    monkeypatch.setattr(skillpool, "_today", lambda: datetime.date(2026, 10, 12))
+    top = make_repo(env)
+    skillpool.add(top)
+    Path(top, "package.json").write_text('{\n  "name": "x",\n  "version": "0.3.0"\n}\n')
+    Path(top, "CHANGELOG.md").write_text("# Changelog\n\nIntro.\n\n## [Unreleased]\n\n### Added\n\n- curated\n\n"
+                                          "## [0.3.0] - 2026-09-28\n\n- old\n")
+    git(top, "add", "."), git(top, "commit", "-q", "-m", "chore: v0.3.0"), git(top, "tag", "v0.3.0")
+    version, text = _released(top)
+    assert version == "v0.4.0"
+    assert json.loads(Path(top, "package.json").read_text())["version"] == "0.4.0"
+    assert text == ("# Changelog\n\nIntro.\n\n## [Unreleased]\n\n## [0.4.0] - 2026-10-12\n\n### Added\n\n- curated\n\n"
+                    "## [0.3.0] - 2026-09-28\n\n- old\n")   # curated notes win over commit subjects
+    git(top, "commit", "-q", "--allow-empty", "-m", "fix: y")
+    assert skillpool.release(top) == "v0.5.0"   # empty Unreleased: commit subjects fill the section
+    assert "## [Unreleased]\n\n## [0.5.0] - 2026-10-12\n\n- fix: y\n\n## [0.4.0]" in Path(top, "CHANGELOG.md").read_text()
+
+
+def test_unknown_tag_scheme_or_taken_version_refuses(env):
+    top = make_repo(env)
+    skillpool.add(top)
+    git(top, "tag", "v1-beta")
+    with pytest.raises(skillpool.Refused, match="version scheme"):
+        _released(top)
+    git(top, "tag", "v1.0.0")
+    git(env / "skills.git", "tag", "v1.1.0", "main")   # the next one is already taken on origin
+    with pytest.raises(skillpool.Refused, match="v1.1.0 already exists"):
+        _released(top)
+    assert git(top, "log", "-1", "--format=%s") == "feat: more"   # nothing committed

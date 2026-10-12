@@ -226,22 +226,69 @@ def _tags(top: str) -> set[str]:
 
 
 def _changelog(top: str, version: str, day: str, notes: list[str]) -> None:
+    """Add the release's section in the file's own style: Keep a Changelog (`## [0.4.0] - day`, taking over the
+    curated Unreleased notes when there are any) or plain (`## 0.4 — day`). Headings drop the tag's `v`."""
     p = os.path.join(top, "CHANGELOG.md")
     try:
         with open(p) as f:
             text = f.read()
     except FileNotFoundError:
         text = "# Changelog\n"
-    section = f"## {version} — {day}\n\n" + "".join(f"- {n}\n" for n in notes)
-    i = text.find("\n## ")
-    text = text[:i + 1] + section + "\n" + text[i + 1:] if i >= 0 else text.rstrip("\n") + "\n\n" + section
+    name, bullets = version[1:], "".join(f"- {n}\n" for n in notes)
+    kac = re.search(r"^## \[Unreleased\][^\n]*\n", text, re.M)
+    if kac:
+        rest = text[kac.end():]
+        nxt = re.search(r"^## ", rest, re.M)
+        body = rest[:nxt.start()] if nxt else rest
+        section = f"## [{name}] - {day}\n\n" + (body.lstrip("\n") if body.strip() else bullets + "\n")
+        text = text[:kac.end()] + "\n" + section + rest[len(body):]
+    else:
+        section = f"## {name} — {day}\n\n" + bullets
+        i = text.find("\n## ")
+        text = text[:i + 1] + section + "\n" + text[i + 1:] if i >= 0 else text.rstrip("\n") + "\n\n" + section
     with open(p, "w") as f:
         f.write(text)
 
 
+def _next_version(last: str, day: datetime.date, tags: set[str]) -> str:
+    """Keep the repo's scheme: semver tags get the next minor in the same number of parts (v0.2 → v0.3,
+    v0.3.0 → v0.4.0); no tags or date tags get today's date, suffixed -1, -2 … when taken."""
+    if not last or re.fullmatch(r"v\d{4}\.\d{2}\.\d{2}(-\d+)?", last):
+        version = base = f"v{day:%Y.%m.%d}"
+        n = 0
+        while version in tags:
+            n += 1
+            version = f"{base}-{n}"
+        return version
+    m = re.fullmatch(r"v(\d+)\.(\d+)(\.\d+)?", last)
+    if not m:
+        raise Refused(f"cannot tell the version scheme from tag {last}; tag this release by hand")
+    version = f"v{m[1]}.{int(m[2]) + 1}" + (".0" if m[3] else "")
+    if version in tags:
+        raise Refused(f"{version} already exists on origin or locally; tag this release by hand")
+    return version
+
+
+def _package_json(top: str, version: str) -> bool:
+    """Set package.json's version to the release (semver, so v0.3 → 0.3.0); False when there is none."""
+    p = os.path.join(top, "package.json")
+    try:
+        with open(p) as f:
+            text = f.read()
+    except FileNotFoundError:
+        return False
+    v = version[1:] + (".0" if version[1:].count(".") == 1 else "")
+    text, n = re.subn(r'("version"\s*:\s*")[^"]*(")', lambda m: m[1] + v + m[2], text, count=1)
+    if n:
+        with open(p, "w") as f:
+            f.write(text)
+    return bool(n)
+
+
 def release(d: str) -> str:
-    """Release a skill repo from its main checkout: date version, CHANGELOG section from the commit
-    subjects since the last tag, commit, tag, push, GitHub release. PenguPool owns this for every pool repo."""
+    """Release a skill repo from its main checkout: next version in the repo's own scheme (`_next_version`),
+    CHANGELOG section and package.json version, commit, tag, push, GitHub release. PenguPool owns this for
+    every pool repo."""
     top = _main_top(d)
     _in_pool(top)
     if _git(top, "branch", "--show-current") != "main":
@@ -256,14 +303,10 @@ def release(d: str) -> str:
     notes = [s for s in _git(top, "log", "--format=%s", f"{last}..HEAD" if last else "HEAD").splitlines() if s]
     if not notes:
         raise Refused(f"nothing to release since {last or 'the start'}")
-    tags, day = _tags(top), _today()
-    version = base = f"v{day:%Y.%m.%d}"
-    n = 0
-    while version in tags:
-        n += 1
-        version = f"{base}-{n}"
+    day = _today()
+    version = _next_version(last, day, _tags(top))
     _changelog(top, version, day.isoformat(), notes)
-    _git(top, "add", "CHANGELOG.md")
+    _git(top, "add", "CHANGELOG.md", *(["package.json"] if _package_json(top, version) else []))
     _git(top, "commit", "-q", "-m", f"chore: release {version}")
     _git(top, "tag", version)
     try:
