@@ -8,7 +8,7 @@ const ts = require('typescript');
 const now = Date.now();
 const SESSIONS = [
   ['pi-1', 'pengupool', 'pi', '/repos/pengupool', now - 4_000],
-  ['pi-2', 'oh-tidepool', 'pi', '/repos/oh-tidepool', now - 3 * 3_600_000],
+  ['pi-2', 'acme-shop', 'pi', '/repos/acme-shop', now - 3 * 3_600_000],
 ];
 
 /** The real command registry with VS Code replaced: quick picks answer themselves, runCtl is scripted. */
@@ -69,13 +69,13 @@ test('the run-all button restores every past session, newest first, and looks at
   await h.restore();
   const [items, options] = h.picks[0];
   assert.equal(options.canPickMany, true);
-  assert.deepEqual([...items.map((item) => item.label)], ['pengupool', 'oh-tidepool']);
+  assert.deepEqual([...items.map((item) => item.label)], ['pengupool', 'acme-shop']);
   assert.deepEqual([...items.map((item) => item.picked)], [true, true]);
   assert.match(items[0].description, /^pi · \/repos\/pengupool · just now$/);
   assert.match(items[1].description, /3 h ago$/);
   assert.deepEqual(h.resumed().map((args) => [...args]),
                    [['resume', '/repos/pengupool', 'pengupool', 'pi-1'],
-                    ['resume', '/repos/oh-tidepool', 'oh-tidepool', 'pi-2']]);
+                    ['resume', '/repos/acme-shop', 'acme-shop', 'pi-2']]);
   assert.deepEqual(h.bound, [['/repos/pengupool', 'pengupool', 'pi-1', 'pi']]);
   assert.deepEqual(h.messages, [['info', 'PenguPool: resumed 2 sessions.']]);
 });
@@ -99,7 +99,7 @@ test('a session that will not come back is counted, not hidden', async () => {
   const h = harness({ resume: (args) => (args[3] === 'pi-2' ? { code: 1, stderr: 'window gone' } : { code: 0 }) });
   await h.restore();
   assert.deepEqual(h.bound, [['/repos/pengupool', 'pengupool', 'pi-1', 'pi']]);
-  assert.deepEqual(h.messages, [['warn', 'PenguPool: resumed 1 of 2 — oh-tidepool: window gone']]);
+  assert.deepEqual(h.messages, [['warn', 'PenguPool: resumed 1 of 2 — acme-shop: window gone']]);
 });
 
 test('a failing list is surfaced instead of looking like an empty pool', async () => {

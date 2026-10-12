@@ -209,7 +209,7 @@ def _terms(text: str) -> set[str]:
 
 def _parts(name: str) -> set[str]:
     """Terms of a session name or workspace: every run of its pieces between - _ ~ . as written
-    ("oh-tidepool-portal" gives oh-tidepool, tidepool-portal, tidepool, …). Both sides are split the same
+    ("acme-shop-portal" gives acme-shop, shop-portal, shop, …). Both sides are split the same
     way, so a repo prefix a parent shares with its child cancels out whatever its length."""
     bits = re.split(r"([-_~.])", str(name).lower())   # pieces at even indexes, separators between
     runs = {"".join(bits[i:j + 1]) for i in range(0, len(bits), 2) for j in range(i, len(bits), 2)}
