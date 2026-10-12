@@ -200,10 +200,14 @@ def test_release_skipped_when_main_checkout_dirty(env):
     assert not os.path.exists(wt)
 
 
-def _no_gh(monkeypatch):
-    """PATH with git but without the fake (or any) gh."""
+def _no_gh(monkeypatch, tmp):
+    """PATH with git but without the fake (or any) gh: a dir holding only a git link, since CI keeps
+    gh next to git in /usr/bin."""
     import shutil
-    monkeypatch.setenv("PATH", os.path.dirname(shutil.which("git")))
+    only = tmp / "only-git"
+    only.mkdir()
+    (only / "git").symlink_to(shutil.which("git"))
+    monkeypatch.setenv("PATH", str(only))
     assert shutil.which("gh") is None
 
 
@@ -211,7 +215,7 @@ def test_no_gh_is_unmerged_then_refused(env, monkeypatch):
     top = make_repo(env)
     skillpool.add(top)
     wt, _ = wt_with_commit(top)
-    _no_gh(monkeypatch)
+    _no_gh(monkeypatch, env)
     with pytest.raises(skillpool.Unmerged):
         skillpool.worktree_rm(wt)
     with pytest.raises(skillpool.Refused, match="gh"):
@@ -225,7 +229,7 @@ def test_no_gh_but_landed_on_main_is_removed(env, monkeypatch):
     git(top, "merge", "-q", "--squash", branch)          # the content lands on main as one new commit
     git(top, "commit", "-q", "-m", "log: a (#1)")
     git(top, "push", "-q", "origin", "main")
-    _no_gh(monkeypatch)
+    _no_gh(monkeypatch, env)
     assert skillpool.worktree_rm(wt) == f"removed {wt}"
 
 
