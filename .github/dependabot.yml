@@ -14,6 +14,13 @@ updates:
     open-pull-requests-limit: 5
     cooldown:
       default-days: 3  # same 3-day cooloff as the installer
+    ignore:
+      # The type packages follow the oldest VS Code we support (engines.vscode), not the newest:
+      # vsce rejects @types/vscode above the engine, and newer @types/node types Node APIs that
+      # engine's runtime lacks. Bump them by hand together with engines.vscode.
+      - dependency-name: "@types/vscode"
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:

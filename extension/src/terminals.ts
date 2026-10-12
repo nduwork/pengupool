@@ -152,6 +152,9 @@ export class TerminalManager implements vscode.Disposable {
       env: { ...process.env },
       strictEnv: true,
       isTransient: true,
+      // The Python extension types `source <venv>/bin/activate` into every new visible terminal, and here
+      // that lands in the agent's prompt. It skips hideFromUser terminals; the show() below surfaces ours.
+      hideFromUser: true,
     });
     // Removing restored legacy tabs can make VS Code create a blank default shell to keep the
     // visible panel populated. Close only untouched default shells once our real work pane exists.
