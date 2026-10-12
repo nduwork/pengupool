@@ -41,3 +41,35 @@ def test_serve_once_writes_one_json_line(monkeypatch):
     assert len(lines) == 1
     obj = json.loads(lines[0])
     assert obj["rev"] == 1 and "topo_hash" in obj and obj["roots"][0]["name"] == "root"
+
+
+def test_a_pane_no_session_claims_yet_shows_as_a_pending_card(monkeypatch):
+    """`ctl new` makes the pane before the agent writes its session file (it waits on folder trust first),
+    so the pane itself becomes a card the user can open and answer."""
+    from pengupool import tmux
+    monkeypatch.setattr(model, "snapshot", lambda: _roots())
+    panes = {"cc": [{"pane": "%3", "pid": 30, "name": "child", "cwd": "/repo"},           # claimed by c1
+                    {"pane": "%66", "pid": 66, "name": "review-agent", "cwd": "/rg"},
+                    {"pane": "%70", "pid": 70, "name": "other", "cwd": "/o"}],
+             "pi": [{"pane": "%3", "pid": 33, "name": "pi-one", "cwd": "/p"}]}           # same id, other server
+    monkeypatch.setattr(tmux, "starting_panes", lambda h="cc": panes[h])
+    monkeypatch.setattr(tmux, "pane_owns", lambda pane, pid, h: (pane, pid) == ("%70", 1))   # r1's pid runs in %70
+    monkeypatch.setattr(tmux, "trust_prompt", lambda pane, h: pane == "%66")
+    snap = serve.build()
+    pending = {r["id"]: r for r in snap["roots"][1:]}
+    assert set(pending) == {"pane-66", "pi-pane-3"}
+    card = pending["pane-66"]
+    assert (card["name"], card["cwd"], card["state"], card["tmux_pane"], card["harness"]) == \
+        ("review-agent", "/rg", "waiting", "%66", "cc")
+    assert "folder trust" in card["status"]
+    assert "starting" in pending["pi-pane-3"]["status"] and pending["pi-pane-3"]["harness"] == "pi"
+
+
+def test_trust_prompt_matches_claude_codes_folder_trust_screens(monkeypatch):
+    from pengupool import tmux
+    for screen, want in (("Quick safety check: Is this a project you created or one you trust?\n ❯ 1. Yes, I trust this folder", True),
+                         ("Do you trust the files in this folder?", True),
+                         ("> how do I trust this folder in git?", False),   # a prompt typed by the user is not the screen
+                         ("", False)):
+        monkeypatch.setattr(tmux, "_run", lambda *a, h="cc", s=screen: s)
+        assert tmux.trust_prompt("%1") is want, screen

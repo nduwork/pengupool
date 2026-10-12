@@ -84,6 +84,40 @@ def test_attach_uses_the_sessions_own_harness_server(monkeypatch, capsys):
     assert seen == ["pi"]
 
 
+def test_attach_opens_a_pending_pane_card(monkeypatch, capsys):
+    """A pending card's id names its pane; attaching shows that pane so the user can answer its prompt."""
+    monkeypatch.setattr(model, "load_registry", lambda: {})
+    monkeypatch.setattr(model, "load_sessions", lambda: [])
+    panes = {"cc": [{"pane": "%66", "pid": 66, "name": "review-agent", "cwd": "/rg"}],
+             "pi": [{"pane": "%3", "pid": 3, "name": "p", "cwd": "/p"}]}
+    monkeypatch.setattr("pengupool.tmux.starting_panes", lambda h="cc": panes[h])
+    monkeypatch.setattr("pengupool.tmux.view_command", lambda pane, name, view, h: f"ATTACH {pane} {name} {h}")
+    assert ctl.main(["--json", "attach", "pane-66", "review-agent"]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["command"] == "ATTACH %66 review-agent cc" and out["cwd"] == "/rg"
+    assert ctl.main(["attach", "pi-pane-3", "p"]) == 0 and "ATTACH %3 p pi" in capsys.readouterr().out
+    assert ctl.main(["attach", "pane-99", "gone"]) == 1   # gone; 1, not 2, so nobody offers to adopt it
+
+
+def test_select_switches_an_open_view_to_a_pending_pane(monkeypatch):
+    monkeypatch.setattr(model, "load_registry", lambda: {})
+    monkeypatch.setattr(model, "load_sessions", lambda: [])
+    seen = []
+    monkeypatch.setattr("pengupool.tmux.select_view", lambda pane, view, h: seen.append((pane, view, h)) or True)
+    assert ctl.main(["select", "pane-66", "editor-1"]) == 0 and seen == [("%66", "editor-1", "cc")]
+    assert ctl.main(["select", "pi-pane-3", "editor-2"]) == 0 and seen[-1] == ("%3", "editor-2", "pi")
+
+
+def test_close_on_a_pending_card_kills_only_a_still_starting_pane(monkeypatch):
+    monkeypatch.setattr(model, "load_registry", lambda: {})
+    monkeypatch.setattr(model, "load_sessions", lambda: [])
+    monkeypatch.setattr("pengupool.tmux.starting_panes", lambda h="cc": [{"pane": "%66", "pid": 66, "name": "r", "cwd": "/rg"}])
+    killed = []
+    monkeypatch.setattr("pengupool.tmux.kill", lambda pane, pid, h: killed.append((pane, pid, h)) or True)
+    assert ctl.main(["close", "pane-66"]) == 0 and killed == [("%66", 66, "cc")]
+    assert ctl.main(["close", "pane-99"]) == 1 and len(killed) == 1   # not a starting pane: left alone
+
+
 def test_select_switches_the_existing_extension_view(monkeypatch):
     monkeypatch.setattr(model, "load_registry", lambda: {"sid": "%1"})
     monkeypatch.setattr(model, "load_sessions", lambda: [{"sessionId": "sid", "pid": 4242}])

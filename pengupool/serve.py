@@ -45,9 +45,34 @@ def _topo(roots: list[model.Node], cross: list[model.Edge]) -> str:
     return hashlib.sha1(json.dumps(shape).encode()).hexdigest()[:12]
 
 
+def _pending(roots: list[model.Node]) -> list[model.Node]:
+    """Agent panes no session claims yet, as cards. `ctl new` makes the pane before the agent writes its
+    session file (it first waits on the folder-trust question), and without a card nobody can answer it.
+    UI only: routing and the context tree never see these."""
+    from . import harness, tmux
+    nodes, stack = [], list(roots)
+    while stack:
+        n = stack.pop()
+        nodes.append(n)
+        stack.extend(n.children)
+    claimed = {(n.harness, n.tmux_pane) for n in nodes if n.tmux_pane}
+    out = []
+    for h in harness.SOCK:
+        for p in tmux.starting_panes(h):
+            # a session without a registry entry still owns its pane when its process runs inside it
+            if (h, p["pane"]) in claimed or any(n.harness == h and tmux.pane_owns(p["pane"], n.pid, h) for n in nodes):
+                continue
+            status = ("waiting for folder trust — open to answer" if tmux.trust_prompt(p["pane"], h)
+                      else "starting — open to see it")
+            out.append(model.Node(tmux.pending_id(p["pane"], h), p["name"], p["cwd"], p["pid"], "waiting",
+                                  status_line=status, tmux_pane=p["pane"], harness=h))
+    return out
+
+
 def build() -> dict:
     """One snapshot dict (no `rev`/`ts`; serve() adds those)."""
     roots, cross, msgs = model.snapshot()
+    roots = roots + _pending(roots)
     return {"topo_hash": _topo(roots, cross),
             "roots": [_node(r) for r in roots],
             "cross": [list(e) for e in cross],

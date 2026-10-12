@@ -225,3 +225,4 @@ def test_a_switch_leaves_a_window_another_client_is_displaying_alone(servers, at
     assert tmux.select_view(pane_of(unseen), "editor-a")
     assert [call[1:3] for call in resized()] == [("-t", f"pv-ext-editor-a:{unseen}")]
     assert size_of(unseen) == "100x30"
+
