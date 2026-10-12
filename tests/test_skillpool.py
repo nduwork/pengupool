@@ -438,3 +438,47 @@ def test_a_plain_repo_in_the_pool_is_never_merged_or_released(env):
 def test_ls_marks_skill_repos(env):
     skillpool.add(make_repo(env))
     assert skillpool.ls()[0]["skill"] is True
+
+
+def test_ls_reports_the_last_release(env):
+    top = make_repo(env)
+    skillpool.add(top)
+    assert skillpool.ls()[0]["version"] == ""
+    git(top, "tag", "v0.3.0")
+    assert skillpool.ls()[0]["version"] == "v0.3.0"
+
+
+def test_rm_given_a_subfolder_or_worktree_drops_its_repo(env):
+    top = make_repo(env)
+    wt = tmux.worktree_add(top, "log run")
+    skillpool.add(top)
+    assert skillpool.remove(os.path.join(top, "skills", "task")) == top
+    assert skillpool.load() == []
+    skillpool.add(top)
+    assert skillpool.remove(wt) == top and skillpool.load() == []
+
+
+def test_pull_fast_forwards_main_and_refuses_local_changes(env):
+    top = make_repo(env, skill=False)
+    other = env / "other"
+    git(env, "clone", "-q", str(env / "skills.git"), str(other))
+    git(other, "commit", "-q", "--allow-empty", "-m", "upstream")
+    git(other, "push", "-q", "origin", "main")
+    with pytest.raises(skillpool.Refused, match="not in the skill pool"):
+        skillpool.pull(top)
+    skillpool.add(top)
+    (Path(top) / "runner.sh").write_text("live edit\n")         # git-runners-setup: edits in use are never touched
+    with pytest.raises(skillpool.Refused, match="uncommitted changes"):
+        skillpool.pull(top)
+    assert git(top, "log", "-1", "--format=%s") == "root"
+    os.remove(Path(top) / "runner.sh")
+    assert "up to date" not in skillpool.pull(top)
+    assert git(top, "log", "-1", "--format=%s") == "upstream"
+    assert skillpool.pull(top) == "skills is up to date"
+
+
+def test_ctl_pool_pull(env, capsys):
+    top = make_repo(env)
+    skillpool.add(top)
+    assert ctl.main(["pool", "pull", top]) == 0
+    assert "up to date" in capsys.readouterr().out

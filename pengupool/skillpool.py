@@ -92,9 +92,28 @@ def clone(src: str, parent: str) -> str:
 
 
 def remove(d: str) -> str:
-    p = os.path.realpath(d)   # the repo may be gone, so no git lookup
+    """Drop a repo from the pool; a subfolder or worktree drops its repo. A repo that is gone is matched by path."""
+    try:
+        p = _main_top(d)
+    except Refused:
+        p = os.path.realpath(d)
     _save([r for r in load() if r != p])
     return p
+
+
+def pull(d: str) -> str:
+    """Fast-forward a pool repo's main checkout. Local changes refuse it, so a checkout in use (git-runners-setup
+    runs its runners from there) is never touched."""
+    top = _main_top(d)
+    _in_pool(top)
+    if _git(top, "status", "--porcelain"):
+        raise Refused(f"{os.path.basename(top)} has uncommitted changes; pull it by hand")
+    before = _git(top, "rev-parse", "HEAD")
+    _git(top, "pull", "-q", "--ff-only")
+    after = _git(top, "rev-parse", "HEAD")
+    if after == before:
+        return f"{os.path.basename(top)} is up to date"
+    return f"{os.path.basename(top)}: {_git(top, 'rev-list', '--count', f'{before}..{after}')} new commit(s)"
 
 
 def worktrees(top: str) -> list[dict]:
@@ -113,10 +132,18 @@ def ls() -> list[dict]:
         e = {"repo": r, "name": os.path.basename(r), "worktrees": [], "skill": _is_skill(r)}
         try:
             e["worktrees"] = worktrees(r)
+            e["version"] = _last_tag(r)
         except Refused:
             e["missing"] = True
         out.append(e)
     return out
+
+
+def _last_tag(top: str) -> str:
+    try:
+        return _git(top, "describe", "--tags", "--abbrev=0", "--match", "v*")
+    except Refused:   # no release yet
+        return ""
 
 
 def _pr(cwd: str, branch: str) -> tuple[str, str]:
@@ -312,10 +339,7 @@ def release(d: str) -> str:
     if _git(top, "status", "--porcelain"):
         raise Refused("the main checkout has uncommitted changes")
     _git(top, "pull", "-q", "--ff-only", "origin", "main")
-    try:
-        last = _git(top, "describe", "--tags", "--abbrev=0", "--match", "v*")
-    except Refused:
-        last = ""
+    last = _last_tag(top)
     notes = [s for s in _git(top, "log", "--format=%s", f"{last}..HEAD" if last else "HEAD").splitlines() if s]
     if not notes:
         raise Refused(f"nothing to release since {last or 'the start'}")

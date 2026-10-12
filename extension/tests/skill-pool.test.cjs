@@ -23,7 +23,7 @@ function openMap(answers, warningPick, ui = {}) {
   const panel = { webview, reveal() {}, dispose() {}, onDidDispose: () => ({ dispose() {} }) };
   const vscode = {
     ViewColumn: { One: 1, Beside: -2 }, ProgressLocation: { Notification: 15 },
-    Uri: { joinPath: (...parts) => parts.join('/') },
+    Uri: { joinPath: (...parts) => parts.join('/'), file: (p) => ({ fsPath: p }) },
     commands: { executeCommand: async (...args) => { commands.push(args); } },
     window: {
       createWebviewPanel: () => panel,
@@ -31,7 +31,7 @@ function openMap(answers, warningPick, ui = {}) {
       showInformationMessage: async (m) => { shown.push(['info', m]); },
       showWarningMessage: async (m, opts, ...items) => { shown.push(['warn', m]); return warningPick ? items[0] : undefined; },
       showOpenDialog: async () => [{ fsPath: ui.folder || '/repos/skills' }],
-      showQuickPick: async (items) => items.find((i) => i.label.includes(ui.pick || 'local')),
+      showQuickPick: async (items) => { ui.offered = items.map((i) => i.label); return items.find((i) => i.label.includes(ui.pick || 'local')); },
       showInputBox: async () => ui.input,
       withProgress: async (o, task) => task(),
     },
@@ -161,4 +161,48 @@ test('a pool repo that is not a skill repo is tagged, and its worktree × says m
   assert.match(script, /const plain = r\.skill === false && !r\.missing/);
   assert.match(script, /never merges or releases it/);
   assert.match(script, /once its PR is merged on GitHub/);
+});
+
+test('a drop reloads the pool once the session has started, so a new worktree shows', async () => {
+  const map = openMap({ 'pool ls': LS });
+  map.receive({ type: 'poolDrop', dir: '/repos/skills' });
+  await settle();
+  assert.deepEqual(map.ctl, ['pool ls']);
+});
+
+test('the repo menu offers release only for a skill repo', async () => {
+  const skill = {}, plain = {};
+  openMap({ 'pool ls': LS }, false, skill).receive({ type: 'poolMenu', dir: '/repos/skills', skill: true });
+  openMap({ 'pool ls': LS }, false, plain).receive({ type: 'poolMenu', dir: '/repos/runners', skill: false });
+  await settle();
+  assert.deepEqual([...skill.offered], ['New session here', 'Open folder in new window', 'Pull latest', 'Release…', 'Remove from pool']);
+  assert.ok(!plain.offered.includes('Release…'));
+});
+
+test('repo menu actions run the matching ctl verb or command', async () => {
+  const run = async (pick, warningPick) => {
+    const ui = { pick };
+    const map = openMap({ 'pool ls': LS, 'pool pull /repos/skills': { code: 0, stdout: 'skills: 2 new commit(s)', stderr: '' } }, warningPick, ui);
+    map.receive({ type: 'poolMenu', dir: '/repos/skills', skill: true });
+    await settle();
+    return map;
+  };
+  assert.deepEqual((await run('New session')).commands.at(-1), ['pengupool.newIn', '/repos/skills']);
+  const open = (await run('Open folder')).commands.at(-1);
+  assert.deepEqual(JSON.parse(JSON.stringify([open[0], open[1].fsPath, open[2]])), ['vscode.openFolder', '/repos/skills', { forceNewWindow: true }]);
+  const pulled = await run('Pull');
+  assert.deepEqual(pulled.ctl, ['pool pull /repos/skills', 'pool ls']);
+  assert.deepEqual(pulled.shown.at(-1), ['info', 'PenguPool: skills: 2 new commit(s)']);
+  assert.deepEqual((await run('Remove')).ctl, ['pool rm /repos/skills', 'pool ls']);
+  assert.deepEqual((await run('Release', false)).ctl, []);                 // the confirmation is the approval
+  assert.deepEqual((await run('Release', true)).ctl, ['release /repos/skills', 'pool ls']);
+});
+
+test('the drawer is the Agent pool, with release, live sessions and a menu on each repo', () => {
+  const html = openMap({}).html();
+  assert.match(html, />Agent pool</);
+  assert.match(html, /r\.version/);
+  assert.match(html, /type:'poolMenu'/);
+  assert.match(html, /contextmenu/);
+  assert.match(html, /liveIn\(/);
 });

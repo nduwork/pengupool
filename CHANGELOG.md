@@ -14,6 +14,11 @@ All notable changes to this project are documented here. The format follows
   heading style. Only skill repos (with `skills/*/SKILL.md`) are ever merged or released: any other repo in
   the pool, such as one running live services from its checkout, gets sessions and merged-worktree removal,
   and is tagged `repo` in the drawer
+- the drawer is the **Agent pool**: each repo shows a `skill`/`repo` tag, its last release and how many
+  sessions run in it (click to light their cards); right-click or `⋯` to start a session, open the folder,
+  pull its main checkout (`ctl pool pull`, refused while it has local changes), release a skill repo after a
+  confirm, or remove it. `pool rm` takes a subfolder or worktree path, the drawer reloads after a drop starts
+  a session, and a worktree's × is off while a session runs there
 
 ## [1.1.2] - 2026-10-12
 

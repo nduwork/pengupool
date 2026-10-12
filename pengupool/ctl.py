@@ -29,6 +29,7 @@ Verbs:
                                   (pool repos only); refuses when ignored files would go
     pool ls | add <dir> | rm <dir>  the skill-repo pool (JSON for ls); add needs a GitHub origin
     pool clone <owner/repo|url> <parent>  clone a GitHub repo into <parent>/<repo> and add it
+    pool pull <dir>               fast-forward a pool repo's main checkout; refused with local changes
     release <repo>                release a pool repo from main in its own version scheme (semver: next minor;
                                   else a date), CHANGELOG + package.json, tag, GitHub release
     past <dir>                    JSON [[sessionId, title, harness], …] of resumable past sessions
@@ -381,11 +382,11 @@ def _skill(fn) -> int:
 def _pool(verb: str, d: str = "", parent: str = "") -> int:
     if verb == "ls" and not d:
         return _skill(lambda s: json.dumps(s.ls()))
-    if verb in ("add", "rm") and d:
-        return _skill(lambda s: s.add(d) if verb == "add" else s.remove(d))
+    if verb in ("add", "rm", "pull") and d:
+        return _skill(lambda s: {"add": s.add, "rm": s.remove, "pull": s.pull}[verb](d))
     if verb == "clone" and d and parent:
         return _skill(lambda s: s.clone(d, parent))
-    print("usage: pengupool ctl pool ls | add <dir> | rm <dir> | clone <owner/repo|url> <parent-dir>", file=sys.stderr)
+    print("usage: pengupool ctl pool ls | add <dir> | rm <dir> | pull <dir> | clone <owner/repo|url> <parent-dir>", file=sys.stderr)
     return 2
 
 
