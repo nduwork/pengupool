@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.0
+
+- agent pool on the map (v1.2.0) (#95)
+
+Ships with PenguPool v1.2.0.
+
 ## 0.9.2
 
 - v1.1.2 — folder-trust card, venv line, status line, type pins (#94)

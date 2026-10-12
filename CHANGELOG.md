@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-12
+
 ### Added
 - skill-repo pool: register repos from a local folder, from GitHub (`ctl pool clone`), or by dropping a
   session card on the drawer (`pengupool ctl pool`), list them in a drawer on the map, drag one onto
@@ -21,6 +23,7 @@ All notable changes to this project are documented here. The format follows
   a session, a worktree's × is off while a session runs there, and the panel is resizable from its left edge
   (drag, or arrow keys; double-click resets), remembered per map
 
+- Editor extension: 0.10.0 (install both with `install.sh`; they ship together in this tag).
 ## [1.1.2] - 2026-10-12
 
 ### Fixed
