@@ -5,6 +5,23 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- pi sessions now run in **oh-my-pi** (`omp`), a pi fork. New pi sessions start with `omp` and resume with
+  `omp --resume`. omp has no `--name` flag, so `ctl new` passes the name in `PENGUPOOL_SESSION_NAME` and the
+  PenguPool extension sets it when the session first starts. Extensions, skills and transcripts live in
+  `~/.omp/agent`. The editor labels the harness "oh-my-pi"
+- `pengupool setup pi` installs Bun if it is missing and then omp (`bun install -g
+  @oh-my-pi/pi-coding-agent`), each after a y/N prompt. It installs pi-intercom as an omp plugin and removes
+  the old PenguPool extension from `~/.pi/agent`. `setup --check pi` also checks that omp starts: it needs
+  Bun 1.3.14 or later
+- The PenguPool and workflow-tracker pi extensions handle omp's events. A run ends on `agent_end`, since omp
+  has no `agent_settled`. The system prompt arrives as a list of parts. A rename shows up when the run ends,
+  since omp sends no `session_info_changed`
+
+### Known issues
+- Under omp, pi-intercom's "New intercom message above." nudge can reach the model one step before the
+  message itself does. The message still arrives in the same turn
+
 ## [1.2.0] - 2026-10-12
 
 ### Added

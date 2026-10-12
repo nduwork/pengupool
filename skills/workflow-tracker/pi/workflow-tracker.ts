@@ -1,12 +1,12 @@
-// workflow-tracker for pi: injects this session's chain into the system prompt.
+// workflow-tracker for pi (run as oh-my-pi): injects this session's chain into the system prompt.
 // The chain is shown in PenguPool's map, so it is deliberately not drawn in pi's footer.
-// Installed by `make install-tracker` into ~/.pi/agent/extensions/workflow-tracker.ts.
+// Installed by `make install-tracker` into ~/.omp/agent/extensions/workflow-tracker.ts.
 //
 //  - the session id keys the tracker's state, so two sessions in one repo do not share a chain:
 //    exported for the session's own tools (steps.sh reads STEP_STATUS_SESSION) and passed to the hook
 //  - before each prompt, hook_prompt.sh's line (this session's chain, or the nudge to set one) is
 //    appended to the system prompt, like the UserPromptSubmit/SessionStart hooks
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent"
+import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent"
 import { execFile } from "node:child_process"
 import * as path from "node:path"
 
@@ -30,6 +30,8 @@ export default function (pi: ExtensionAPI) {
     // steps.sh call the agent makes then lands in this session's tracker, not the shared one
     if (sessionId) process.env.STEP_STATUS_SESSION = sessionId
     const line = await sh("hook_prompt.sh", [], ctx.cwd, JSON.stringify({ cwd: ctx.cwd, session_id: sessionId }))
-    if (line) return { systemPrompt: `${event.systemPrompt}\n\n${line}` }
+    if (!line) return
+    const sp: unknown = event.systemPrompt  // omp: string[] parts; plain pi: one string
+    return { systemPrompt: Array.isArray(sp) ? [...sp, line] : `${sp}\n\n${line}` } as any
   })
 }

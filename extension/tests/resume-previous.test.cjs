@@ -71,7 +71,7 @@ test('the run-all button restores every past session, newest first, and looks at
   assert.equal(options.canPickMany, true);
   assert.deepEqual([...items.map((item) => item.label)], ['pengupool', 'acme-shop']);
   assert.deepEqual([...items.map((item) => item.picked)], [true, true]);
-  assert.match(items[0].description, /^pi · \/repos\/pengupool · just now$/);
+  assert.match(items[0].description, /^oh-my-pi · \/repos\/pengupool · just now$/);
   assert.match(items[1].description, /3 h ago$/);
   assert.deepEqual(h.resumed().map((args) => [...args]),
                    [['resume', '/repos/pengupool', 'pengupool', 'pi-1'],

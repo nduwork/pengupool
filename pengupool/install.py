@@ -3,8 +3,8 @@
 `auto` (the default) means every harness whose CLI is installed, or Claude Code when neither is.
 
 Setup makes sure everything the chosen harnesses need is present and wired: tmux, the agent CLI
-(`claude`, `pi`), and PenguPool's own plugins — the Claude Code lifecycle hooks, or for pi the
-pi-intercom package plus the PenguPool pi extension. A missing tmux or CLI is installed only after
+(`claude`, oh-my-pi's `omp` plus the Bun it runs on), and PenguPool's own plugins — the Claude Code
+lifecycle hooks, or for pi the pi-intercom plugin plus the PenguPool pi extension. A missing tmux or CLI is installed only after
 a y/N prompt (declining prints the manual command and fails); PenguPool's own wiring needs no prompt.
 """
 from __future__ import annotations
@@ -21,9 +21,12 @@ from . import harness, hook, model
 
 CLI_INSTALL = {  # official installers
     "cc": "curl -fsSL https://claude.ai/install.sh | bash",
-    "pi": "npm install -g --ignore-scripts @earendil-works/pi-coding-agent",
+    "pi": "bun install -g @oh-my-pi/pi-coding-agent",
 }
-INTERCOM = "npm:pi-intercom"
+BUN_INSTALL = "curl -fsSL https://bun.sh/install | bash"
+INTERCOM = "pi-intercom"
+# where plain pi kept PenguPool's extension before 1.3.0; setup clears it so pi and omp never both load it
+LEGACY_PI = Path.home() / ".pi" / "agent"
 EXTENSION = Path(__file__).with_name("pi_extension.ts")
 
 
@@ -76,7 +79,7 @@ def ensure(name: str, binary: str, command: str) -> bool:
 
 def _has_intercom() -> bool:
     try:
-        out = subprocess.run([harness.CLI["pi"], "list"], capture_output=True, text=True, timeout=30).stdout
+        out = subprocess.run([harness.CLI["pi"], "plugin", "list"], capture_output=True, text=True, timeout=30).stdout
     except (OSError, subprocess.TimeoutExpired):
         return False
     return "pi-intercom" in out
@@ -100,9 +103,13 @@ def wire(h: str) -> bool:
         return True
     if not _has_intercom():
         print(f"installing pi-intercom ({INTERCOM}) — PenguPool sessions message each other through it")
-        if subprocess.run([harness.CLI["pi"], "install", INTERCOM]).returncode != 0:
-            print(f"  could not install pi-intercom: run `pi install {INTERCOM}` and re-run")
+        if subprocess.run([harness.CLI["pi"], "plugin", "install", INTERCOM]).returncode != 0:
+            print(f"  could not install pi-intercom: run `omp plugin install {INTERCOM}` and re-run")
             return False
+    legacy = LEGACY_PI / "extensions" / "pengupool.ts"
+    if legacy.exists():
+        legacy.unlink()
+        print(f"removed the plain-pi PenguPool extension → {legacy} (pi sessions now run in oh-my-pi)")
     target = _pi_extension()
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(_extension_source())
@@ -118,7 +125,7 @@ def unwire(h: str) -> None:
     if target.exists():
         target.unlink()
         print(f"removed PenguPool pi extension → {target}")
-    print(f"left pi-intercom installed (other tools may use it); remove it with `pi remove {INTERCOM}`")
+    print(f"left pi-intercom installed (other tools may use it); remove it with `omp plugin uninstall {INTERCOM}`")
 
 
 def check(h: str) -> bool:
@@ -133,12 +140,18 @@ def check(h: str) -> bool:
             wired = False
         print(f"{'✓' if wired else '✗'} Claude Code lifecycle hooks, SendMessage guard and ctx % status line in {_settings()}")
         return ok and wired
+    try:  # omp needs a recent Bun; an older one fails at its first line, so `omp` on PATH is not enough
+        runs = ok and subprocess.run([harness.CLI["pi"], "--version"], capture_output=True, text=True,
+                                     timeout=30).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        runs = False
+    print(f"{'✓' if runs else '✗'} omp starts" + ("" if runs or not ok else " (needs Bun ≥ 1.3.14: run `bun upgrade`)"))
     wired = _pi_extension().is_file() and _unbaked(_pi_extension().read_text()) == EXTENSION.read_text()
     print(f"{'✓' if wired else '✗'} PenguPool pi extension at {_pi_extension()}"
           + ("" if wired or not _pi_extension().is_file() else " (outdated: re-run setup)"))
     intercom = ok and _has_intercom()
     print(f"{'✓' if intercom else '✗'} pi-intercom installed")
-    return ok and wired and intercom
+    return runs and wired and intercom
 
 
 def _harnesses(arg: str) -> list[str]:
@@ -171,7 +184,7 @@ def main(args: list[str]) -> int:
     ok = True
     for h in hs:
         if h == "pi" and not shutil.which(harness.CLI["pi"]) \
-                and not ensure("npm (needed to install pi)", "npm", _pkg_install("node")):
+                and not ensure("Bun (needed to install oh-my-pi)", "bun", BUN_INSTALL):
             ok = False
             continue
         if ensure(f"{harness.LABEL[h]} ({harness.CLI[h]})", harness.CLI[h], CLI_INSTALL[h]):

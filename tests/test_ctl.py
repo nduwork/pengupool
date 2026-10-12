@@ -171,7 +171,7 @@ def test_new_rejects_an_unknown_session_location(monkeypatch, capsys):
 
 
 @pytest.mark.parametrize("h, argv, sock", [("cc", "claude --teammate-mode in-process --name worker", "pengupool"),
-                                           ("pi", "pi --name worker", "pengupool-pi")])
+                                           ("pi", "env PENGUPOOL_SESSION_NAME=worker omp", "pengupool-pi")])
 def test_new_window_runs_the_harness_cli_on_its_own_server(monkeypatch, h, argv, sock):
     from pengupool import tmux
     calls = []
@@ -191,7 +191,7 @@ def test_reservation_rejects_a_pane_that_already_exited(monkeypatch):
 
 
 @pytest.mark.parametrize("h, command", [("cc", "claude --teammate-mode in-process --name worker --resume abcdef12-0000"),
-                                        ("pi", "pi --session abcdef12-0000")])
+                                        ("pi", "omp --resume abcdef12-0000")])
 def test_reserved_pane_resumes_with_its_harness(monkeypatch, h, command):
     from pengupool import tmux
     calls = []
@@ -208,7 +208,7 @@ def test_failed_resume_pane_is_not_mistaken_for_a_running_session(monkeypatch):
 
 def test_pane_resuming_matches_the_pi_cli(monkeypatch):
     from pengupool import tmux
-    monkeypatch.setattr(tmux, "_run", lambda *args, h: "%9\t0\tnode\tpi --session abcdef12-0000\n")
+    monkeypatch.setattr(tmux, "_run", lambda *args, h: "%9\t0\tbun\tomp --resume abcdef12-0000\n")
     assert tmux.pane_resuming("abcdef12-0000", "pi") == "%9"
 
 
@@ -289,7 +289,7 @@ def test_context_prints_the_sessions_block(monkeypatch, capsys):
         "k": {"name": "kid", "repo": "r", "state": "active", "harness": "pi", "parent": "lead", "children": []}}})
     assert ctl.main(["context", "k"]) == 0
     out = capsys.readouterr().out
-    assert 'You are pi session "kid"' in out and "the intercom tool" in out and "SendMessage" not in out
+    assert 'You are oh-my-pi session "kid"' in out and "the intercom tool" in out and "SendMessage" not in out
 
 
 def test_bad_verb_returns_nonzero(capsys):

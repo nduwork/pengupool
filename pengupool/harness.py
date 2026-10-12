@@ -1,4 +1,5 @@
-"""The few things that differ between agent harnesses: Claude Code ("cc") and pi ("pi").
+"""The few things that differ between agent harnesses: Claude Code ("cc") and pi ("pi"), which PenguPool
+runs as oh-my-pi (`omp`), a pi fork that loads pi extensions and keeps pi's session layout.
 
 Everything else is shared: a pi session is made to look like a Claude one. The PenguPool pi
 extension (pi-extension/) writes a live-session file in the same shape as Claude Code's
@@ -13,14 +14,14 @@ import re
 from pathlib import Path
 
 HARNESSES = ("cc", "pi")
-CLI = {"cc": "claude", "pi": "pi"}
-LABEL = {"cc": "Claude Code", "pi": "pi"}
+CLI = {"cc": "claude", "pi": "omp"}
+LABEL = {"cc": "Claude Code", "pi": "oh-my-pi"}
 SOCK = {"cc": "pengupool", "pi": "pengupool-pi"}  # one tmux sessions server (-L) per harness
 TOOL = {"cc": "SendMessage", "pi": "the intercom tool (action send or ask)"}
 # slash command that renames a live session; pi-intercom's /alias sets the name intercom addresses
 RENAME = {"cc": "/rename", "pi": "/alias"}
 
-PI = Path(os.environ.get("PI_CODING_AGENT_DIR", Path.home() / ".pi" / "agent"))
+PI = Path(os.environ.get("PI_CODING_AGENT_DIR", Path.home() / ".omp" / "agent"))
 
 
 def check(h: str) -> str:
@@ -42,18 +43,20 @@ CC_FLAGS = ["--teammate-mode", "in-process"]
 
 
 def argv_new(h: str, name: str) -> list[str]:
-    return [CLI["cc"], *CC_FLAGS, "--name", name] if check(h) == "cc" else [CLI["pi"], "--name", name]
+    # omp has no --name: the PenguPool extension names the session from this env var on its first start
+    return [CLI["cc"], *CC_FLAGS, "--name", name] if check(h) == "cc" else \
+        ["env", f"PENGUPOOL_SESSION_NAME={name}", CLI["pi"]]
 
 
 def argv_resume(h: str, name: str, sid: str) -> list[str]:
-    # pi keeps the session's name in the session file itself (session_info entry)
+    # omp keeps the session's name in the session file itself
     if check(h) == "cc":
         return [CLI["cc"], *CC_FLAGS, "--name", name, "--resume", sid]
-    return [CLI["pi"], "--session", sid]
+    return [CLI["pi"], "--resume", sid]
 
 
 def pi_dir(cwd: str) -> Path:
-    """pi's per-cwd session folder: `--<cwd without leading slash, / \\ : → ->--` (session-manager.js)."""
+    """omp's (and pi's) per-cwd session folder: `--<cwd without leading slash, / \\ : → ->--`."""
     return PI / "sessions" / ("--" + re.sub(r"[/\\:]", "-", re.sub(r"^[/\\]", "", cwd)) + "--")
 
 

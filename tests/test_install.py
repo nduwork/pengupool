@@ -11,12 +11,12 @@ from pengupool import install
 def env(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_SETTINGS", str(tmp_path / "settings.json"))
     ran = []
-    have = {"tmux", "claude", "pi", "brew", "pengupool"}
+    have = {"tmux", "claude", "omp", "bun", "brew", "pengupool"}
     monkeypatch.setattr(install.shutil, "which", lambda b: f"/bin/{b}" if b in have else None)
 
     def run(cmd, **k):
         ran.append(cmd)
-        out = "npm:pi-intercom\n" if cmd[-1] == "list" and "pi-intercom" in have else ""
+        out = "● pi-intercom@0.17.0\n" if cmd[-1] == "list" and "pi-intercom" in have else ""
         return subprocess.CompletedProcess(cmd, 0, stdout=out)
     monkeypatch.setattr(install.subprocess, "run", run)
     return have, ran
@@ -34,7 +34,7 @@ def test_declined_install_stops_before_wiring(env, monkeypatch, capsys):
 
 def test_non_interactive_never_installs(env, monkeypatch):
     have, ran = env
-    have.discard("pi")
+    have.discard("omp")
     monkeypatch.setattr("builtins.input", lambda q: (_ for _ in ()).throw(EOFError))
     assert install.main(["setup", "pi"]) == 1
     assert ran == []
@@ -49,10 +49,15 @@ def test_accepted_install_runs_the_official_installer(env, monkeypatch):
     assert "pengupool.context" in (install._settings()).read_text()   # hooks wired after
 
 
-def test_pi_setup_installs_intercom_and_the_extension(env):
+def test_pi_setup_installs_intercom_and_the_extension(env, tmp_path, monkeypatch):
     have, ran = env
+    legacy = tmp_path / "legacy-pi"
+    monkeypatch.setattr(install, "LEGACY_PI", legacy)
+    (legacy / "extensions").mkdir(parents=True)
+    (legacy / "extensions" / "pengupool.ts").write_text("// plain pi wiring\n")
     assert install.main(["setup", "pi"]) == 0
-    assert ["pi", "install", "npm:pi-intercom"] in ran
+    assert ["omp", "plugin", "install", "pi-intercom"] in ran
+    assert not (legacy / "extensions" / "pengupool.ts").exists()     # the old pi wiring goes
     src = install._pi_extension().read_text()
     assert '|| "/bin/pengupool"' in src                               # absolute CLI baked in
     assert not install._settings().exists()                           # Claude settings untouched
@@ -72,7 +77,7 @@ def test_unknown_harness_is_rejected(env):
     assert install.main(["setup", "ollama"]) == 2
 
 
-@pytest.mark.parametrize("installed, wired", [({"claude", "pi"}, ["cc", "pi"]), ({"pi"}, ["pi"]),
+@pytest.mark.parametrize("installed, wired", [({"claude", "omp"}, ["cc", "pi"]), ({"omp"}, ["pi"]),
                                               ({"claude"}, ["cc"]), (set(), ["cc"])])
 def test_auto_wires_every_installed_harness(monkeypatch, installed, wired):
     monkeypatch.setattr(install.shutil, "which", lambda b: f"/bin/{b}" if b in installed else None)
@@ -106,3 +111,24 @@ def test_node_installs_under_each_package_managers_own_name(monkeypatch, pm, cmd
     monkeypatch.setattr(install.shutil, "which", lambda b: f"/bin/{b}" if b == pm else None)
     assert install._pkg_install("node") == cmd
     assert install._pkg_install("tmux").endswith("tmux")
+
+
+def test_omp_needs_bun_first(env, monkeypatch):
+    have, ran = env
+    have.difference_update({"omp", "bun"})
+    monkeypatch.setattr("builtins.input", lambda q: "y")
+    install.main(["setup", "pi"])
+    assert ran[0] == ["bash", "-c", install.BUN_INSTALL]
+    assert ran[1] == ["bash", "-c", install.CLI_INSTALL["pi"]]
+    assert install.CLI_INSTALL["pi"] == "bun install -g @oh-my-pi/pi-coding-agent"
+
+
+def test_check_flags_an_omp_that_cannot_start(env, monkeypatch, capsys):
+    have, ran = env
+    have.add("pi-intercom")
+    install.main(["setup", "pi"])
+    real = install.subprocess.run
+    monkeypatch.setattr(install.subprocess, "run", lambda cmd, **k: subprocess.CompletedProcess(cmd, 1, stdout="")
+                        if cmd[-1] == "--version" else real(cmd, **k))
+    assert install.main(["setup", "--check", "pi"]) == 1
+    assert "bun upgrade" in capsys.readouterr().out

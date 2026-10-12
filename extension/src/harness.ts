@@ -51,7 +51,7 @@ export function bothHarnessesContext(): (roots: readonly SessionNode[]) => void 
 
 export interface TabsMessage { type: 'tabs'; shown: boolean; active: Harness; }
 
-/** "Claude Code | pi" tabs for the map and log, shown only while both harnesses run. The active tab is
+/** "Claude Code | oh-my-pi" tabs for the map and log, shown only while both harnesses run. The active tab is
  *  the user's last pick, else the selected session's harness, else Claude Code. */
 export class HarnessTabs {
   private picked?: Harness;
@@ -88,7 +88,7 @@ export const HARNESS_TABS_CSS = `
 
 export const HARNESS_TABS_HTML = `<div id="tabs" role="tablist" aria-label="Harness">` +
   `<button type="button" role="tab" data-harness="cc" aria-selected="true">Claude Code</button>` +
-  `<button type="button" role="tab" data-harness="pi" aria-selected="false">pi</button></div>`;
+  `<button type="button" role="tab" data-harness="pi" aria-selected="false">oh-my-pi</button></div>`;
 
 export const HARNESS_TABS_JS = `
   document.querySelectorAll('#tabs [data-harness]').forEach(tab => tab.addEventListener('click',

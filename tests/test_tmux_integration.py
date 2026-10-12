@@ -45,7 +45,7 @@ def test_cross_server_collision_cannot_attach_or_kill_unrelated_session(servers,
 
 
 @pytest.mark.parametrize("h, args", [("cc", ["--teammate-mode", "in-process", "--name", "worker", "--resume", "abcdef12-0000"]),
-                                     ("pi", ["--session", "abcdef12-0000"])])
+                                     ("pi", ["--resume", "abcdef12-0000"])])
 def test_adopt_resumes_with_its_harness_on_its_own_server(servers, monkeypatch, tmp_path, capsys, h, args):
     (shared, _, pi), run = servers
     sid = "abcdef12-0000"

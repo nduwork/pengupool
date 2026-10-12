@@ -28,7 +28,7 @@ a detail after `|` (e.g. `loop|check agent status`).
 `STEPS` below means `bash <this skill's dir>/scripts/steps.sh`. The Skill tool prints the
 base directory of this skill when loaded; installed as a plugin it is
 `${CLAUDE_PLUGIN_ROOT}` (Codex: `${PLUGIN_ROOT}`), as a symlinked skill it is
-`~/.claude/skills/workflow-tracker`, under pi it is `~/.pi/agent/skills/workflow-tracker`. Run it via the Bash tool from the project root — state
+`~/.claude/skills/workflow-tracker`, under pi (run as oh-my-pi) it is `~/.omp/agent/skills/workflow-tracker`. Run it via the Bash tool from the project root — state
 lives in `./.step-status/` (self-ignoring; each session gets a tracker of its own, see below).
 
 1. **At the start** of a multi-step workflow, define the chain once, naming it for the task

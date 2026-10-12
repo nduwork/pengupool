@@ -1,5 +1,5 @@
-// PenguPool pi extension: makes this pi session look to PenguPool exactly like a Claude Code session.
-// Installed by `pengupool setup pi` into ~/.pi/agent/extensions/pengupool.ts.
+// PenguPool pi extension: makes this oh-my-pi (omp) session look to PenguPool exactly like a Claude Code
+// session. Installed by `pengupool setup pi` into ~/.omp/agent/extensions/pengupool.ts.
 //
 //  - ~/.pengupool/pi-sessions/<pid>.json   live-session file, same shape as ~/.claude/sessions/*.json
 //  - ~/.pengupool/registry.jsonl           session -> tmux pane line, like the Claude SessionStart hook
@@ -10,7 +10,8 @@
 //    user @-tagged in that prompt)
 //  - every intercom send/ask goes through `pengupool ctl authorize` first; a non-adjacent target blocks it;
 //    PenguPool failing to answer does not (the same rule Claude's SendMessage guard applies)
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent"
+//  - omp has no --name flag: `ctl new` passes the name in PENGUPOOL_SESSION_NAME and the first start sets it
+import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent"
 import { execFile } from "node:child_process"
 import * as crypto from "node:crypto"
 import * as fs from "node:fs"
@@ -69,6 +70,9 @@ export default function (pi: ExtensionAPI) {
     // also fires after /new, /resume and /fork: the same process now hosts a different session
     const sessionId = ctx.sessionManager.getSessionId()
     process.env.PENGUPOOL_SESSION = sessionId  // tools this session runs inherit it: ctl knows who is calling
+    const wanted = process.env.PENGUPOOL_SESSION_NAME
+    delete process.env.PENGUPOOL_SESSION_NAME  // only the session ctl started: a later /new is not named alike
+    if (wanted && !pi.getSessionName()) pi.setSessionName(wanted)
     await run(["ctl", "register", sessionId, ctx.cwd, "--key-stdin"], `${GRANT_KEY}\n`)  // before the first prompt
     update({ sessionId, cwd: ctx.cwd, name: pi.getSessionName() || "", status: "idle",
              sessionFile: ctx.sessionManager.getSessionFile() })
@@ -79,11 +83,12 @@ export default function (pi: ExtensionAPI) {
       }) + "\n")
     } catch {}
   })
-  pi.on("session_info_changed", async (event) => update({ name: event.name || "" }))
+  // omp sends no session_info_changed, so a rename shows up when the run ends
   pi.on("agent_start", async () => update({ status: "busy" }))
   pi.on("turn_end", async (_event, ctx) => saveContext(ctx))
-  pi.on("agent_settled", async (_event, ctx) => {
-    update({ status: "idle" })
+  pi.on("agent_end", async (event: any, ctx) => {
+    if (event?.willContinue) return  // omp is about to run the next step: still busy
+    update({ status: "idle", name: pi.getSessionName() || "" })
     saveContext(ctx)
   })
   pi.on("before_agent_start", async (event) => {
@@ -91,7 +96,10 @@ export default function (pi: ExtensionAPI) {
     // the user's prompt goes along: its @session tags lift the adjacent rule for those sessions
     const r = await run(["ctl", "context", String(live.sessionId), "--keyed-prompt-stdin"],
                         `${GRANT_KEY}\n${String(event.prompt || "")}`)
-    if (!r.code && r.out) return { systemPrompt: `${event.systemPrompt}\n\n${r.out}` }
+    if (r.code || !r.out) return
+    // omp passes the system prompt as parts (string[]); plain pi as one string
+    const sp: unknown = event.systemPrompt
+    return { systemPrompt: Array.isArray(sp) ? [...sp, r.out] : `${sp}\n\n${r.out}` } as any
   })
   pi.on("tool_call", async (event: any) => {
     const input = event.input || {}
@@ -102,6 +110,7 @@ export default function (pi: ExtensionAPI) {
     if (r.code === 3) return { block: true, reason: r.err }
   })
   const gone = () => { try { fs.unlinkSync(LIVE) } catch {} }
-  pi.on("session_shutdown", async (event) => { if (event.reason === "quit") gone() })
+  // omp gives no shutdown reason; after /new or /resume, session_start writes the live file again
+  pi.on("session_shutdown", async () => gone())
   process.once("exit", gone)
 }

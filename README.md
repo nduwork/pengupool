@@ -169,7 +169,7 @@ puts the ticked ones back.
 ## Skills
 
 `make install` (and so the installer) puts these in place for each harness it wires: Claude Code skills in
-`~/.claude/skills`, pi skills and extensions in `~/.pi/agent`.
+`~/.claude/skills`, pi skills and extensions in `~/.omp/agent` (pi sessions run in oh-my-pi, `omp`).
 
 | Skill | Harness | Ask for it with | What it does |
 | --- | --- | --- | --- |

@@ -65,8 +65,8 @@ When creating a session, PenguPool asks whether to create an isolated worktree o
 folder, then which harness to run: Claude Code or pi. Several sessions can share a folder, so using the
 selected folder is fine even when a session already runs there; a worktree only isolates a branch.
 Each harness has its own tmux server and its own terminal (`PenguPool` for Claude Code, `PenguPool · pi`
-for pi), so showing a session of one never replaces the other. Sessions group only under a session of the same harness; pi rows are
-marked `pi` in the Sessions list.
+for pi), so showing a session of one never replaces the other. Sessions group only under a session of the same harness; pi sessions run in oh-my-pi (`omp`) and
+their rows are marked `pi` in the Sessions list.
 Add Previous reopens its folder picker at the last directory selected, including after an editor
 restart, and lists past sessions of both harnesses.
 Adopting a live session from outside PenguPool resumes it with the harness it was started with.

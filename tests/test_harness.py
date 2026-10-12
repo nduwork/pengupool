@@ -156,3 +156,13 @@ def test_a_long_busy_turn_is_never_stale(tmp_path, monkeypatch):
         model.write_json(model.PI_LIVE / f"{os.getpid()}.json", {**live, "status": status})
         [s] = model.load_sessions()
         assert s["state"] == state, status
+
+
+def test_pi_harness_runs_oh_my_pi(monkeypatch):
+    import importlib
+    monkeypatch.delenv("PI_CODING_AGENT_DIR", raising=False)
+    assert importlib.reload(harness).PI == Path.home() / ".omp" / "agent"
+    assert (harness.CLI["pi"], harness.LABEL["pi"]) == ("omp", "oh-my-pi")
+    # omp has no --name: the PenguPool extension names the session from the env on its first start
+    assert harness.argv_new("pi", "notes") == ["env", "PENGUPOOL_SESSION_NAME=notes", "omp"]
+    assert harness.argv_resume("pi", "notes", SID) == ["omp", "--resume", SID]

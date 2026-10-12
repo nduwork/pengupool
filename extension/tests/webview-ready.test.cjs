@@ -260,7 +260,7 @@ for (const [name, show] of [
     const h = loadPanel(name + 'Panel');
     const panel = show(h, { ...mixed, roots: [pi('p1', 'beta')] });
     assert.match(h.html(), /data-harness="cc"[^>]*>Claude Code</);
-    assert.match(h.html(), /data-harness="pi"[^>]*>pi</);
+    assert.match(h.html(), /data-harness="pi"[^>]*>oh-my-pi</);
     assert.equal(h.tabs().at(-1).shown, false);
     panel.update(mixed);
     assert.equal(h.tabs().at(-1).shown, true);
