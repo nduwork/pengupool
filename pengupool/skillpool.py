@@ -102,8 +102,8 @@ def remove(d: str) -> str:
 
 
 def pull(d: str) -> str:
-    """Fast-forward a pool repo's main checkout. Local changes refuse it, so a checkout in use (git-runners-setup
-    runs its runners from there) is never touched."""
+    """Fast-forward a pool repo's main checkout. Local changes refuse it, so work in progress in
+    that checkout is never touched."""
     top = _main_top(d)
     _in_pool(top)
     if _git(top, "status", "--porcelain"):
@@ -243,8 +243,8 @@ def _is_skill(top: str) -> bool:
 
 
 def _skill_repo(top: str, lead: str = "") -> None:
-    """Only skill repos are merged and released by PenguPool. Any other pool repo (git-runners-setup runs
-    live runners from its main checkout) keeps sessions and merged-worktree removal, nothing more."""
+    """Only skill repos are merged and released by PenguPool. Any other pool repo (an ops or app repo
+    whose PRs its owner merges on GitHub) keeps sessions and merged-worktree removal, nothing more."""
     if not _is_skill(top):
         raise Refused(f"{lead}{os.path.basename(top)} is not a skill repo (no skills/*/SKILL.md): PenguPool "
                       "never merges or releases it; merge its PR on GitHub, then remove the worktree")

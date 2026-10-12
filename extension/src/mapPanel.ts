@@ -768,7 +768,7 @@ ${HARNESS_TABS_HTML}
     poolList.replaceChildren();
     if(!repos.length){ const e = hel('div', { id:'poolEmpty' }); e.textContent = 'No repos yet.'; poolList.appendChild(e); }
     repos.forEach(r => {
-      // a plain repo (git-runners-setup) gets sessions and merged-worktree removal; PenguPool never merges or releases it
+      // a plain repo (no skills/*/SKILL.md) gets sessions and merged-worktree removal; PenguPool never merges or releases it
       const plain = r.skill === false && !r.missing;
       const row = poolRow('poolRepo' + (r.missing ? ' missing' : ''), r.name,
         r.missing ? r.repo + ' is gone' : r.repo + '\\nDrag onto the map to start a session here; right-click to manage it' +

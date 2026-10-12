@@ -50,7 +50,7 @@ def env(tmp_path, monkeypatch):
 
 def make_repo(tmp, name="skills", skill=True):
     """A repo on main, pushed to a bare origin that answers at https://github.com/me/<name>. A skill repo
-    has skills/<task>/SKILL.md; skill=False is an ordinary repo (git-runners-setup's shape)."""
+    has skills/<task>/SKILL.md; skill=False is an ordinary repo."""
     origin = tmp / f"{name}.git"
     subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(origin)], check=True)
     top = tmp / name
@@ -417,7 +417,7 @@ def test_unknown_tag_scheme_or_taken_version_refuses(env):
 
 
 def test_a_plain_repo_in_the_pool_is_never_merged_or_released(env):
-    """git-runners-setup runs live runners from its main checkout: it may sit in the pool for sessions and
+    """A repo without skills/*/SKILL.md may sit in the pool for sessions and
     for removing merged worktrees, but PenguPool never merges, releases, or asks to."""
     top = make_repo(env, "runners", skill=False)
     skillpool.add(top)
@@ -467,7 +467,7 @@ def test_pull_fast_forwards_main_and_refuses_local_changes(env):
     with pytest.raises(skillpool.Refused, match="not in the skill pool"):
         skillpool.pull(top)
     skillpool.add(top)
-    (Path(top) / "runner.sh").write_text("live edit\n")         # git-runners-setup: edits in use are never touched
+    (Path(top) / "runner.sh").write_text("live edit\n")         # work in progress is never touched
     with pytest.raises(skillpool.Refused, match="uncommitted changes"):
         skillpool.pull(top)
     assert git(top, "log", "-1", "--format=%s") == "root"
