@@ -19,6 +19,21 @@ All notable changes to this project are documented here. The format follows
   has no `agent_settled`. The system prompt arrives as a list of parts. A rename shows up when the run ends,
   since omp sends no `session_info_changed`
 
+### Fixed
+- a pi session omp moves under the same process is rebound: the live-session file, its profile, its
+  cwd→pane registry line and `PENGUPOOL_SESSION` all follow the new session, so the map, the routing rule
+  and the ctx % no longer describe the session the process left behind. The workflow tracker's session key
+  follows the same events, so a chain is filed under the session actually running it
+- pi session folders are found the way oh-my-pi 18 names them: `-<relative>` under `$HOME`,
+  `-tmp-<relative>` under the temp root, `--<absolute>--` anywhere else — plus the absolute name omp
+  migrates away from, pi's own name for the cwd, and the resolved path when the cwd is a symlink. A
+  session whose cwd is under home was invisible to `ctl past`, `ctl resume` and the message log before
+- a pi-intercom `handover` is authorized like `send` and `ask`: it delivers a session's summary to
+  another session, so leaving it out let the adjacent rule be walked around
+- `ctl past` reads a pi session's name from omp's `title` entry (and `titleSource` in the header) as well
+  as from Claude's `custom-title`/`session_info` and pi's `session_info`, instead of falling back to the
+  first line of the session's first prompt
+
 ### Known issues
 - Under omp, pi-intercom's "New intercom message above." nudge can reach the model one step before the
   message itself does. The message still arrives in the same turn

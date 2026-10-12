@@ -597,6 +597,12 @@ def harness_of_past(sid: str, cwd: str) -> str:
     return "pi" if resumable_transcript(sid, cwd, "pi") else "cc"
 
 
+NAME_MARK = re.compile(r'"custom-title"|"session_info"|"titleSource"|"type"\s*:\s*"title')
+# a session's own name in a transcript: Claude's /rename and session_info, pi's /alias, and omp's
+# title slot (a `title` entry and/or `titleSource` in the header), which omp writes with or without
+# spaces after the colons
+
+
 def past_sessions(cwd: str, limit: int = 20) -> list[tuple[str, str, str]]:
     """(session_id, title, harness) for a cwd across harnesses, newest first. Title = the session's
     own name (Claude /rename, pi /alias or --name) or its first user line.
@@ -621,11 +627,12 @@ def past_sessions(cwd: str, limit: int = 20) -> list[tuple[str, str, str]]:
                 for i, line in enumerate(fh):
                     if i > 4000:
                         break
-                    if '"custom-title"' in line or '"session_info"' in line:
+                    if NAME_MARK.search(line):  # Claude /rename, pi /alias, omp's own title slot
                         d = json.loads(line)
-                        t = d.get("customTitle", d.get("name")) if isinstance(d, dict) else None
-                        if isinstance(t, str):
-                            title = t
+                        t = (d.get("customTitle") or d.get("name") or d.get("title")) \
+                            if isinstance(d, dict) else None
+                        if isinstance(t, str) and t.strip():
+                            title = t.strip()
                     elif not first and ('"type":"user"' in line or '"role":"user"' in line):
                         d = json.loads(line)
                         m = d.get("message", {}) if isinstance(d, dict) else {}

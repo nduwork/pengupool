@@ -77,7 +77,7 @@ plug into it, one for each place you meet your agents.
 | `pengupool serve` | Streams NDJSON snapshots of the pool to the extension, which only renders. |
 | `pengupool ctl` | The control verbs (new, resume, group, describe, route, …) called by the editor and the pi extension. |
 | Claude Code hooks | `pengupool.context` injects the `<pengupool>` block (tree, parent, children, role) on each prompt; `pengupool.routing` guards `SendMessage`. Both are registered by `pengupool setup`. |
-| pi extension | The same block in pi's system prompt, and the same rule for pi-intercom `send` / `ask`. |
+| pi extension | The same block in pi's system prompt, and the same rule for every pi-intercom action that reaches another session (`send`, `ask`, `handover`). |
 
 ## Install
 

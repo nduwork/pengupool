@@ -58,14 +58,73 @@ def argv_resume(h: str, name: str, sid: str) -> list[str]:
     return [CLI["pi"], "--resume", str(hit) if hit and not hit.is_relative_to(PI) else sid]
 
 
+def _slug(text: str) -> str:
+    return re.sub(r"[/\\:]", "-", text)
+
+
+def _abs_dir_name(cwd: str) -> str:
+    """`--<cwd without leading slash, / \\ : → ->--`: omp's folder name for a cwd under neither home nor
+    the temp root, and every version of pi's own name for any cwd."""
+    return "--" + _slug(re.sub(r"^[/\\]", "", cwd)) + "--"
+
+
+def _inside(cwd: str, root: str) -> str | None:
+    """`cwd` relative to `root` when it sits inside it (the root itself counts, as omp's
+    isRelativeWithin does), else None."""
+    rel = os.path.relpath(cwd, root)
+    if rel == os.curdir:
+        return ""  # the root itself: omp's path.relative gives "" and counts as inside
+    return None if rel.startswith(os.pardir) else rel
+
+
+def _rel_dir_name(prefix: str, relative: str) -> str:
+    """omp's encodeRelativeSessionDirName: the scope prefix, then the slugged relative path, joined with
+    a dash unless the prefix already ends in one."""
+    slug = _slug(relative)
+    if not slug:
+        return prefix
+    return prefix + slug if prefix.endswith("-") else f"{prefix}-{slug}"
+
+
+def _tmp_root() -> str:
+    """The temp root omp scopes a cwd under: $TMPDIR, which Node's os.tmpdir() reads."""
+    return os.environ.get("TMPDIR") or "/tmp"
+
+
+def pi_dir_names(cwd: str) -> list[str]:
+    """omp's session folder for `cwd`, best first: a cwd under the temp root is `-tmp-<relative>`, one
+    under $HOME is `-<relative>`, anything else is `--<absolute>--`; last comes the `--<absolute>--`
+    name omp migrates away from, which an install it has not migrated yet still holds. Mirrors omp's
+    getDefaultSessionDirName (`src/session/session-paths.ts`, omp 18.10)."""
+    home, temp = _inside(cwd, os.path.expanduser("~")), _inside(cwd, _tmp_root())
+    names: list[str] = []
+    if temp is not None:
+        names.append(_rel_dir_name("-tmp", temp))
+        if home is not None:  # the temp root nests inside home on Windows
+            names.append(_rel_dir_name("-", home))
+    elif home is not None:
+        names.append(_rel_dir_name("-", home))
+    absolute = _abs_dir_name(cwd)
+    return names if absolute in names else [*names, absolute]
+
+
 def pi_dir(cwd: str) -> Path:
-    """omp's (and pi's) per-cwd session folder: `--<cwd without leading slash, / \\ : → ->--`."""
-    return PI / "sessions" / ("--" + re.sub(r"[/\\:]", "-", re.sub(r"^[/\\]", "", cwd)) + "--")
+    """omp's per-cwd session folder, the one it writes today."""
+    return PI / "sessions" / pi_dir_names(cwd)[0]
 
 
 def pi_dirs(cwd: str) -> list[Path]:
-    """The cwd's session folders: omp's, then plain pi's from before 1.3.0."""
-    return [root / "sessions" / pi_dir(cwd).name for root in pi_roots()]
+    """Every folder the cwd's sessions can live in, best first: omp's — for the cwd as given and as
+    resolved, since omp names the folder after the canonical path (`/tmp/x` becomes `/private/tmp/x`) —
+    then plain pi's from before 1.3.0, which always used the absolute name."""
+    names = pi_dir_names(cwd)
+    real = os.path.realpath(cwd)
+    if real != cwd:
+        names += [n for n in pi_dir_names(real) if n not in names]
+    dirs = [PI / "sessions" / name for name in names]
+    if LEGACY_PI != PI:
+        dirs += [LEGACY_PI / "sessions" / name for name in dict.fromkeys([_abs_dir_name(cwd), _abs_dir_name(real)])]
+    return dirs
 
 
 def pi_roots() -> list[Path]:
