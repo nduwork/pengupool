@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-10-12
+
 ### Fixed
 - a session started with `ctl new` shows as a card while it waits on Claude Code's folder-trust question
   ("waiting for folder trust"), instead of staying invisible until it is answered; open the card to answer
@@ -12,6 +14,7 @@ All notable changes to this project are documented here. The format follows
 - keep the Python extension's venv activation (`source …/activate`) out of a session terminal's agent prompt
 - the status line no longer goes blank when the workflow tracker's old status line sits inside PenguPool's wrapper
 
+- Editor extension: 0.9.2 (install both with `install.sh`; they ship together in this tag).
 ## [1.1.1] - 2026-10-07
 
 ### Fixed

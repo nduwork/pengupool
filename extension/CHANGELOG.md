@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.2
+
+- v1.1.2 — folder-trust card, venv line, status line, type pins (#94)
+
+Ships with PenguPool v1.1.2.
+
 ## 0.9.1
 
 - offer Fold All or Unfold All, not both, in the map's menu (#90)
