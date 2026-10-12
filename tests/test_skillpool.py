@@ -1,0 +1,484 @@
+"""Skill-repo pool: registry, worktree removal behind a merged-PR check, and PenguPool's own releases.
+Real temp git repos; origin is a bare repo reached through a github.com URL (insteadOf), and `gh` is a
+fake on PATH whose PR state lives in files."""
+import datetime
+import json
+import os
+import subprocess
+from pathlib import Path
+
+import pytest
+
+from pengupool import ctl, model, skillpool, tmux
+
+FAKE_GH = r"""#!/bin/sh
+echo "$*" >> "$FAKE_GH/calls"
+key() { echo "$1" | tr / _; }
+case "$1 $2" in
+  "pr view") f="$FAKE_GH/$(key "$3")"; [ -f "$f" ] && cat "$f" && exit 0
+             echo "no pull requests found for branch $3" >&2; exit 1;;
+  "pr create") b="$(git branch --show-current)"; echo "OPEN $(git rev-parse "$b")" > "$FAKE_GH/$(key "$b")"; exit 0;;
+  "pr merge") [ -n "$GH_MERGE_FAILS" ] && { echo "required checks are failing" >&2; exit 1; }
+              grep -q '^OPEN ' "$FAKE_GH/$(key "$3")" || { echo "pull request is closed" >&2; exit 1; }
+              echo "MERGED $(git rev-parse "$3")" > "$FAKE_GH/$(key "$3")"; exit 0;;
+  "release create") exit 0;;
+esac
+echo "unexpected: gh $*" >&2; exit 1
+"""
+
+
+def git(cwd, *a):
+    return subprocess.run(["git", "-C", str(cwd), *a], check=True, capture_output=True, text=True).stdout.strip()
+
+
+@pytest.fixture
+def env(tmp_path, monkeypatch):
+    monkeypatch.setattr(model, "PENGU", tmp_path / "pengu")
+    monkeypatch.setattr(model, "load_sessions", lambda: [])
+    for k in ("AUTHOR", "COMMITTER"):
+        monkeypatch.setenv(f"GIT_{k}_NAME", "t")
+        monkeypatch.setenv(f"GIT_{k}_EMAIL", "t@t")
+    (tmp_path / "gh").mkdir()
+    bin_ = tmp_path / "bin"
+    bin_.mkdir()
+    (bin_ / "gh").write_text(FAKE_GH)
+    (bin_ / "gh").chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setenv("FAKE_GH", str(tmp_path / "gh"))
+    return tmp_path
+
+
+def make_repo(tmp, name="skills", skill=True):
+    """A repo on main, pushed to a bare origin that answers at https://github.com/me/<name>. A skill repo
+    has skills/<task>/SKILL.md; skill=False is an ordinary repo."""
+    origin = tmp / f"{name}.git"
+    subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(origin)], check=True)
+    top = tmp / name
+    top.mkdir()
+    git(top, "init", "-q", "-b", "main")
+    git(top, "config", f"url.{origin}.insteadOf", f"https://github.com/me/{name}")
+    git(top, "remote", "add", "origin", f"https://github.com/me/{name}")
+    if skill:
+        (top / "skills" / "task").mkdir(parents=True)
+        (top / "skills" / "task" / "SKILL.md").write_text("---\nname: task\n---\n")
+        git(top, "add", ".")
+    git(top, "commit", "-q", "--allow-empty", "-m", "root")
+    git(top, "push", "-q", "-u", "origin", "main")
+    return os.path.realpath(top)
+
+
+def gh_calls(tmp):
+    p = tmp / "gh" / "calls"
+    return p.read_text() if p.exists() else ""
+
+
+def test_pool_add_ls_rm(env):
+    top = make_repo(env)
+    wt = tmux.worktree_add(top, "log run")
+    assert skillpool.add(wt) == top                 # a worktree path registers its main checkout
+    assert skillpool.add(top) == top and skillpool.load() == [top]   # no duplicate
+    [entry] = skillpool.ls()
+    assert entry["repo"] == top and entry["name"] == "skills"
+    assert entry["worktrees"] == [{"path": os.path.realpath(wt), "branch": "pengupool/log-run"}]
+    skillpool.remove(top)
+    assert skillpool.load() == [] and skillpool.ls() == []
+
+
+def test_rm_accepts_trailing_slash(env):
+    top = make_repo(env)
+    skillpool.add(top)
+    skillpool.remove(top + "/")
+    assert skillpool.load() == []
+
+
+def test_add_refuses_non_repo_and_no_github_origin(env):
+    with pytest.raises(skillpool.Refused, match="not a git repo"):
+        skillpool.add(str(env))
+    local = env / "local"
+    local.mkdir()
+    git(local, "init", "-q")
+    with pytest.raises(skillpool.Refused, match="GitHub origin"):
+        skillpool.add(str(local))
+    assert skillpool.load() == []
+
+
+def test_ls_flags_a_missing_repo(env):
+    top = make_repo(env)
+    skillpool.add(top)
+    subprocess.run(["rm", "-rf", top], check=True)
+    assert skillpool.ls() == [{"repo": top, "name": "skills", "worktrees": [], "skill": False, "missing": True}]
+
+
+def wt_with_commit(top, name="log run"):
+    wt = tmux.worktree_add(top, name)
+    Path(wt, "logs").mkdir(exist_ok=True)
+    Path(wt, "logs", "a.md").write_text("done\n")
+    git(wt, "add", "-A")
+    git(wt, "commit", "-q", "-m", "log: a")
+    return os.path.realpath(wt), git(wt, "branch", "--show-current")
+
+
+def merged(tmp, branch, wt):
+    """gh reports the branch's PR as merged at the branch's current tip."""
+    (tmp / "gh" / branch.replace("/", "_")).write_text(f"MERGED {git(wt, 'rev-parse', branch)}\n")
+
+
+def test_refusals_leave_the_worktree(env):
+    top = make_repo(env)
+    wt, branch = wt_with_commit(top)
+    with pytest.raises(skillpool.Refused, match="main checkout"):
+        skillpool.worktree_rm(top)
+    other = env / "feat-wt"
+    git(top, "worktree", "add", "-q", "-b", "feat/x", str(other))
+    with pytest.raises(skillpool.Refused, match="not a pengupool"):
+        skillpool.worktree_rm(str(other))
+    with pytest.raises(skillpool.Unmerged, match="not merged"):
+        skillpool.worktree_rm(wt)
+    merged(env, branch, wt)
+    Path(wt, "scratch.txt").write_text("x")
+    with pytest.raises(skillpool.Refused, match="uncommitted"):
+        skillpool.worktree_rm(wt)
+    assert os.path.isdir(wt) and branch in git(top, "branch")
+
+
+def test_live_session_blocks_only_inside(env, monkeypatch):
+    top = make_repo(env)
+    wt, branch = wt_with_commit(top)
+    merged(env, branch, wt)
+    monkeypatch.setattr(model, "load_sessions", lambda: [{"sessionId": "s1", "name": "logger", "cwd": wt + "/logs"}])
+    with pytest.raises(skillpool.Refused, match="logger"):
+        skillpool.worktree_rm(wt)
+    monkeypatch.setattr(model, "load_sessions", lambda: [{"sessionId": "s2", "name": "sib", "cwd": wt + "-1"}])
+    assert skillpool.worktree_rm(wt).startswith("removed")
+
+
+def test_merged_worktree_is_removed_with_its_branch(env):
+    top = make_repo(env)
+    wt, branch = wt_with_commit(top)
+    merged(env, branch, wt)
+    assert skillpool.worktree_rm(wt) == f"removed {wt}"
+    assert not os.path.exists(wt)
+    assert branch not in git(top, "branch")
+    assert "release" not in gh_calls(env)       # already merged: nothing to release here
+
+
+def test_rm_vanished_path_refuses(env):
+    top = make_repo(env)
+    wt, branch = wt_with_commit(top)
+    merged(env, branch, wt)
+    skillpool.worktree_rm(wt)
+    with pytest.raises(skillpool.Refused):
+        skillpool.worktree_rm(wt)
+
+
+def test_merge_pushes_merges_removes_and_releases(env, monkeypatch):
+    monkeypatch.setattr(skillpool, "_today", lambda: datetime.date(2026, 10, 10))
+    top = make_repo(env)
+    skillpool.add(top)
+    wt, branch = wt_with_commit(top)
+    msg = skillpool.worktree_rm(wt, merge=True)
+    assert msg == f"removed {wt}; released v2026.10.10"
+    calls = gh_calls(env)
+    assert "pr create" in calls and f"pr merge {branch} --squash" in calls and "release create v2026.10.10" in calls
+    assert branch in git(env / "skills.git", "branch")              # pushed before the PR
+    assert "v2026.10.10" in git(env / "skills.git", "tag")
+    assert not os.path.exists(wt)
+
+
+def test_merge_failure_removes_nothing(env, monkeypatch):
+    monkeypatch.setenv("GH_MERGE_FAILS", "1")
+    top = make_repo(env)
+    skillpool.add(top)
+    wt, _ = wt_with_commit(top)
+    with pytest.raises(skillpool.Refused, match="checks are failing"):
+        skillpool.worktree_rm(wt, merge=True)
+    assert os.path.isdir(wt)
+
+
+def test_release_skipped_when_main_checkout_dirty(env):
+    top = make_repo(env)
+    skillpool.add(top)
+    wt, _ = wt_with_commit(top)
+    Path(top, "wip.txt").write_text("x")
+    msg = skillpool.worktree_rm(wt, merge=True)
+    assert msg.startswith(f"removed {wt}; release skipped: ") and "uncommitted" in msg
+    assert not os.path.exists(wt)
+
+
+def _no_gh(monkeypatch, tmp):
+    """PATH with git but without the fake (or any) gh: a dir holding only a git link, since CI keeps
+    gh next to git in /usr/bin."""
+    import shutil
+    only = tmp / "only-git"
+    only.mkdir()
+    (only / "git").symlink_to(shutil.which("git"))
+    monkeypatch.setenv("PATH", str(only))
+    assert shutil.which("gh") is None
+
+
+def test_no_gh_is_unmerged_then_refused(env, monkeypatch):
+    top = make_repo(env)
+    skillpool.add(top)
+    wt, _ = wt_with_commit(top)
+    _no_gh(monkeypatch, env)
+    with pytest.raises(skillpool.Unmerged):
+        skillpool.worktree_rm(wt)
+    with pytest.raises(skillpool.Refused, match="gh"):
+        skillpool.worktree_rm(wt, merge=True)
+    assert os.path.isdir(wt)
+
+
+def test_no_gh_but_landed_on_main_is_removed(env, monkeypatch):
+    top = make_repo(env)
+    wt, branch = wt_with_commit(top)
+    git(top, "merge", "-q", "--squash", branch)          # the content lands on main as one new commit
+    git(top, "commit", "-q", "-m", "log: a (#1)")
+    git(top, "push", "-q", "origin", "main")
+    _no_gh(monkeypatch, env)
+    assert skillpool.worktree_rm(wt) == f"removed {wt}"
+
+
+def test_release_versions_changelog_and_refusals(env, monkeypatch):
+    monkeypatch.setattr(skillpool, "_today", lambda: datetime.date(2026, 10, 10))
+    top = make_repo(env)
+    skillpool.add(top)
+    assert skillpool.release(top) == "v2026.10.10"
+    text = open(os.path.join(top, "CHANGELOG.md")).read()
+    assert text == "# Changelog\n\n## 2026.10.10 — 2026-10-10\n\n- root\n"
+    with pytest.raises(skillpool.Refused, match="nothing to release"):
+        skillpool.release(top)
+    git(top, "commit", "-q", "--allow-empty", "-m", "log: b")
+    git(env / "skills.git", "tag", "v2026.10.10-1", "main")        # taken on origin only
+    assert skillpool.release(top) == "v2026.10.10-2"
+    text = open(os.path.join(top, "CHANGELOG.md")).read()
+    assert text.index("2026.10.10-2") < text.index("## 2026.10.10 —")   # newest first
+    assert "- log: b\n" in text and "chore: release" not in text.split("## 2026.10.10 —")[0]
+    git(top, "checkout", "-q", "-b", "side")
+    with pytest.raises(skillpool.Refused, match="main"):
+        skillpool.release(top)
+
+
+def test_ctl_verbs_and_exit_codes(env, monkeypatch, capsys):
+    top = make_repo(env)
+    assert ctl.main(["pool", "add", top]) == 0 and capsys.readouterr().out.strip() == top
+    assert ctl.main(["pool", "ls"]) == 0
+    assert json.loads(capsys.readouterr().out)[0]["repo"] == top
+    assert ctl.main(["pool", "add", str(env)]) == 3 and "not a git repo" in capsys.readouterr().err
+    assert ctl.main(["pool", "frob"]) == 2
+    wt, _ = wt_with_commit(top)
+    assert ctl.main(["worktree-rm", wt]) == 4 and "not merged" in capsys.readouterr().err
+    assert ctl.main(["worktree-rm", wt, "--force"]) == 2
+    assert ctl.main(["pool", "rm", top]) == 0 and skillpool.load() == []
+    monkeypatch.setattr(skillpool, "release", lambda d: "v2026.10.10")
+    capsys.readouterr()
+    assert ctl.main(["release", top]) == 0 and capsys.readouterr().out.strip() == "v2026.10.10"
+
+
+def test_stale_merged_pr_on_a_reused_branch_keeps_new_work(env):
+    top = make_repo(env)
+    wt, branch = wt_with_commit(top)
+    merged(env, branch, wt)                       # an earlier PR from this branch name was merged
+    Path(wt, "logs", "b.md").write_text("new\n")
+    git(wt, "add", "-A")
+    git(wt, "commit", "-q", "-m", "log: b")       # new work after that merge
+    with pytest.raises(skillpool.Unmerged):
+        skillpool.worktree_rm(wt)
+    assert os.path.isdir(wt)
+
+
+def test_merge_after_a_stale_merged_pr_opens_a_new_one(env, monkeypatch):
+    monkeypatch.setattr(skillpool, "_today", lambda: datetime.date(2026, 10, 10))
+    top = make_repo(env)
+    skillpool.add(top)
+    wt, branch = wt_with_commit(top)
+    merged(env, branch, wt)
+    git(wt, "commit", "-q", "--allow-empty", "-m", "log: b")
+    assert skillpool.worktree_rm(wt, merge=True).startswith(f"removed {wt}; released")
+    assert "pr create" in gh_calls(env)
+
+
+def test_ignored_files_block_removal_except_ds_store(env):
+    top = make_repo(env)
+    with open(os.path.join(top, ".git", "info", "exclude"), "a") as f:
+        f.write("/MEMORY.md\n.DS_Store\n")
+    wt, branch = wt_with_commit(top)
+    merged(env, branch, wt)
+    Path(wt, ".DS_Store").write_text("x")
+    Path(wt, "MEMORY.md").write_text("owner memory\n")
+    with pytest.raises(skillpool.Refused, match="MEMORY.md"):
+        skillpool.worktree_rm(wt)
+    assert Path(wt, "MEMORY.md").exists()
+    os.remove(os.path.join(wt, "MEMORY.md"))
+    assert skillpool.worktree_rm(wt) == f"removed {wt}"   # .DS_Store alone does not block
+
+
+def test_merge_and_release_only_for_pool_repos(env):
+    top = make_repo(env)
+    wt, _ = wt_with_commit(top)
+    with pytest.raises(skillpool.Refused, match="not in the skill pool"):
+        skillpool.worktree_rm(wt, merge=True)
+    with pytest.raises(skillpool.Refused, match="not in the skill pool"):
+        skillpool.release(top)
+    assert os.path.isdir(wt) and "pr " not in gh_calls(env)
+
+
+def test_rejected_push_undoes_the_release_so_it_can_be_retried(env, monkeypatch):
+    monkeypatch.setattr(skillpool, "_today", lambda: datetime.date(2026, 10, 10))
+    top = make_repo(env)
+    skillpool.add(top)
+    hook = env / "skills.git" / "hooks" / "pre-receive"
+    hook.write_text("#!/bin/sh\necho protected branch >&2\nexit 1\n")
+    hook.chmod(0o755)
+    git(env / "skills.git", "config", "core.hooksPath", str(hook.parent))   # over any global hooksPath
+    head = git(top, "rev-parse", "HEAD")
+    with pytest.raises(skillpool.Refused, match="protected branch"):
+        skillpool.release(top)
+    assert git(top, "rev-parse", "HEAD") == head and git(top, "tag") == ""
+    assert not os.path.exists(os.path.join(top, "CHANGELOG.md"))
+    hook.unlink()
+    assert skillpool.release(top) == "v2026.10.10"
+
+
+@pytest.mark.parametrize("src", ["me/skills", "https://github.com/me/skills", "https://github.com/me/skills.git",
+                                 "git@github.com:me/skills.git", "github.com/me/skills/"])
+def test_clone_from_github_adds_it(env, monkeypatch, src):
+    make_repo(env)
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "1")   # the clone reaches the bare origin the way make_repo's does
+    monkeypatch.setenv("GIT_CONFIG_KEY_0", f"url.{env / 'skills.git'}.insteadOf")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_0", "https://github.com/me/skills")
+    (env / "clones").mkdir()
+    top = skillpool.clone(src, str(env / "clones"))
+    assert top == os.path.realpath(env / "clones" / "skills") and skillpool.load() == [top]
+    assert git(top, "config", "--get", "remote.origin.url") == "https://github.com/me/skills"
+
+
+def test_clone_refusals(env):
+    with pytest.raises(skillpool.Refused, match="not a GitHub repo"):
+        skillpool.clone("https://gitlab.com/me/skills", str(env))
+    (env / "skills").mkdir()
+    with pytest.raises(skillpool.Refused, match="already exists"):
+        skillpool.clone("me/skills", str(env))
+    assert skillpool.load() == []
+
+
+def test_ctl_pool_clone(env, monkeypatch, capsys):
+    monkeypatch.setattr(skillpool, "clone", lambda src, parent: f"/x/{src}@{parent}")
+    assert ctl.main(["pool", "clone", "me/skills", "/p"]) == 0
+    assert capsys.readouterr().out.strip() == "/x/me/skills@/p"
+
+
+def _released(top):
+    git(top, "commit", "-q", "--allow-empty", "-m", "feat: more")
+    return skillpool.release(top), open(os.path.join(top, "CHANGELOG.md")).read()
+
+
+def test_semver_repo_keeps_semver_and_its_heading_style(env, monkeypatch):
+    """A repo tagged v0.1 / v0.2 gets v0.3 (same number of parts), headed like its own CHANGELOG."""
+    monkeypatch.setattr(skillpool, "_today", lambda: datetime.date(2026, 10, 12))
+    top = make_repo(env)
+    skillpool.add(top)
+    Path(top, "CHANGELOG.md").write_text("# Changelog\n\n## 0.2 — 2026-10-04\n\n- b\n")
+    git(top, "add", "."), git(top, "commit", "-q", "-m", "docs: log"), git(top, "tag", "v0.2")
+    version, text = _released(top)
+    assert version == "v0.3" and git(top, "describe", "--tags") == "v0.3"
+    assert text.startswith("# Changelog\n\n## 0.3 — 2026-10-12\n\n- feat: more\n\n## 0.2 — 2026-10-04")
+
+
+def test_keep_a_changelog_repo_bumps_minor_and_package_json(env, monkeypatch):
+    """research_agent's shape: v0.3.0 tags, package.json 0.3.0, Keep a Changelog with curated Unreleased notes."""
+    monkeypatch.setattr(skillpool, "_today", lambda: datetime.date(2026, 10, 12))
+    top = make_repo(env)
+    skillpool.add(top)
+    Path(top, "package.json").write_text('{\n  "name": "x",\n  "version": "0.3.0"\n}\n')
+    Path(top, "CHANGELOG.md").write_text("# Changelog\n\nIntro.\n\n## [Unreleased]\n\n### Added\n\n- curated\n\n"
+                                          "## [0.3.0] - 2026-09-28\n\n- old\n")
+    git(top, "add", "."), git(top, "commit", "-q", "-m", "chore: v0.3.0"), git(top, "tag", "v0.3.0")
+    version, text = _released(top)
+    assert version == "v0.4.0"
+    assert json.loads(Path(top, "package.json").read_text())["version"] == "0.4.0"
+    assert text == ("# Changelog\n\nIntro.\n\n## [Unreleased]\n\n## [0.4.0] - 2026-10-12\n\n### Added\n\n- curated\n\n"
+                    "## [0.3.0] - 2026-09-28\n\n- old\n")   # curated notes win over commit subjects
+    git(top, "commit", "-q", "--allow-empty", "-m", "fix: y")
+    assert skillpool.release(top) == "v0.5.0"   # empty Unreleased: commit subjects fill the section
+    assert "## [Unreleased]\n\n## [0.5.0] - 2026-10-12\n\n- fix: y\n\n## [0.4.0]" in Path(top, "CHANGELOG.md").read_text()
+
+
+def test_unknown_tag_scheme_or_taken_version_refuses(env):
+    top = make_repo(env)
+    skillpool.add(top)
+    git(top, "tag", "v1-beta")
+    with pytest.raises(skillpool.Refused, match="version scheme"):
+        _released(top)
+    git(top, "tag", "v1.0.0")
+    git(env / "skills.git", "tag", "v1.1.0", "main")   # the next one is already taken on origin
+    with pytest.raises(skillpool.Refused, match="v1.1.0 already exists"):
+        _released(top)
+    assert git(top, "log", "-1", "--format=%s") == "feat: more"   # nothing committed
+
+
+def test_a_plain_repo_in_the_pool_is_never_merged_or_released(env):
+    """A repo without skills/*/SKILL.md may sit in the pool for sessions and
+    for removing merged worktrees, but PenguPool never merges, releases, or asks to."""
+    top = make_repo(env, "runners", skill=False)
+    skillpool.add(top)
+    assert [(e["name"], e["skill"]) for e in skillpool.ls()] == [("runners", False)]
+    wt, branch = wt_with_commit(top, "tweak")
+    with pytest.raises(skillpool.Refused, match="not a skill repo") as e:
+        skillpool.worktree_rm(wt)
+    assert not isinstance(e.value, skillpool.Unmerged)        # a refusal, never the merge question
+    with pytest.raises(skillpool.Refused, match="not a skill repo"):
+        skillpool.worktree_rm(wt, merge=True)
+    with pytest.raises(skillpool.Refused, match="not a skill repo"):
+        skillpool.release(top)
+    assert os.path.isdir(wt) and "pr create" not in gh_calls(env) and git(top, "tag") == ""
+    merged(env, branch, wt)                                     # merged on GitHub by its owner
+    assert skillpool.worktree_rm(wt) == f"removed {wt}"        # plain removal still works
+
+
+def test_ls_marks_skill_repos(env):
+    skillpool.add(make_repo(env))
+    assert skillpool.ls()[0]["skill"] is True
+
+
+def test_ls_reports_the_last_release(env):
+    top = make_repo(env)
+    skillpool.add(top)
+    assert skillpool.ls()[0]["version"] == ""
+    git(top, "tag", "v0.3.0")
+    assert skillpool.ls()[0]["version"] == "v0.3.0"
+
+
+def test_rm_given_a_subfolder_or_worktree_drops_its_repo(env):
+    top = make_repo(env)
+    wt = tmux.worktree_add(top, "log run")
+    skillpool.add(top)
+    assert skillpool.remove(os.path.join(top, "skills", "task")) == top
+    assert skillpool.load() == []
+    skillpool.add(top)
+    assert skillpool.remove(wt) == top and skillpool.load() == []
+
+
+def test_pull_fast_forwards_main_and_refuses_local_changes(env):
+    top = make_repo(env, skill=False)
+    other = env / "other"
+    git(env, "clone", "-q", str(env / "skills.git"), str(other))
+    git(other, "commit", "-q", "--allow-empty", "-m", "upstream")
+    git(other, "push", "-q", "origin", "main")
+    with pytest.raises(skillpool.Refused, match="not in the skill pool"):
+        skillpool.pull(top)
+    skillpool.add(top)
+    (Path(top) / "runner.sh").write_text("live edit\n")         # work in progress is never touched
+    with pytest.raises(skillpool.Refused, match="uncommitted changes"):
+        skillpool.pull(top)
+    assert git(top, "log", "-1", "--format=%s") == "root"
+    os.remove(Path(top) / "runner.sh")
+    assert "up to date" not in skillpool.pull(top)
+    assert git(top, "log", "-1", "--format=%s") == "upstream"
+    assert skillpool.pull(top) == "skills is up to date"
+
+
+def test_ctl_pool_pull(env, capsys):
+    top = make_repo(env)
+    skillpool.add(top)
+    assert ctl.main(["pool", "pull", top]) == 0
+    assert "up to date" in capsys.readouterr().out

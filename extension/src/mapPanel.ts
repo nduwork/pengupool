@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { Snapshot } from './serveClient';
 import { CTX_LEVEL_CSS, CTX_LEVEL_JS, SESSION_STATES, SESSION_STATE_CSS } from './sessionState';
-import { HarnessTabs, HARNESS_TABS_CSS, HARNESS_TABS_HTML, HARNESS_TABS_JS } from './harness';
+import { findNode, HarnessTabs, HARNESS_TABS_CSS, HARNESS_TABS_HTML, HARNESS_TABS_JS } from './harness';
 import { SESSION_CONTEXT_JS } from './webviewMenu';
 import { runCtl } from './util';
 
@@ -53,6 +53,7 @@ export class MapPanel {
     this.panel.webview.onDidReceiveMessage((message) => {
       if (message?.type === 'ready') {
         this.render();
+        void this.sendPool();
         if (this.selectedId) { void this.panel.webview.postMessage({ type: 'selection', id: this.selectedId }); }
       }
       if (message?.type === 'select' && typeof message.id === 'string') {
@@ -60,7 +61,7 @@ export class MapPanel {
       }
       // Refresh: redraw from the last snapshot now, and restart `pengupool serve` so a fresh process
       // rebuilds the whole model from disk (sessions, transcripts, roles, chains) and sends it in full.
-      if (message?.type === 'refresh') { this.render(); void vscode.commands.executeCommand('pengupool.refresh'); }
+      if (message?.type === 'refresh') { this.render(); void this.sendPool(); void vscode.commands.executeCommand('pengupool.refresh'); }
       if (message?.type === 'tab' && this.tabs.pick(message.harness)) { this.render(); }
       // Drag a card onto another to group it there, or onto empty canvas for the top level, as in the
       // Sessions list. ctl refuses a loop or a cross-harness group; its reason is shown as-is.
@@ -78,6 +79,19 @@ export class MapPanel {
       if (message?.type === 'foldState' && ['none', 'open', 'folded'].includes(message.fold)) {
         void vscode.commands.executeCommand('setContext', 'pengupool.mapFold', message.fold);
       }
+      // The skill-repo drawer. A repo dropped on the map starts a session there through the usual prompts.
+      if (message?.type === 'poolDrop' && typeof message.dir === 'string') {
+        void this.newIn(message.dir, typeof message.parent === 'string' ? message.parent : '');
+      }
+      if (message?.type === 'poolRm' && typeof message.dir === 'string') { void this.poolRun(['pool', 'rm', message.dir]); }
+      if (message?.type === 'poolMenu' && typeof message.dir === 'string') { void this.poolMenu(message.dir, message.skill === true); }
+      if (message?.type === 'poolAdd') { void this.poolAdd(); }
+      if (message?.type === 'poolSession' && typeof message.id === 'string') {
+        // A session card dropped on the drawer adds its repo (a worktree registers its main checkout).
+        const cwd = this.last && findNode(this.last.roots, message.id)?.cwd;
+        if (cwd) { void this.poolRun(['pool', 'add', cwd]); }
+      }
+      if (message?.type === 'worktreeRm' && typeof message.path === 'string') { void this.worktreeRm(message.path); }
     });
     this.panel.onDidDispose(() => {
       // the key is window-wide, so a closed map must not hand its state to the next one
@@ -107,6 +121,94 @@ export class MapPanel {
     const { tabs, snapshot } = this.tabs.view(this.last, this.selectedId);
     void this.panel.webview.postMessage(tabs);
     void this.panel.webview.postMessage(snapshot);
+  }
+
+  // `ctl pool ls` is the drawer's whole state, reloaded after every pool action.
+  private async sendPool(): Promise<void> {
+    const r = await runCtl(['pool', 'ls']);
+    let repos: unknown = [];
+    try { repos = JSON.parse(r.stdout || '[]'); } catch { /* an older backend without the pool */ }
+    void this.panel.webview.postMessage({ type: 'pool', repos });
+  }
+
+  private async poolRun(args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
+    const r = await runCtl(args);
+    if (r.code !== 0 && r.code !== 4) { void vscode.window.showErrorMessage(`PenguPool: ${r.stderr || args.join(' ') + ' failed'}`); }
+    await this.sendPool();
+    return r;
+  }
+
+  // A new session may have made a worktree: reload the drawer once it has started.
+  /** A repo dropped on a session's card becomes that session's child. */
+  private async newIn(dir: string, parent = ''): Promise<void> {
+    await vscode.commands.executeCommand('pengupool.newIn', dir, ...(parent ? [parent] : []));
+    await this.sendPool();
+  }
+
+  // A repo's menu. Release is offered only for skill repos, and the modal yes is the release approval.
+  private async poolMenu(dir: string, skill: boolean): Promise<void> {
+    const items = ['New session here', 'Open folder in new window', 'Pull latest', ...(skill ? ['Release…'] : []), 'Remove from pool'];
+    const pick = (await vscode.window.showQuickPick(items.map((label) => ({ label })), { placeHolder: dir }))?.label;
+    if (pick === 'New session here') { await this.newIn(dir); }
+    if (pick === 'Open folder in new window') {
+      await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(dir), { forceNewWindow: true });
+    }
+    let r: { code: number; stdout: string } | undefined;
+    if (pick === 'Pull latest') { r = await this.poolRun(['pool', 'pull', dir]); }
+    if (pick === 'Remove from pool') { await this.poolRun(['pool', 'rm', dir]); }
+    if (pick === 'Release…') {
+      const go = 'Release';
+      if (await vscode.window.showWarningMessage(`Release ${dir} from main: tag the next version, push it, and create the GitHub release?`,
+        { modal: true }, go) !== go) { return; }
+      r = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'PenguPool: releasing…' },
+        () => this.poolRun(['release', dir]));
+    }
+    if (r?.code === 0 && r.stdout) { void vscode.window.showInformationMessage(`PenguPool: ${r.stdout}`); }
+  }
+
+  // Two ways in: a local checkout, or a GitHub repo cloned into a folder the user picks.
+  private async poolAdd(): Promise<void> {
+    const pick = await vscode.window.showQuickPick(
+      [{ label: 'From a local folder…' }, { label: 'From GitHub…', description: 'clone owner/repo or a github.com URL' }],
+      { placeHolder: 'Add a skill repo' });
+    if (!pick) { return; }
+    const folder = async (openLabel: string) => (await vscode.window.showOpenDialog(
+      { canSelectFolders: true, canSelectFiles: false, canSelectMany: false, openLabel }))?.[0]?.fsPath;
+    if (pick.label.startsWith('From a local')) {
+      const dir = await folder('Add skill repo');
+      if (dir) { await this.poolRun(['pool', 'add', dir]); }
+      return;
+    }
+    const src = (await vscode.window.showInputBox({ prompt: 'GitHub repo to clone', placeHolder: 'owner/repo or https://github.com/owner/repo' }))?.trim();
+    const parent = src && await folder('Clone here');
+    if (src && parent) {
+      await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Cloning ${src}…` },
+        () => this.poolRun(['pool', 'clone', src, parent]));
+    }
+  }
+
+  // Remove a skill-repo worktree. Unmerged (exit 4) asks first; the user's yes is the merge approval:
+  // squash-merge its PR, remove the worktree, release the repo.
+  // One removal per worktree at a time: a second click during a slow merge would race the first.
+  private readonly removing = new Set<string>();
+
+  private async worktreeRm(wt: string): Promise<void> {
+    if (this.removing.has(wt)) { return; }
+    this.removing.add(wt);
+    try { await this.removeWorktree(wt); } finally { this.removing.delete(wt); }
+  }
+
+  private async removeWorktree(wt: string): Promise<void> {
+    let r = await this.poolRun(['worktree-rm', wt]);
+    if (r.code === 4) {
+      const go = 'Squash-merge, release, and remove';
+      const pick = await vscode.window.showWarningMessage(
+        `${r.stderr}. Squash-merge its PR into main, cut a release, then remove the worktree?`, { modal: true }, go);
+      if (pick !== go) { return; }
+      r = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'PenguPool: merging and releasing…' },
+        () => this.poolRun(['worktree-rm', wt, '--merge']));
+    }
+    if (r.code === 0 && r.stdout) { void vscode.window.showInformationMessage(`PenguPool: ${r.stdout}`); }
   }
 }
 
@@ -198,6 +300,36 @@ function html(webview: vscode.Webview, dagreUri: vscode.Uri): string {
   #legend svg { vertical-align:middle; margin-right:4px; }
   #wrap { bottom:24px; }
   #svg { margin-top:28px; }   /* below the toolbar */
+  /* skill-repo drawer on the right: a tab when closed, a list when open */
+  #pool { position:absolute; top:32px; right:0; bottom:24px; z-index:2; display:flex; align-items:flex-start; pointer-events:none; }
+  #pool > * { pointer-events:auto; }
+  #poolToggle { writing-mode:vertical-rl; cursor:pointer; padding:8px 3px; font:inherit; font-size:11px; color:inherit;
+                background:var(--vscode-sideBar-background, var(--vscode-editor-background));
+                border:1px solid var(--vscode-panel-border); border-right:none; border-radius:3px 0 0 3px; }
+  #poolBody { display:none; position:relative; width:220px; height:100%; overflow:auto; box-sizing:border-box; padding:6px;
+              background:var(--vscode-sideBar-background, var(--vscode-editor-background)); border-left:1px solid var(--vscode-panel-border); }
+  #pool.open #poolBody { display:block; }
+  #poolGrip { position:absolute; left:0; top:0; bottom:0; width:5px; cursor:ew-resize; z-index:1; }
+  #poolGrip:hover, #poolGrip:focus, body.poolsizing #poolGrip { background:var(--vscode-sash-hoverBorder, var(--vscode-focusBorder)); outline:none; }
+  body.poolsizing, body.poolsizing * { cursor:ew-resize !important; user-select:none; }
+  .poolRepo, .poolWt { display:flex; align-items:center; gap:4px; padding:3px 4px; border-radius:3px; }
+  .poolRepo { cursor:grab; user-select:none; }
+  .poolWt { padding-left:16px; font-size:11px; color:var(--vscode-descriptionForeground); }
+  .poolRepo:hover, .poolWt:hover { background:var(--vscode-list-hoverBackground); }
+  .poolRepo .nm, .poolWt .nm { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .poolRepo.missing { cursor:default; } .poolRepo.missing .nm { text-decoration:line-through; opacity:.6; }
+  #pool button.x { cursor:pointer; border:none; background:none; color:inherit; padding:0 4px; }
+  #poolAdd { margin-top:6px; width:100%; cursor:pointer; padding:3px; border-radius:3px; font:inherit; font-size:11px;
+             color:var(--vscode-button-secondaryForeground); background:var(--vscode-button-secondaryBackground); border:none; }
+  .poolRepo .tag { font-size:10px; padding:0 3px; border:1px solid var(--vscode-descriptionForeground); border-radius:3px;
+    color:var(--vscode-descriptionForeground); }
+  .poolRepo .ver { font-size:10px; color:var(--vscode-descriptionForeground); }
+  #pool button.live { cursor:pointer; border:none; background:none; color:var(--vscode-charts-green); padding:0 2px; font:inherit; font-size:10px; }
+  #pool button.x:disabled { opacity:.35; cursor:default; }
+  .node.poolhl .selection { stroke:var(--vscode-focusBorder); }
+  #poolEmpty { padding:4px; font-size:11px; color:var(--vscode-descriptionForeground); }
+  body.pooldrag, body.pooldrag * { cursor:copy !important; }
+  body.dragging #poolToggle, body.dragging #poolBody { outline:1px dashed var(--vscode-focusBorder); cursor:copy; }
 </style></head><body>
 ${HARNESS_TABS_HTML}
 <div id="regroupBanner">
@@ -214,6 +346,9 @@ ${HARNESS_TABS_HTML}
 </div>
 <div id="empty">no sessions</div>
 <div id="wrap"><svg id="svg" width="100%" height="100%"><g id="scene"></g></svg></div>
+<div id="pool"><button id="poolToggle" aria-expanded="false" title="Agent pool: drag a repo onto the map to start a session in it; drop a session here to add its repo; right-click a repo to manage it">Agent pool</button>
+<div id="poolBody"><div id="poolGrip" role="separator" aria-orientation="vertical" aria-label="Resize the Agent pool" tabindex="0"
+  title="Drag to resize; double-click to reset"></div><div id="poolList"></div><button id="poolAdd">+ Add repo…</button></div></div>
 <div id="legend">
   <span><svg width="18" height="8"><path d="M0,4 H18" class="edge"/></svg>parent → child</span>
   <span><svg width="18" height="8"><path d="M0,4 H18" class="edge hot-down"/></svg>message sent</span>
@@ -260,7 +395,8 @@ ${HARNESS_TABS_HTML}
   const opts = Object.assign({ layout:'org', spacing:'roomy' }, saved.opts);
   if(!LAYOUTS[saved.opts?.layout]) opts.layout = saved.opts?.dir==='LR' ? 'right' : 'org';   // saved before layouts had names
   const folded = new Set(saved.folded || []);
-  function save(){ vscode.setState?.({ opts, folded:[...folded] }); }
+  let poolOpen = !!saved.poolOpen, poolWidth = saved.poolWidth || 220;
+  function save(){ vscode.setState?.({ opts, folded:[...folded], poolOpen, poolWidth }); }
   // Inside a group: sib between siblings, rank between a parent and its children, stack between stacked
   // cards. Roomy frames each group (pad inside, gap between frames); compact packs the groups as close as
   // their cards and lines allow, gap apart.
@@ -555,6 +691,7 @@ ${HARNESS_TABS_HTML}
   ${HARNESS_TABS_JS}
   window.addEventListener('message', ev => {
     if(ev.data?.type==='tabs') return;
+    if(ev.data?.type==='pool'){ drawPool(ev.data.repos || []); return; }
     if(ev.data?.type==='fold'){ ev.data.id ? setFold(ev.data.id, ev.data.on) : foldAll(ev.data.on); return; }
     if(ev.data?.type==='selection'){
       selected=ev.data.id;
@@ -566,6 +703,7 @@ ${HARNESS_TABS_HTML}
     if(snap.topo_hash !== topo || key !== sizes || fresh){ fresh = false; topo = snap.topo_hash; sizes = key; relayout(snap); }
     restyle(snap);
     renderRegroupBanner(snap);
+    drawPool(poolRepos);   // live-session counts follow the map
   });
   // Refresh: forget the cached layout and redraw now, then reload everything from the backend and
   // lay the map out again from that fresh snapshot, even when its structure did not change.
@@ -606,10 +744,93 @@ ${HARNESS_TABS_HTML}
   wrap.addEventListener('pointerup', ev => {
     const d = drag; endDrag(); if(!d?.on) return;
     justDragged = true; setTimeout(() => { justDragged = false; });
+    if(document.elementFromPoint(ev.clientX, ev.clientY)?.closest('#pool')){ vscode.postMessage({type:'poolSession', id:d.id}); return; }
     const t = under(ev);
     if(t.id ? t.id!==d.id : t.canvas) vscode.postMessage({type:'group', source:d.id, target:t.id}); });
   wrap.addEventListener('pointercancel', endDrag);
   wrap.addEventListener('click', ev => { if(justDragged){ ev.stopPropagation(); justDragged=false; } }, true);
+  // Agent pool drawer. Drag a repo onto the map to start a session in it (the empty map's notice counts);
+  // ⋯ or a right-click on a repo opens its menu (new session, open, pull, release, remove); × on a worktree
+  // removes it (asking to merge first when it is not merged), and is off while a session runs there.
+  const pool = document.getElementById('pool'), poolList = document.getElementById('poolList');
+  const poolToggle = document.getElementById('poolToggle');
+  function showPool(){ pool.classList.toggle('open', poolOpen); poolToggle.setAttribute('aria-expanded', String(poolOpen)); }
+  poolToggle.addEventListener('click', () => { poolOpen = !poolOpen; save(); showPool(); });
+  document.getElementById('poolAdd').addEventListener('click', () => vscode.postMessage({type:'poolAdd'}));
+  function xButton(label, msg, text){ const b = hel('button', { class:'x', title:label, 'aria-label':label }); b.textContent = text || '×';
+    b.addEventListener('click', ev => { ev.stopPropagation(); vscode.postMessage(msg); }); return b; }
+  function poolRow(cls, name, title){ const row = hel('div', { class:cls, title }); const nm = hel('span', { class:'nm' });
+    nm.textContent = name; row.appendChild(nm); return row; }
+  // Sessions on the map whose folder is one of dirs (a repo's main checkout or a worktree).
+  function liveIn(dirs){ return last ? flat(last.roots).filter(n => n.cwd && dirs.some(d => n.cwd===d || n.cwd.startsWith(d+'/'))) : []; }
+  function liveButton(nodes){ const b = hel('button', { class:'live', title:'Running here: '+nodes.map(n => n.name).join(', ') });
+    b.textContent = '● '+nodes.length;
+    b.addEventListener('click', ev => { ev.stopPropagation();   // light their cards for a moment
+      nodes.forEach(n => nodeEls.get(n.id)?.grp.classList.add('poolhl'));
+      setTimeout(() => nodeEls.forEach(e => e.grp.classList.remove('poolhl')), 1500); });
+    return b; }
+  let poolRepos = [];
+  function drawPool(repos){
+    poolRepos = repos;
+    poolList.replaceChildren();
+    if(!repos.length){ const e = hel('div', { id:'poolEmpty' }); e.textContent = 'No repos yet.'; poolList.appendChild(e); }
+    repos.forEach(r => {
+      // a plain repo (no skills/*/SKILL.md) gets sessions and merged-worktree removal; PenguPool never merges or releases it
+      const plain = r.skill === false && !r.missing;
+      const row = poolRow('poolRepo' + (r.missing ? ' missing' : ''), r.name,
+        r.missing ? r.repo + ' is gone' : r.repo + '\\nDrag onto the map to start a session here; right-click to manage it' +
+        (plain ? '\\nNot a skill repo: PenguPool never merges or releases it' : ''));
+      row.dataset.dir = r.repo;
+      if(!r.missing){ const tag = hel('span', { class:'tag' }); tag.textContent = plain ? 'repo' : 'skill'; row.appendChild(tag); }
+      if(r.version){ const v = hel('span', { class:'ver', title:'Last release' }); v.textContent = r.version; row.appendChild(v); }
+      const live = liveIn([r.repo, ...(r.worktrees || []).map(w => w.path)]);
+      if(live.length) row.appendChild(liveButton(live));
+      const menu = {type:'poolMenu', dir:r.repo, skill:!plain};
+      if(r.missing) row.appendChild(xButton('Remove ' + r.name + ' from the pool', {type:'poolRm', dir:r.repo}));
+      else row.appendChild(xButton('Manage ' + r.name, menu, '⋯'));
+      if(!r.missing) row.addEventListener('contextmenu', ev => { ev.preventDefault(); ev.stopPropagation(); vscode.postMessage(menu); });
+      poolList.appendChild(row);
+      (r.worktrees || []).forEach(w => {
+        const wt = poolRow('poolWt', w.branch.replace(/^pengupool\\//, ''), w.path);
+        const here = liveIn([w.path]);
+        if(here.length) wt.appendChild(liveButton(here));
+        const x = xButton(here.length ? 'A session runs here: close it first' :
+          plain ? 'Remove this worktree once its PR is merged on GitHub' : 'Remove this worktree', {type:'worktreeRm', path:w.path});
+        x.disabled = !!here.length;
+        wt.appendChild(x);
+        poolList.appendChild(wt);
+      });
+    });
+  }
+  let poolDrag = null;
+  function endPoolDrag(){ poolDrag = null; document.body.classList.remove('pooldrag'); }
+  poolList.addEventListener('pointerdown', ev => {
+    const row = ev.button===0 && !ev.target.closest('button') && ev.target.closest('.poolRepo:not(.missing)');
+    if(row) poolDrag = { dir: row.dataset.dir, row, x: ev.clientX, y: ev.clientY, on: false }; });
+  poolList.addEventListener('pointermove', ev => {
+    if(!poolDrag || poolDrag.on || Math.hypot(ev.clientX-poolDrag.x, ev.clientY-poolDrag.y) < 6) return;
+    poolDrag.on = true; poolDrag.row.setPointerCapture?.(ev.pointerId); document.body.classList.add('pooldrag'); });
+  poolList.addEventListener('pointerup', ev => {
+    const d = poolDrag; endPoolDrag(); if(!d?.on) return;
+    const t = document.elementFromPoint(ev.clientX, ev.clientY);
+    if(t && (wrap.contains(t) || t.id==='empty')) vscode.postMessage({type:'poolDrop', dir:d.dir, parent:t.closest('.node')?.dataset.id || ''}); });
+  poolList.addEventListener('pointercancel', endPoolDrag);
+  // The panel's left edge resizes it (drag, or arrow keys when focused); double-click goes back to 220px.
+  const poolBody = document.getElementById('poolBody'), poolGrip = document.getElementById('poolGrip');
+  function setPoolWidth(w){ poolWidth = Math.round(Math.max(160, Math.min(w, Math.max(160, (globalThis.innerWidth || 1e4) - 80))));
+    poolBody.style.width = poolWidth + 'px'; poolGrip.setAttribute('aria-valuenow', String(poolWidth)); }
+  let sizing = null;
+  poolGrip.addEventListener('pointerdown', ev => { if(ev.button!==0) return; ev.preventDefault();
+    sizing = { x: ev.clientX, w: poolWidth }; poolGrip.setPointerCapture?.(ev.pointerId); document.body.classList.add('poolsizing'); });
+  poolGrip.addEventListener('pointermove', ev => { if(sizing) setPoolWidth(sizing.w + sizing.x - ev.clientX); });
+  function endSizing(){ if(!sizing) return; sizing = null; document.body.classList.remove('poolsizing'); save(); }
+  poolGrip.addEventListener('pointerup', endSizing);
+  poolGrip.addEventListener('pointercancel', endSizing);
+  poolGrip.addEventListener('dblclick', () => { setPoolWidth(220); save(); });
+  poolGrip.addEventListener('keydown', ev => { const d = ev.key==='ArrowLeft' ? 16 : ev.key==='ArrowRight' ? -16 : 0;
+    if(d){ ev.preventDefault(); setPoolWidth(poolWidth + d); save(); } });
+  setPoolWidth(poolWidth);
+  showPool();
   // Empty canvas: the pool actions, as on the list's background, and folding every group.
   poolContext(document.body, { map: true });
   // snapshots arrive only when something changes, so a quiet pool still needs its lit lines to go out
