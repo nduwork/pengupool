@@ -18,7 +18,8 @@ All notable changes to this project are documented here. The format follows
   sessions run in it (click to light their cards); right-click or `⋯` to start a session, open the folder,
   pull its main checkout (`ctl pool pull`, refused while it has local changes), release a skill repo after a
   confirm, or remove it. `pool rm` takes a subfolder or worktree path, the drawer reloads after a drop starts
-  a session, and a worktree's × is off while a session runs there
+  a session, a worktree's × is off while a session runs there, and the panel is resizable from its left edge
+  (drag, or arrow keys; double-click resets), remembered per map
 
 ## [1.1.2] - 2026-10-12
 

@@ -206,3 +206,11 @@ test('the drawer is the Agent pool, with release, live sessions and a menu on ea
   assert.match(html, /contextmenu/);
   assert.match(html, /liveIn\(/);
 });
+
+test('the Agent pool panel has a drag handle that sets and remembers its width', () => {
+  const html = openMap({}).html();
+  assert.match(html, /id="poolGrip"/);
+  assert.match(html, /poolWidth/);
+  assert.match(html, /function setPoolWidth/);
+  assert.match(html, /vscode\.setState\?\.\(\{[^}]*poolWidth/);
+});

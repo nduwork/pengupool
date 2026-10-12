@@ -303,9 +303,12 @@ function html(webview: vscode.Webview, dagreUri: vscode.Uri): string {
   #poolToggle { writing-mode:vertical-rl; cursor:pointer; padding:8px 3px; font:inherit; font-size:11px; color:inherit;
                 background:var(--vscode-sideBar-background, var(--vscode-editor-background));
                 border:1px solid var(--vscode-panel-border); border-right:none; border-radius:3px 0 0 3px; }
-  #poolBody { display:none; width:220px; height:100%; overflow:auto; box-sizing:border-box; padding:6px;
+  #poolBody { display:none; position:relative; width:220px; height:100%; overflow:auto; box-sizing:border-box; padding:6px;
               background:var(--vscode-sideBar-background, var(--vscode-editor-background)); border-left:1px solid var(--vscode-panel-border); }
   #pool.open #poolBody { display:block; }
+  #poolGrip { position:absolute; left:0; top:0; bottom:0; width:5px; cursor:ew-resize; z-index:1; }
+  #poolGrip:hover, #poolGrip:focus, body.poolsizing #poolGrip { background:var(--vscode-sash-hoverBorder, var(--vscode-focusBorder)); outline:none; }
+  body.poolsizing, body.poolsizing * { cursor:ew-resize !important; user-select:none; }
   .poolRepo, .poolWt { display:flex; align-items:center; gap:4px; padding:3px 4px; border-radius:3px; }
   .poolRepo { cursor:grab; user-select:none; }
   .poolWt { padding-left:16px; font-size:11px; color:var(--vscode-descriptionForeground); }
@@ -341,7 +344,8 @@ ${HARNESS_TABS_HTML}
 <div id="empty">no sessions</div>
 <div id="wrap"><svg id="svg" width="100%" height="100%"><g id="scene"></g></svg></div>
 <div id="pool"><button id="poolToggle" aria-expanded="false" title="Agent pool: drag a repo onto the map to start a session in it; drop a session here to add its repo; right-click a repo to manage it">Agent pool</button>
-<div id="poolBody"><div id="poolList"></div><button id="poolAdd">+ Add repo…</button></div></div>
+<div id="poolBody"><div id="poolGrip" role="separator" aria-orientation="vertical" aria-label="Resize the Agent pool" tabindex="0"
+  title="Drag to resize; double-click to reset"></div><div id="poolList"></div><button id="poolAdd">+ Add repo…</button></div></div>
 <div id="legend">
   <span><svg width="18" height="8"><path d="M0,4 H18" class="edge"/></svg>parent → child</span>
   <span><svg width="18" height="8"><path d="M0,4 H18" class="edge hot-down"/></svg>message sent</span>
@@ -388,8 +392,8 @@ ${HARNESS_TABS_HTML}
   const opts = Object.assign({ layout:'org', spacing:'roomy' }, saved.opts);
   if(!LAYOUTS[saved.opts?.layout]) opts.layout = saved.opts?.dir==='LR' ? 'right' : 'org';   // saved before layouts had names
   const folded = new Set(saved.folded || []);
-  let poolOpen = !!saved.poolOpen;
-  function save(){ vscode.setState?.({ opts, folded:[...folded], poolOpen }); }
+  let poolOpen = !!saved.poolOpen, poolWidth = saved.poolWidth || 220;
+  function save(){ vscode.setState?.({ opts, folded:[...folded], poolOpen, poolWidth }); }
   // Inside a group: sib between siblings, rank between a parent and its children, stack between stacked
   // cards. Roomy frames each group (pad inside, gap between frames); compact packs the groups as close as
   // their cards and lines allow, gap apart.
@@ -808,6 +812,21 @@ ${HARNESS_TABS_HTML}
     const t = document.elementFromPoint(ev.clientX, ev.clientY);
     if(t && (wrap.contains(t) || t.id==='empty')) vscode.postMessage({type:'poolDrop', dir:d.dir}); });
   poolList.addEventListener('pointercancel', endPoolDrag);
+  // The panel's left edge resizes it (drag, or arrow keys when focused); double-click goes back to 220px.
+  const poolBody = document.getElementById('poolBody'), poolGrip = document.getElementById('poolGrip');
+  function setPoolWidth(w){ poolWidth = Math.round(Math.max(160, Math.min(w, Math.max(160, (globalThis.innerWidth || 1e4) - 80))));
+    poolBody.style.width = poolWidth + 'px'; poolGrip.setAttribute('aria-valuenow', String(poolWidth)); }
+  let sizing = null;
+  poolGrip.addEventListener('pointerdown', ev => { if(ev.button!==0) return; ev.preventDefault();
+    sizing = { x: ev.clientX, w: poolWidth }; poolGrip.setPointerCapture?.(ev.pointerId); document.body.classList.add('poolsizing'); });
+  poolGrip.addEventListener('pointermove', ev => { if(sizing) setPoolWidth(sizing.w + sizing.x - ev.clientX); });
+  function endSizing(){ if(!sizing) return; sizing = null; document.body.classList.remove('poolsizing'); save(); }
+  poolGrip.addEventListener('pointerup', endSizing);
+  poolGrip.addEventListener('pointercancel', endSizing);
+  poolGrip.addEventListener('dblclick', () => { setPoolWidth(220); save(); });
+  poolGrip.addEventListener('keydown', ev => { const d = ev.key==='ArrowLeft' ? 16 : ev.key==='ArrowRight' ? -16 : 0;
+    if(d){ ev.preventDefault(); setPoolWidth(poolWidth + d); save(); } });
+  setPoolWidth(poolWidth);
   showPool();
   // Empty canvas: the pool actions, as on the list's background, and folding every group.
   poolContext(document.body, { map: true });
