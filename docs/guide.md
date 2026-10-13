@@ -109,9 +109,8 @@ Worktrees are created next to the repo as `<repo>-wt-<name>` on a `pengupool/<na
 ### 6. Keep the tree intact
 
 - Compact with `c` in the Sessions view, or `/compact` in the session.
-- For a fresh context in a Claude Code session, press `Shift+C` (or right-click → **Fresh Context**) or type
-  `/clear`: the session keeps its group and role. In pi, **don't use `/new`**: it starts a new session outside
-  the group.
+- For a fresh context, press `Shift+C` (or right-click → **Fresh Context**), or type `/clear` in a Claude Code
+  session or `/new` in a pi session: the session keeps its group and role.
 - After a Claude Code or pi update, press `Shift+R` (or right-click → **Restart & Resume**). The session
   stops and resumes in the same terminal with the new version, keeping its id, group and role.
 - To reorganise, drag rows in Sessions or cards on the Map. Dropping on empty space moves a session to the top level.

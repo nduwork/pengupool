@@ -86,7 +86,7 @@ Do this before you go on stage. The player starts from this state.
 | --- | --- |
 | **Shot** | Sidebar. |
 | **Action** | Right-click `api` → **Restart & Resume**. A "restarting api…" notification; the card blinks and comes back in the same terminal, worktree and group. Then `lead`'s context badge turns red (71%): press `c` on it to compact, and it drops back to green (9%). `deploy` reports "staging deploy done, smoke tests green" and the chain completes: `api ✓ → web ✓ → deploy ✓`. |
-| **Caption** | Restart in place after an update. Compact with c; Shift+C gives a Claude Code session a fresh context and keeps its place. |
+| **Caption** | Restart in place after an update. Compact with c; Shift+C gives a session a fresh context and keeps its place. |
 | **Live demo** | End on the finished chain and the full tree. |
 
 ---

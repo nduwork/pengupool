@@ -29,8 +29,9 @@ export interface Snapshot {
   ts: number;
   topo_hash: string;
   roots: SessionNode[];
-  cross: [string, string, string][];
-  msgs: [string, string, string, string, boolean][];
+  // harness last: names repeat across harnesses (each names its own sessions); absent from older backends
+  cross: [string, string, string, Harness?][];
+  msgs: [string, string, string, string, boolean, Harness?][];
   group_plan?: GroupPlan | null;   // a regrouping a session proposed, waiting for the user
 }
 

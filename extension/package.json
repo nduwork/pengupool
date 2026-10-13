@@ -119,7 +119,7 @@
       },
       {
         "command": "pengupool.clear",
-        "title": "Fresh Context (/clear)",
+        "title": "Fresh Context (/clear, pi /new)",
         "category": "PenguPool"
       },
       {

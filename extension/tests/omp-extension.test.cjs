@@ -37,8 +37,11 @@ function load(env = {}, opts = {}) {
   const proc = Object.assign(Object.create(process), { env: { PENGUPOOL_HOME: home, ...env }, once() {} });
   const req = (id) => ({ 'node:child_process': childProcess, 'node:crypto': require('node:crypto'),
     'node:fs': fs, 'node:os': os, 'node:path': path })[id];
+  // the name poll's timer, ticked by hand: tick() runs every interval callback once
+  const timers = [];
+  const setInterval = (fn) => { timers.push(fn); return { unref() {} }; };
   vm.runInNewContext(js, { module, exports: module.exports, require: req, process: proc, Date, JSON, Object,
-    String, Promise, setImmediate, Array });
+    String, Promise, setImmediate, setInterval, Array });
   let name = '';
   const bindPi = () => {
     const handlers = {};
@@ -57,7 +60,9 @@ function load(env = {}, opts = {}) {
   // omp calls the factory again, in the same process, for every subagent the session spawns
   const subagent = () => ({ handlers: bindPi(), ctx: { ...ctx, agent: { kind: 'sub', id: '0-Probe' },
     sessionManager: { getSessionId: () => 'sub-1', getSessionFile: () => '/sub.jsonl' } } });
-  return { handlers, ctx, live, livePath, calls, proc, name: () => name, switchTo, subagent, home };
+  const rename = (n) => { name = n; };
+  const tick = () => timers.forEach((fn) => fn());
+  return { handlers, ctx, live, livePath, calls, proc, name: () => name, switchTo, subagent, home, rename, tick };
 }
 
 test('a new omp session takes its name from PENGUPOOL_SESSION_NAME, once', async () => {
@@ -66,6 +71,18 @@ test('a new omp session takes its name from PENGUPOOL_SESSION_NAME, once', async
   assert.equal(x.name(), 'notes');
   assert.equal(x.live().name, 'notes');
   assert.equal(x.proc.env.PENGUPOOL_SESSION_NAME, undefined);  // a later /new is not named "notes" too
+});
+
+test('a rename between turns reaches the live file without waiting for a run to end', async () => {
+  const x = load({ PENGUPOOL_SESSION_NAME: 'notes' });
+  await x.handlers.session_start({ type: 'session_start' }, x.ctx);
+  x.rename('api');                                   // /rename, /alias or PenguPool's Rename: omp sends no event
+  x.tick();
+  assert.equal(x.live().name, 'api');
+  await x.handlers.session_shutdown({ type: 'session_shutdown' }, x.ctx);
+  x.rename('later');
+  x.tick();
+  assert.equal(fs.existsSync(x.livePath), false);    // a gone session's file is not written back
 });
 
 test('the tree context is appended to an omp string[] system prompt', async () => {
@@ -83,13 +100,14 @@ test('a session omp swaps under a live process is rebound, hooks and all', async
   await x.handlers.session_start({ type: 'session_start' }, x.ctx);
   assert.equal(x.live().sessionId, 'sid-1');
   assert.deepEqual(registry().map((r) => r.sessionId), ['sid-1']);
-  // /new (or /resume, /fork): the same process now hosts sid-2
+  // /resume (or /fork): the same process now hosts sid-2, another session
   x.switchTo('sid-2', '/t.jsonl');
-  await x.handlers.session_switch({ type: 'session_switch', reason: 'new', previousSessionFile: '/s.jsonl' }, x.ctx);
+  await x.handlers.session_switch({ type: 'session_switch', reason: 'resume', previousSessionFile: '/s.jsonl' }, x.ctx);
   assert.equal(x.live().sessionId, 'sid-2');        // not the session omp left behind
   assert.equal(x.live().sessionFile, '/t.jsonl');
   assert.equal(x.live().status, 'idle');
-  assert.equal(x.live().name, '');                  // a later session is not named "notes" too
+  assert.equal(x.live().name, '');                  // another session is not named "notes" too
+  assert.equal(x.calls.some((a) => a[1] === 'carry'), false);   // nor does it take sid-1's place
   assert.deepEqual(registry().map((r) => r.sessionId), ['sid-1', 'sid-2']);
   assert.equal(x.calls.filter((a) => a[1] === 'register').length, 2);   // the new session gets a profile
   // its window is already in use: the map rings it now, not after the next turn
@@ -97,6 +115,19 @@ test('a session omp swaps under a live process is rebound, hooks and all', async
   // a branch that rewinds within the same session changes nothing
   await x.handlers.session_branch({ type: 'session_branch', reason: 'branch' }, x.ctx);
   assert.deepEqual(registry().map((r) => r.sessionId), ['sid-1', 'sid-2']);
+});
+
+test('/new is a fresh context: the new id takes over the name, group and role', async () => {
+  const x = load({ PENGUPOOL_SESSION_NAME: 'notes' });
+  await x.handlers.session_start({ type: 'session_start' }, x.ctx);
+  x.switchTo('sid-2', '/t.jsonl');
+  await x.handlers.session_switch({ type: 'session_switch', reason: 'new', previousSessionFile: '/s.jsonl' }, x.ctx);
+  // ctl moves the seat once both ids are registered under this process's key
+  assert.deepEqual(x.calls.map((a) => a.slice(0, 3).join(' ')),
+                   ['ctl register sid-1', 'ctl register sid-2', 'ctl carry sid-1']);
+  assert.deepEqual([...x.calls.at(-1)], ['ctl', 'carry', 'sid-1', 'sid-2']);
+  assert.equal(x.live().sessionId, 'sid-2');
+  assert.equal(x.live().name, 'notes');
 });
 
 test('a compaction refreshes the context the map rings, mid-turn', async () => {

@@ -181,8 +181,21 @@ def test_a_shared_name_never_pulls_a_pi_child_under_claude():
     assert kids == {"c": [], "p": ["k"]}
 
 
+def test_a_session_shows_the_name_its_harness_addresses_it_by():
+    # pi-intercom knows the pi session as "notes" whatever Claude calls its own sessions, so the map and
+    # the agents' tree show "notes"; only a second pi "notes" needs `~pid` to tell the two apart
+    s = {"cwd": "", "state": "waiting"}
+    sessions = [{**s, "sessionId": "c", "name": "notes", "harness": "cc", "pid": 1},
+                {**s, "sessionId": "p", "name": "notes", "harness": "pi", "pid": 2},
+                {**s, "sessionId": "q", "name": "notes", "harness": "pi", "pid": 4},
+                {**s, "sessionId": "k", "name": "kid", "harness": "pi", "pid": 3}]
+    roots, _ = model.build_trees(sessions, model.apply_groups(sessions, [], {"k": "q"}))
+    names = {r.session_id: (r.name, [c.name for c in r.children]) for r in roots}
+    assert names == {"c": ("notes", []), "p": ("notes", []), "q": ("notes~4", ["kid"])}
+
+
 def test_a_pi_message_names_the_pi_session_not_its_claude_namesake(tmp_path, monkeypatch):
-    # pi-intercom calls the pi parent "notes"; the tree (and so the pi tab's log) calls it "notes~2"
+    # pi-intercom calls the pi parent "notes", and so does the tree (and the pi tab's log)
     for k, v in {"CLAUDE": tmp_path, "PENGU": tmp_path, "GROUPS": tmp_path / "g.json",
                  "CLEARED": tmp_path / "cleared.json"}.items():
         monkeypatch.setattr(model, k, v)
@@ -197,7 +210,7 @@ def test_a_pi_message_names_the_pi_session_not_its_claude_namesake(tmp_path, mon
     monkeypatch.setattr(model, "load_sessions", lambda *a, **k: [dict(x) for x in sessions])
     monkeypatch.setattr(model, "TRANSCRIPTS", model.Transcripts())
     _, _, msgs = model.snapshot()
-    assert [(m.src, m.dst) for m in msgs] == [("kid", "notes~2")]
+    assert [(m.src, m.dst) for m in msgs] == [("kid", "notes")]
 
 
 def test_a_long_busy_turn_is_never_stale(tmp_path, monkeypatch):

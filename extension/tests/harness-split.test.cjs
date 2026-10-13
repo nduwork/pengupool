@@ -72,6 +72,20 @@ test('splitByHarness keeps one harness and only links/messages between its own s
   assert.deepEqual(splitByHarness(snap([piTree()]), 'cc').roots, []);
 });
 
+test('splitByHarness never lets a namesake in the other harness pull its links or messages in', () => {
+  const { splitByHarness } = harness().load('harness');
+  // each harness names its own sessions: a Claude and a pi pair can both be "notes" → "kid"
+  const both = {
+    topo_hash: 'h', roots: [cc('c1', 'notes', [cc('c2', 'kid')]), pi('p1', 'notes', [pi('p2', 'kid')])],
+    cross: [['notes', 'kid', 'cc link', 'cc'], ['notes', 'kid', 'pi link', 'pi']],
+    msgs: [['t', 'kid', 'notes', 'cc msg', false, 'cc'], ['t', 'kid', 'notes', 'pi msg', false, 'pi']],
+  };
+  const piOnly = splitByHarness(both, 'pi');
+  assert.deepEqual(piOnly.cross.map((link) => link[2]), ['pi link']);
+  assert.deepEqual(piOnly.msgs.map((msg) => msg[3]), ['pi msg']);
+  assert.deepEqual(splitByHarness(both, 'cc').msgs.map((msg) => msg[3]), ['cc msg']);
+});
+
 test('bothHarnesses context key is true only while both harnesses run, set on change', () => {
   const h = harness();
   const sync = h.load('harness').bothHarnessesContext();

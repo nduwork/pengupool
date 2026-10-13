@@ -261,7 +261,6 @@ export function registerCommands(context: vscode.ExtensionContext, d: Deps): voi
   reg('pengupool.clear', async (node?: SessionNode) => {
     const n = sel(node);
     if (!n) { return; }
-    if (n.harness === 'pi') { vscode.window.showWarningMessage('PenguPool: Fresh Context is for Claude Code sessions.'); return; }
     const ok = await vscode.window.showWarningMessage(
       `Clear "${n.name}"'s conversation? It keeps its place in the tree and its role.`, { modal: true }, 'Clear');
     if (ok) { await d.terminals.slash(n, 'clear'); }

@@ -5,6 +5,24 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Fresh Context for pi sessions. `Shift+C` (or right-click → **Fresh Context**) types `/new` into an omp
+  session, and the new session keeps the old one's group and role, as Claude Code's `/clear` does, and its name.
+  Typing `/new` in the session does the same. The PenguPool pi extension hands the seat over with the new
+  `ctl carry <old> <new>`, which only the omp process that held both ids can call: its in-memory key, on
+  stdin, must be the one both ids were registered with
+
+### Fixed
+- Renaming a pi session (PenguPool's **Rename**, `/alias`, omp's `/rename`) now shows on the map within a
+  second. omp sends no rename event, so the new name used to appear only after the session's next run ended.
+- A pi session sharing its name with a Claude Code session shows that name on the map, in the Sessions view
+  and in the agents' tree, matching the alias pi-intercom addresses it by. It used to show as `name~pid`.
+  A `~pid` now marks only two sessions of the same harness with the same name. `serve`'s cross links and
+  messages carry their harness, so a namesake's traffic never shows on the other harness's tab.
+- **Restart & Resume** of a pi session reported "session window is gone" even though the session had
+  restarted. The stopped process removes its live file, so ctl lost the session's harness and looked for the
+  pane on Claude Code's tmux server. It now keeps the session's record from before the stop.
+
 ## [1.3.0] - 2026-10-12
 
 ### Changed

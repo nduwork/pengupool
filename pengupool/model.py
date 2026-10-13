@@ -445,26 +445,34 @@ def load_registry() -> dict[str, str]:
     return reg
 
 
-def tree_names(sessions: list[dict]) -> list[str]:
+def tree_names(sessions: list[dict], per_harness: bool = False) -> list[str]:
     """Each session's node name, in order. A name can repeat (each harness names its own sessions, and a
-    session can be resumed twice), so a repeat gets `~pid`. Map a session id through this, never through
-    its bare name, which may be another harness's session."""
+    session can be resumed twice), so a repeat gets `~pid`. The default counts repeats across harnesses:
+    those names key the tree, so map a session id through them, never through its bare name, which may be
+    another harness's session. `per_harness` counts repeats within a harness only: that is the name the
+    harness addresses the session by (pi-intercom's alias, Claude's SendMessage name), so it is the one
+    shown and handed to agents, where a namesake in the other harness is never in view."""
+    seen: set = set()
     out: list[str] = []
     for s in sessions:
-        out.append(f"{s['name']}~{s['pid']}" if s["name"] in out else s["name"])
+        k = (harness.of(s), s["name"]) if per_harness else s["name"]
+        out.append(f"{s['name']}~{s['pid']}" if k in seen else s["name"])
+        seen.add(k)
     return out
 
 
 def build_trees(sessions: list[dict], edges: list[Edge], registry: dict[str, str] | None = None
-                ) -> tuple[list[Node], list[Edge]]:
-    """Return (roots, cross_edges). Edge labels from later edges overwrite earlier ones."""
+                ) -> tuple[list[Node], list[tuple[str, str, str, str]]]:
+    """Return (roots, cross_edges). Edges name nodes by their `tree_names` key; a node and a cross edge
+    (src, dst, label, harness) carry the name the session's harness shows. Edge labels from later edges
+    overwrite earlier ones."""
     registry = registry or {}
     nodes: dict[str, Node] = {}
-    for s, name in zip(sessions, tree_names(sessions)):
-        nodes[name] = Node(s["sessionId"], name, s["cwd"], int(s.get("pid", 0)), s["state"],
-                           s.get("status_line", ""), tmux_pane=registry.get(s["sessionId"], ""),
-                           started=float(s.get("startedAt", 0) or 0) / 1000, ctx_pct=s.get("ctx_pct"),
-                           harness=harness.of(s), summary=s.get("summary", ""))
+    for s, key, name in zip(sessions, tree_names(sessions), tree_names(sessions, per_harness=True)):
+        nodes[key] = Node(s["sessionId"], name, s["cwd"], int(s.get("pid", 0)), s["state"],
+                          s.get("status_line", ""), tmux_pane=registry.get(s["sessionId"], ""),
+                          started=float(s.get("startedAt", 0) or 0) / 1000, ctx_pct=s.get("ctx_pct"),
+                          harness=harness.of(s), summary=s.get("summary", ""))
     out: dict[tuple[str, str], str] = {}
     for src, dst, label in edges:
         if src in nodes and dst in nodes and src != dst:
@@ -488,11 +496,12 @@ def build_trees(sessions: list[dict], edges: list[Edge], registry: dict[str, str
     # one contiguous section per harness (Claude first), so the list, map and extension group them
     roots = sorted((n for name, n in nodes.items() if name not in parent),
                    key=lambda n: (harness.HARNESSES.index(n.harness), n.name))
-    cross: list[Edge] = [(s, d, l) for (s, d), l in out.items() if parent.get(d) != s]
+    # a cross edge never spans harnesses (apply_groups), and names repeat across them: it carries its harness
+    cross = [(nodes[s].name, nodes[d].name, l, nodes[s].harness) for (s, d), l in out.items() if parent.get(d) != s]
     return roots, cross
 
 
-def snapshot(light: bool = False) -> tuple[list[Node], list[Edge], list["Msg"]]:
+def snapshot(light: bool = False) -> tuple[list[Node], list[tuple[str, str, str, str]], list["Msg"]]:
     """The tree comes ONLY from manual groups (the `g` action) — it never re-parents itself from
     message traffic, so the hierarchy is stable until the user regroups. Messages still feed the log.
     `light` (used by the per-prompt hook when tree.json is stale): no transcript tailing, no writes."""
@@ -525,9 +534,9 @@ def snapshot(light: bool = False) -> tuple[list[Node], list[Edge], list["Msg"]]:
         s["ctx_pct"] = load_context_pct(s["sessionId"])
         s["summary"] = profiles.load(s["sessionId"]).get("summary", "")
     roots, cross = build_trees(sessions, apply_groups(sessions, team_edges(sessions), groups), load_registry())
-    # a message names sessions the way its harness does; show it with the names the tree uses
+    # a message names sessions the way its harness does; show it with the names the tree shows
     node: dict[tuple[str, str], str] = {}
-    for s, n in zip(sessions, tree_names(sessions)):
+    for s, n in zip(sessions, tree_names(sessions, per_harness=True)):
         node.setdefault((harness.of(s), s["name"]), n)
     msgs = [replace(m, src=node.get((m.harness, m.src), m.src), dst=node.get((m.harness, m.dst), m.dst))
             for m in msgs]

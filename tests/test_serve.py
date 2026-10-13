@@ -12,7 +12,7 @@ def _roots(state="active", ctx=10, child_name="child"):
                        tmux_pane="%3")
     root = model.Node("r1", "root", "/repo", 1, "active", status_line="[b] y ●", ctx_pct=5,
                       children=[child])
-    return [root], [("root", "c1", "spun up")], []
+    return [root], [("root", "c1", "spun up", "cc")], []
 
 
 def test_build_shape_and_topo_hash(monkeypatch):
@@ -21,7 +21,7 @@ def test_build_shape_and_topo_hash(monkeypatch):
     assert snap["roots"][0]["id"] == "r1"
     assert snap["roots"][0]["children"][0]["ctx_pct"] == 10
     assert snap["roots"][0]["children"][0]["tmux_pane"] == "%3"   # extension uses this for "attach vs start"
-    assert snap["cross"] == [["root", "c1", "spun up"]]
+    assert snap["cross"] == [["root", "c1", "spun up", "cc"]]
     base = snap["topo_hash"]
 
     # status + ctx change only -> same topology hash (client should NOT relayout)

@@ -236,7 +236,7 @@
 
   // ---- the scenes (docs/tutorial-script.md) --------------------------------------------------------
   const MENU = ['New Child Session…', 'Add Previous Session as Child…', 'Resume Previous Sessions…', '—',
-    'Reveal in Finder', 'Copy Path', '—', 'Compact (/compact)', 'Fresh Context (/clear)', 'Restart & Resume', '—',
+    'Reveal in Finder', 'Copy Path', '—', 'Compact (/compact)', 'Fresh Context (/clear, pi /new)', 'Restart & Resume', '—',
     'Group Under…', 'Rename', 'Describe Role…', '—', 'Close'];
   const PLACES = [['Use selected folder', 'no new worktree · fine if a session already runs here'], ['Create a worktree', 'isolated branch for this session']];
   const newSession = async (name, folder, where, harness, s) => {
@@ -319,7 +319,7 @@
       await say('<span class="dot">⏺</span> Staging is live: shop-api v1.8.0, shop-web v2.3.0.', '', 800);
       hidePtr();
     } },
-    { t: 'Keep the tree healthy', p: 'Restart in place after an update. Compact with c; Shift+C gives a Claude Code session a fresh context and keeps its place.', run: async () => {
+    { t: 'Keep the tree healthy', p: 'Restart in place after an update. Compact with c; Shift+C gives a session a fresh context and keeps its place.', run: async () => {
       await menu('api', MENU, MENU.indexOf('Restart & Resume'));
       await set('api', { blink: true });
       await toast('PenguPool: restarting api…');
