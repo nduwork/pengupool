@@ -435,6 +435,10 @@ def _slash(sid: str, what: str, name: str = "") -> int:
         text = "/compact"
     elif what == "clear" and not name:  # the new id keeps its group and role: Claude's SessionStart hook,
         text = harness.CLEAR[h]          # pi's extension through `ctl carry`
+    elif what == "rename" and h == "pi" and name.strip().casefold() in ("", "menu"):  # `/alias` opens a dialog
+        print("pi-intercom reads a blank name or \"menu\" as a request for its /alias dialog: pick another name",
+              file=sys.stderr)
+        return 2
     elif what == "rename" and re.fullmatch(r"[^\x00-\x1f\x7f]{1,80}", name):  # one printable line
         text = f"{harness.RENAME[h]} {name}"
     else:

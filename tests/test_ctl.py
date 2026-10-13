@@ -345,6 +345,10 @@ def test_slash_types_into_the_sessions_own_pane_and_only_for_the_user(monkeypatc
     assert typed == [("%1", "/compact", "cc"), ("%1", "/rename api", "cc"), ("%2", "/alias docs", "pi"),
                      ("%1", "/clear", "cc"), ("%2", "/new", "pi")]
     assert ctl.main(["slash", "c1", "rename", "a\nsecond prompt"]) == 2  # never a newline into the agent
+    assert ctl.main(["slash", "p1", "rename", "Menu"]) == 2           # pi-intercom's /alias menu opens a dialog
+    assert ctl.main(["slash", "p1", "rename", "  "]) == 2             # as does a blank /alias
+    assert ctl.main(["slash", "c1", "rename", "menu"]) == 0           # Claude's /rename menu is just a name
+    typed.pop()
     monkeypatch.setattr(ctl.profiles, "caller", lambda: "c1")          # from inside a session
     assert ctl.main(["slash", "p1", "compact"]) == 2
     assert len(typed) == 5

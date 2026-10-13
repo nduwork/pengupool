@@ -132,3 +132,37 @@ def test_check_flags_an_omp_that_cannot_start(env, monkeypatch, capsys):
                         if cmd[-1] == "--version" else real(cmd, **k))
     assert install.main(["setup", "--check", "pi"]) == 1
     assert "bun upgrade" in capsys.readouterr().out
+
+
+def test_a_bun_just_installed_is_on_path_for_the_steps_after_it(env, tmp_path, monkeypatch):
+    """Bun's installer adds ~/.bun/bin only to shell rc files, and puts omp there too: without it on this
+    process's PATH, `bun install -g` and `omp plugin install` failed (127, or a FileNotFoundError)."""
+    have, ran = env
+    have.difference_update({"omp", "bun"})
+    monkeypatch.setenv("BUN_INSTALL", str(tmp_path / "bun"))
+    monkeypatch.setenv("PATH", "/usr/bin")
+    monkeypatch.setattr("builtins.input", lambda q: "y")
+    real = install.subprocess.run
+
+    def run(cmd, **k):
+        if cmd == ["bash", "-c", install.BUN_INSTALL]:
+            (tmp_path / "bun" / "bin").mkdir(parents=True)
+        elif cmd == ["bash", "-c", install.CLI_INSTALL["pi"]]:
+            assert install.os.environ["PATH"].split(":")[0] == str(tmp_path / "bun" / "bin")
+        return real(cmd, **k)
+    monkeypatch.setattr(install.subprocess, "run", run)
+    install.main(["setup", "pi"])
+    assert ["bash", "-c", install.CLI_INSTALL["pi"]] in ran
+
+
+def test_an_omp_off_path_reports_instead_of_crashing(env, monkeypatch, capsys):
+    have, ran = env
+    real = install.subprocess.run
+
+    def run(cmd, **k):
+        if cmd[:2] == ["omp", "plugin"] and cmd[2] == "install":
+            raise FileNotFoundError("omp")
+        return real(cmd, **k)
+    monkeypatch.setattr(install.subprocess, "run", run)
+    assert install.main(["setup", "pi"]) == 1
+    assert "omp plugin install pi-intercom" in capsys.readouterr().out

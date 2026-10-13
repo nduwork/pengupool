@@ -145,8 +145,8 @@ class ProcTable:
         if row is None:
             return False
         if proc_start:
-            mine, theirs = _start_epoch(proc_start, utc=True), _start_epoch(row[1], utc=False)
-            if mine and theirs and abs(mine - theirs) > 2:
+            mine, theirs = _start_epoch(proc_start, utc=True), _local_epochs(row[1])
+            if mine and theirs and min(abs(mine - t) for t in theirs) > 2:
                 return False  # pid recycled by another process
         return True
 
@@ -163,6 +163,21 @@ def _start_epoch(s: str, utc: bool) -> float:
         return 0.0
     import calendar
     return float(calendar.timegm(t)) if utc else time.mktime(t)
+
+
+def _local_epochs(s: str) -> list[float]:
+    """`ps lstart` local time → every epoch it can be: two in the hour a DST fall-back repeats, where
+    mktime alone picks the first and a process started in the second would read as a recycled pid."""
+    try:
+        t = time.strptime(" ".join(str(s).split()), "%a %b %d %H:%M:%S %Y")
+    except ValueError:
+        return []
+    out = set()
+    for dst in (0, 1):
+        e = time.mktime((*t[:8], dst))
+        if time.localtime(e)[:6] == t[:6]:  # this reading names that wall-clock time
+            out.add(e)
+    return sorted(out) or [time.mktime(t)]
 
 
 PROCS = ProcTable()
@@ -629,6 +644,9 @@ def past_sessions(cwd: str, limit: int = 20) -> list[tuple[str, str, str]]:
             break
         if h == "cc" and _cc_cwd(f) not in (cwd, None):  # foo_bar and foo-bar share one Claude folder
             continue
+        # ~/a-b and ~/a/b share one omp folder; omp names it after the resolved path (/tmp → /private/tmp)
+        if h == "pi" and (fc := _cc_cwd(f)) is not None and os.path.realpath(fc) != os.path.realpath(cwd):
+            continue
         sid = f.stem if h == "cc" else f.stem.split("_", 1)[1]
         title, first = "", ""
         try:
@@ -661,22 +679,18 @@ def _mtime(p: Path | None) -> float:
         return 0.0
 
 
-def _transcript_cwd(d: Path, h: str) -> str:
-    """A transcript carries its own cwd; the directory slug (`--Users-a-repo--`) cannot be turned
-    back into one, so read the newest file's head. Claude writes cwd on every line, pi on the header."""
-    for f in sorted(d.glob("*.jsonl"), key=_mtime, reverse=True)[:1]:
-        try:
-            with f.open() as fh:
-                for i, line in enumerate(fh):
-                    if i > 20:
-                        break
-                    row = json.loads(line)
-                    cwd = row.get("cwd") if isinstance(row, dict) else None
-                    if isinstance(cwd, str) and cwd:
-                        return cwd
-        except Exception:  # a hostile or half-written transcript must not break the restore list
-            continue
-    return ""
+def _transcript_cwds(d: Path, window: float) -> list[str]:
+    """Every cwd the folder's recent transcripts record, newest first. The directory slug cannot be
+    turned back into a cwd, and two cwds can share one (Claude's foo_bar and foo-bar, omp's ~/a-b and
+    ~/a/b), so each file's head says. Claude writes cwd on every line, pi on the header."""
+    out: list[str] = []
+    for f in sorted(d.glob("*.jsonl"), key=_mtime, reverse=True)[:PAST_PER_DIR * 4]:
+        if time.time() - _mtime(f) > window:
+            break
+        cwd = _cc_cwd(f)  # a hostile or half-written transcript reads as None
+        if cwd and cwd not in out:
+            out.append(cwd)
+    return out
 
 
 def _transcript_dirs(window: float) -> list[tuple[str, str]]:
@@ -687,9 +701,7 @@ def _transcript_dirs(window: float) -> list[tuple[str, str]]:
     for d, h in dirs:
         if not d.is_dir() or time.time() - max((_mtime(f) for f in d.glob("*.jsonl")), default=0.0) > window:
             continue
-        cwd = _transcript_cwd(d, h)
-        if cwd:
-            found.append((cwd, h))
+        found += [(cwd, h) for cwd in _transcript_cwds(d, window)]
     return found
 
 
@@ -764,7 +776,7 @@ def parse_transcript_line(line: str, me: str) -> list[Msg]:
                 if to:
                     out.append(Msg(ts, me, to, label[:MSG_LABEL_MAX]))
     elif d.get("type") == "custom" and d.get("customType") in ("intercom_sent", "intercom_received"):
-        # pi-intercom records each delivered message in the sender's and receiver's session file
+        # the sender's record of a send, and the asker's of the reply its ask got
         data = d.get("data") if isinstance(d.get("data"), dict) else {}
         body = data.get("message") if isinstance(data.get("message"), dict) else {}
         label = str(body.get("text") or "")
@@ -772,6 +784,14 @@ def parse_transcript_line(line: str, me: str) -> list[Msg]:
             out.append(Msg(ts, me, str(data["to"]).strip(), label[:MSG_LABEL_MAX]))
         elif d["customType"] == "intercom_received" and data.get("from"):
             out.append(Msg(ts, str(data["from"]).strip(), me, label[:MSG_LABEL_MAX], incoming=True))
+    elif d.get("type") == "custom_message" and d.get("customType") == "intercom_message":
+        # the receiver's copy of a pi-intercom message: the only record of it when the sender's own file
+        # is not read (a subagent, a one-shot run, a session that exited or runs outside the pool)
+        det = d.get("details") if isinstance(d.get("details"), dict) else {}
+        frm = det.get("from") if isinstance(det.get("from"), dict) else {}
+        src = str(frm.get("name") or str(frm.get("id") or "")[:8]).strip()
+        if src:
+            out.append(Msg(ts, src, me, str(det.get("bodyText") or "")[:MSG_LABEL_MAX], incoming=True))
     elif d.get("type") == "user":
         text = _content_text(content)
         for m in re.finditer(r'<cross-session-message([^>]*)>(.*?)(?=<cross-session-message|$)', text, re.S):
