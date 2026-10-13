@@ -2,6 +2,7 @@
 // before_agent_start a string[] system prompt, ends a run with agent_end (no agent_settled), has no
 // --name flag and no session_info_changed. The extension is transpiled and run against a fake `pi`.
 const test = require('node:test');
+const { EventEmitter } = require('node:events');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -14,16 +15,20 @@ const SRC = path.join(__dirname, '../../pengupool/pi_extension.ts');
 function load(env = {}, opts = {}) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'pp-omp-'));
   const calls = [];
+  // a child's stdin; with opts.epipe the CLI has already exited, so writing to it fails with EPIPE
+  const stdin = () => Object.assign(new EventEmitter(), {
+    end() { if (opts.epipe) { this.emit('error', Object.assign(new Error('write EPIPE'), { code: 'EPIPE' })); } },
+  });
   const childProcess = {
     execFile: (cmd, args, opts_, cb) => {
       calls.push(args);
       const out = args[1] === 'context' ? 'TREE CONTEXT' : '';
       if (args[1] === 'authorize' && opts.authorize === 3) {
         setImmediate(() => cb(Object.assign(new Error('refused'), { code: 3 }), '', 'not adjacent'));
-        return { stdin: { end() {} } };
+        return { stdin: stdin() };
       }
-      setImmediate(() => cb(null, out, ''));
-      return { stdin: { end() {} } };
+      setImmediate(() => opts.epipe ? cb(Object.assign(new Error('exited'), { code: 1 }), '', '') : cb(null, out, ''));
+      return { stdin: stdin() };
     },
   };
   const js = ts.transpileModule(fs.readFileSync(SRC, 'utf8'),
@@ -34,18 +39,25 @@ function load(env = {}, opts = {}) {
     'node:fs': fs, 'node:os': os, 'node:path': path })[id];
   vm.runInNewContext(js, { module, exports: module.exports, require: req, process: proc, Date, JSON, Object,
     String, Promise, setImmediate, Array });
-  const handlers = {};
   let name = '';
-  const pi = { on: (ev, fn) => { handlers[ev] = fn; }, getSessionName: () => name,
-               setSessionName: (n) => { name = n; } };
-  module.exports.default(pi);
+  const bindPi = () => {
+    const handlers = {};
+    module.exports.default({ on: (ev, fn) => { handlers[ev] = fn; }, getSessionName: () => name,
+                             setSessionName: (n) => { name = n; } });
+    return handlers;
+  };
+  const handlers = bindPi();
   // the session omp reports through ctx; a switch swaps it under the same process
   let sid = 'sid-1', file = '/s.jsonl';
   const ctx = { cwd: '/r', getContextUsage: () => ({ percent: 12 }),
     sessionManager: { getSessionId: () => sid, getSessionFile: () => file } };
-  const live = () => JSON.parse(fs.readFileSync(path.join(home, 'pi-sessions', `${proc.pid}.json`), 'utf8'));
+  const livePath = path.join(home, 'pi-sessions', `${proc.pid}.json`);
+  const live = () => JSON.parse(fs.readFileSync(livePath, 'utf8'));
   const switchTo = (next, nextFile = '/s.jsonl', nextName = '') => { sid = next; file = nextFile; name = nextName; };
-  return { handlers, ctx, live, calls, proc, name: () => name, switchTo, home };
+  // omp calls the factory again, in the same process, for every subagent the session spawns
+  const subagent = () => ({ handlers: bindPi(), ctx: { ...ctx, agent: { kind: 'sub', id: '0-Probe' },
+    sessionManager: { getSessionId: () => 'sub-1', getSessionFile: () => '/sub.jsonl' } } });
+  return { handlers, ctx, live, livePath, calls, proc, name: () => name, switchTo, subagent, home };
 }
 
 test('a new omp session takes its name from PENGUPOOL_SESSION_NAME, once', async () => {
@@ -80,6 +92,8 @@ test('a session omp swaps under a live process is rebound, hooks and all', async
   assert.equal(x.live().name, '');                  // a later session is not named "notes" too
   assert.deepEqual(registry().map((r) => r.sessionId), ['sid-1', 'sid-2']);
   assert.equal(x.calls.filter((a) => a[1] === 'register').length, 2);   // the new session gets a profile
+  // its window is already in use: the map rings it now, not after the next turn
+  assert.equal(JSON.parse(fs.readFileSync(path.join(x.home, 'context', 'sid-2.json'), 'utf8')).pct, 12);
   // a branch that rewinds within the same session changes nothing
   await x.handlers.session_branch({ type: 'session_branch', reason: 'branch' }, x.ctx);
   assert.deepEqual(registry().map((r) => r.sessionId), ['sid-1', 'sid-2']);
@@ -114,4 +128,50 @@ test('agent_end settles the session unless omp continues the run', async () => {
   assert.equal(x.live().status, 'busy');
   await x.handlers.agent_end({ willContinue: false }, x.ctx);
   assert.equal(x.live().status, 'idle');
+});
+
+test('a subagent never takes over or removes its session\'s pool entry', async () => {
+  // omp runs the extension for a subagent in the session's own process. Binding it overwrote the live
+  // file, registry line and env with the subagent's id, and its end deleted the file: until the next
+  // prompt the session left the map and its children showed ungrouped.
+  const x = load();
+  const registry = () => fs.readFileSync(path.join(x.home, 'registry.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
+  await x.handlers.session_start({ type: 'session_start' }, x.ctx);
+  await x.handlers.agent_start({}, x.ctx);
+  const sub = x.subagent();
+  for (const ev of ['session_start', 'agent_start', 'turn_end', 'agent_end']) { await sub.handlers[ev]({ type: ev }, sub.ctx); }
+  await sub.handlers.tool_call({ toolName: 'intercom', input: { action: 'send', to: 'peer' } }, sub.ctx);
+  await sub.handlers.session_shutdown({ type: 'session_shutdown' }, sub.ctx);
+  assert.equal(x.live().sessionId, 'sid-1');
+  assert.equal(x.live().status, 'busy');                     // the session still waits on its subagent
+  assert.equal(x.proc.env.PENGUPOOL_SESSION, 'sid-1');       // the session's tools keep its id
+  assert.deepEqual(registry().map((r) => r.sessionId), ['sid-1']);
+  assert.equal(fs.existsSync(path.join(x.home, 'context', 'sub-1.json')), false);
+  assert.deepEqual([...x.calls.at(-1)], ['ctl', 'authorize', 'sid-1', 'peer']);   // checked as the session's send
+  await x.handlers.session_shutdown({ type: 'session_shutdown' }, x.ctx);
+  assert.equal(fs.existsSync(x.livePath), false);           // the session's own end does remove it
+});
+
+test('a one-shot run is no pool session and sends as the session that started it', async () => {
+  // `omp -p` registered as a live pool session. Started from a pool session's tool, it inherits that
+  // session's id: it keeps it, registers nothing, and its sends are checked as that session's.
+  const x = load({ PENGUPOOL_SESSION: 'parent' });
+  const ctx = { ...x.ctx, mode: 'print' };
+  await x.handlers.session_start({ type: 'session_start' }, ctx);
+  assert.equal(await x.handlers.before_agent_start({ prompt: 'go', systemPrompt: [] }, ctx), undefined);
+  await x.handlers.agent_start({}, ctx);
+  await x.handlers.tool_call({ toolName: 'intercom', input: { action: 'send', to: 'peer' } }, ctx);
+  await x.handlers.agent_end({}, ctx);
+  assert.equal(fs.existsSync(x.livePath), false);
+  assert.equal(fs.existsSync(path.join(x.home, 'registry.jsonl')), false);
+  assert.equal(x.proc.env.PENGUPOOL_SESSION, 'parent');
+  assert.deepEqual(x.calls.map((a) => [...a]), [['ctl', 'authorize', 'parent', 'peer']]);
+});
+
+test('a CLI that exits before reading its input cannot crash the session', async () => {
+  // writing to its closed stdin raises EPIPE; unhandled, it ended omp
+  const x = load({}, { epipe: true });
+  await x.handlers.session_start({ type: 'session_start' }, x.ctx);
+  assert.equal(await x.handlers.before_agent_start({ prompt: 'hi', systemPrompt: [] }, x.ctx), undefined);
+  assert.equal(x.live().sessionId, 'sid-1');
 });

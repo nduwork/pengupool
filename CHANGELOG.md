@@ -33,6 +33,15 @@ All notable changes to this project are documented here. The format follows
 - `ctl past` reads a pi session's name from omp's `title` entry (and `titleSource` in the header) as well
   as from Claude's `custom-title`/`session_info` and pi's `session_info`, instead of falling back to the
   first line of the session's first prompt
+- an omp subagent no longer takes over its session's pool entry. omp runs the PenguPool extension for every
+  subagent in the session's process: the subagent overwrote the live-session file, registry line and
+  `PENGUPOOL_SESSION` with its own id, and its end deleted the file, so until the next prompt the session
+  left the map and its children showed ungrouped. A subagent's intercom sends are checked as its session's
+- a one-shot omp run (`omp -p`, `--mode json`) is not registered as a pool session. Started from a pool
+  session's tool, its intercom sends are checked as that session's
+- a `pengupool` CLI that exits without reading its input no longer crashes the omp session (EPIPE)
+- a resumed or forked pi session shows its ctx % right away, not after its first turn
+- `ctl restart` on a card for a pane with no session yet says so, instead of "not alive; resume it instead"
 
 ### Known issues
 - Under omp, pi-intercom's "New intercom message above." nudge can reach the model one step before the

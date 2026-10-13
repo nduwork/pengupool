@@ -277,6 +277,14 @@ def test_restart_refuses_a_session_without_a_transcript(monkeypatch):
     assert ctl.main(["restart", "gone"]) == 1
 
 
+def test_restart_explains_a_pane_that_has_no_session_yet(monkeypatch, capsys):
+    """A `pi-pane-N` card is a pane whose agent has not written a session file: there is nothing to resume,
+    and "not alive; resume it instead" sent the user looking for a session that does not exist."""
+    monkeypatch.setattr("pengupool.tmux.stop", lambda pid, **k: pytest.fail("stopped a pane's agent"))
+    assert ctl.main(["restart", "pi-pane-65"]) == 1
+    assert "has not started a session yet" in capsys.readouterr().err
+
+
 def test_adopt_missing_session(monkeypatch):
     monkeypatch.setattr(model, "load_registry", lambda: {})
     monkeypatch.setattr(model, "load_sessions", lambda: [])
