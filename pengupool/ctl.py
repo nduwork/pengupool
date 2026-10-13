@@ -535,7 +535,7 @@ def _route(sid: str, target: str) -> int:
 
 
 def _authorize(sid: str, recipient: str) -> int:
-    ok, reason = routing.authorize_send(sid, recipient)
+    ok, reason = routing.authorize_send(sid, recipient, routing.settled_tree())  # a fault exits 1: unchecked
     if not ok:
         print(reason, file=sys.stderr)
     return 0 if ok else 3

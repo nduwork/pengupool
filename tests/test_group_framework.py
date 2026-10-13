@@ -413,3 +413,21 @@ def test_a_failed_carry_over_still_registers_the_session(cleared, monkeypatch):
     monkeypatch.setattr(model, "rekey_groups", lambda old, new: (_ for _ in ()).throw(OSError("disk full")))
     clear()
     assert json.loads((home / "registry.jsonl").read_text().splitlines()[-1])["sessionId"] == D
+
+
+def test_a_pi_target_checks_as_the_session_pi_intercom_delivers_to():
+    P, Q, R = "1234abcd-0000", "5678abcd-0000", "9999abcd-0000"
+    t = routing.Tree(parent={P: None, Q: P, R: None}, children={P: [Q], Q: [], R: []},
+                     name={P: "lead", Q: "kid", R: "other"}, harness={P: "pi", Q: "pi", R: "pi"})
+    assert routing.authorize_send(Q, "lead", t) == (True, "")
+    assert routing.authorize_send(Q, P, t) == (True, "")
+    # intercom resolves all of these, to sessions the pool cannot name: refused, not waved through
+    ok, why = routing.authorize_send(Q, "9999ab", t)                         # a short id prefix
+    assert not ok and "message by name: lead" in why
+    assert not routing.authorize_send(Q, "subagent-chat-9999abcd-0000", t)[0]  # its alias for an unnamed session
+    assert not routing.authorize_send(Q, "lead [x]", t)[0]                   # intercom strips no "[ref]"
+    assert routing.authorize_send(Q, "kid", t) == (True, "")                 # itself: a subagent reporting back
+    t.name[R] = P[:8]                     # a session named like the parent's id prefix: intercom takes the name
+    ok, why = routing.authorize_send(Q, P[:8], t)
+    assert not ok and "1234abcd is not adjacent" in why
+    assert routing.authorize_send(R, "anything", t) == (True, "")            # ungrouped: unmanaged
