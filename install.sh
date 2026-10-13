@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# One-command PenguPool install: the CLI, wiring for every installed harness (Claude Code, pi), the
+# One-command PenguPool install: the CLI, wiring for each harness (Claude Code, pi; missing CLIs offered), the
 # workflow tracker, and the editor extension (with its logo) in every VS Code / Cursor found.
 #
 #   curl -fsSL https://pengupool.nduwork.com/install.sh | bash
 #   bash install.sh                      # from a checkout: installs that tree
 #
-# PENGUPOOL_REF=vX.Y.Z pins a release (default: the latest). HARNESS=cc|pi|both overrides detection.
+# PENGUPOOL_REF=vX.Y.Z pins a release (default: the latest). HARNESS=cc|pi|both installs only those.
 # Needs python3 and make (offered y/N through brew/apt-get/dnf/pacman when missing) and installs uv; tmux
 # and the agent CLIs are offered by `pengupool setup` (y/N each). The editor extension is required: the
 # install fails, with what to do, when no VS Code, Cursor or VSCodium is found.

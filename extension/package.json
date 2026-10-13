@@ -387,7 +387,7 @@
         "args": {
           "text": "\u001b\r"
         },
-        "when": "terminalFocus && pengupool.claudeTerminal"
+        "when": "terminalFocus && pengupool.agentTerminal"
       }
     ],
     "configuration": {

@@ -20,12 +20,24 @@ SOCK = {"cc": "pengupool", "pi": "pengupool-pi"}  # one tmux sessions server (-L
 TOOL = {"cc": "SendMessage", "pi": "the intercom tool (action send or ask)"}
 # slash command that renames a live session; pi-intercom's /alias sets the name intercom addresses
 RENAME = {"cc": "/rename", "pi": "/alias"}
+# names the rename command reads as something else: pi-intercom's `/alias`, `/alias menu` open its dialog
+RENAME_RESERVED = {"cc": (), "pi": ("", "menu")}
 # slash command that restarts a live session's conversation under a new id, in the same process
 CLEAR = {"cc": "/clear", "pi": "/new"}
 
 PI = Path(os.environ.get("PI_CODING_AGENT_DIR", Path.home() / ".omp" / "agent"))
 # plain pi's dir, where sessions started before 1.3.0 keep their transcripts; omp resumes them by path
 LEGACY_PI = Path.home() / ".pi" / "agent"
+
+
+def pi_extension() -> Path:
+    return PI / "extensions" / "pengupool.ts"
+
+
+def wired(h: str) -> bool:
+    """omp without the PenguPool extension starts fine but never registers itself, so its card stays a
+    'waiting' pane placeholder that nothing can group or message (`pengupool setup pi` installs it)."""
+    return h != "pi" or pi_extension().is_file()
 
 
 def check(h: str) -> str:
@@ -98,7 +110,9 @@ def pi_dir_names(cwd: str) -> list[str]:
     under $HOME is `-<relative>`, anything else is `--<absolute>--`; last comes the `--<absolute>--`
     name omp migrates away from, which an install it has not migrated yet still holds. Mirrors omp's
     getDefaultSessionDirName (`src/session/session-paths.ts`, omp 18.10)."""
-    home, temp = _inside(cwd, os.path.expanduser("~")), _inside(cwd, _tmp_root())
+    # omp compares against the canonical roots: macOS's $TMPDIR /var/folders/… is /private/var/folders/…
+    home = _inside(cwd, os.path.realpath(os.path.expanduser("~")))
+    temp = _inside(cwd, os.path.realpath(_tmp_root()))
     names: list[str] = []
     if temp is not None:
         names.append(_rel_dir_name("-tmp", temp))

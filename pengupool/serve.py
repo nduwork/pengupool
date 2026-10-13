@@ -32,7 +32,7 @@ def _node(n: model.Node) -> dict:
     return {"id": n.session_id, "name": n.name, "cwd": n.cwd, "repo": n.repo, "pid": n.pid,
             "state": n.state, "status": n.status_line, "label": n.label,
             "ctx_pct": n.ctx_pct, "started": n.started, "tmux_pane": n.tmux_pane, "harness": n.harness,
-            "summary": n.summary,
+            "summary": n.summary, **({"pending": True} if n.pending else {}),
             "children": [_node(c) for c in n.children]}
 
 
@@ -65,7 +65,7 @@ def _pending(roots: list[model.Node]) -> list[model.Node]:
             status = ("waiting for folder trust — open to answer" if tmux.trust_prompt(p["pane"], h)
                       else "starting — open to see it")
             out.append(model.Node(tmux.pending_id(p["pane"], h), p["name"], p["cwd"], p["pid"], "waiting",
-                                  status_line=status, tmux_pane=p["pane"], harness=h))
+                                  status_line=status, tmux_pane=p["pane"], harness=h, pending=True))
     return out
 
 

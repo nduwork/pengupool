@@ -90,6 +90,14 @@ def _emit_view(pane: str, name: str, cwd: str = "", json_output: bool = False,
     return 0
 
 
+def _unwired(h: str) -> bool:
+    if harness.wired(h):
+        return False
+    print("oh-my-pi is not wired into PenguPool: run `pengupool setup pi`, then start the session again",
+          file=sys.stderr)
+    return True
+
+
 def _new(directory: str, name: str, json_output: bool = False, view_id: str = "",
          h: str = "cc", location: str = "worktree") -> int:
     from . import tmux
@@ -97,6 +105,8 @@ def _new(directory: str, name: str, json_output: bool = False, view_id: str = ""
     if location not in ("worktree", "folder"):
         print(f"invalid session location: {location}", file=sys.stderr)
         return 2
+    if _unwired(h):
+        return 1
     if location == "worktree":
         directory = tmux.worktree_add(directory, name) or directory
     pane = tmux.new_window(directory, name, h)
@@ -122,6 +132,8 @@ def _resume(directory: str, name: str, sid: str, json_output: bool = False,
               file=sys.stderr)
         return 2
     h = model.harness_of_past(sid, directory)
+    if _unwired(h):
+        return 1
     # A prior resume may still be starting up, before its lifecycle hook is visible.
     pane = tmux.pane_resuming(sid, h)
     if pane:
@@ -435,6 +447,10 @@ def _slash(sid: str, what: str, name: str = "") -> int:
         text = "/compact"
     elif what == "clear" and not name:  # the new id keeps its group and role: Claude's SessionStart hook,
         text = harness.CLEAR[h]          # pi's extension through `ctl carry`
+    elif what == "rename" and name.strip().casefold() in harness.RENAME_RESERVED[h]:
+        print(f"{harness.RENAME[h]} reads {name.strip() or 'a blank name'!r} as a request for its dialog: "
+              "pick another name", file=sys.stderr)
+        return 2
     elif what == "rename" and re.fullmatch(r"[^\x00-\x1f\x7f]{1,80}", name):  # one printable line
         text = f"{harness.RENAME[h]} {name}"
     else:
@@ -535,7 +551,14 @@ def _route(sid: str, target: str) -> int:
 
 
 def _authorize(sid: str, recipient: str) -> int:
-    ok, reason = routing.authorize_send(sid, recipient)
+    # The sender is the session whose process tree this runs in, when there is one: the pi extension's
+    # `sid` for a one-shot run comes from an env var the agent that started it could unset or rewrite.
+    try:
+        sid = profiles.caller() or sid
+    except PermissionError:  # inside a session it cannot place: keep the extension's word for it
+        pass
+    # only the pi extension calls this, so the message travels by pi-intercom, whoever the sender is
+    ok, reason = routing.authorize_send(sid, recipient, routing.settled_tree(), channel="pi")  # a fault exits 1
     if not ok:
         print(reason, file=sys.stderr)
     return 0 if ok else 3

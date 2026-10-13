@@ -4,6 +4,7 @@ import { SessionsProvider } from './sessionsTree';
 import { TerminalManager } from './terminals';
 import { ExplorerFollow } from './explorer';
 import { runCtl } from './util';
+import { bothHarnesses, harnessOf } from './harness';
 import { SessionsView } from './sessionsView';
 import { MapPanel } from './mapPanel';
 import { LogPanel } from './logPanel';
@@ -98,7 +99,9 @@ export function registerCommands(context: vscode.ExtensionContext, d: Deps): voi
   });
 
   reg('pengupool.quickSwitch', async () => {
-    const items = d.provider.all.map((n) => ({ label: n.name, description: `${n.repo} · ${n.state}`, node: n }));
+    const both = bothHarnesses(d.provider.all);   // a pi session may share a Claude Code session's name
+    const items = d.provider.all.map((n) => ({ label: n.name, node: n,
+      description: `${both ? `${HARNESS_LABEL[harnessOf(n)]} · ` : ''}${n.repo} · ${n.state}` }));
     const pick = await vscode.window.showQuickPick(items, { placeHolder: 'Switch to session…' });
     if (pick) { void vscode.commands.executeCommand('pengupool.switch', pick.node.id); }
   });

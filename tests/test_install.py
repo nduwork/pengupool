@@ -86,11 +86,37 @@ def test_auto_wires_every_installed_harness(monkeypatch, installed, wired):
 
 def test_default_is_auto(env, monkeypatch):
     have, _ = env
-    have.discard("claude")  # pi-only machine, plain `make install`
+    have.discard("claude")  # pi-only machine, plain `make install`, Claude Code declined
+    monkeypatch.setattr("builtins.input", lambda q: "n")
     wired = []
     monkeypatch.setattr(install, "wire", lambda h: wired.append(h) or True)
     assert install.main(["setup"]) == 0
     assert wired == ["pi"]
+
+
+def test_plain_setup_offers_a_harness_installed_later(env, monkeypatch, capsys):
+    """omp installed after PenguPool ran unwired, its sessions stuck as pi-pane-N cards: offer it up front."""
+    have, ran = env
+    have.difference_update({"omp", "bun"})
+    monkeypatch.setattr("builtins.input", lambda q: "y")
+    assert install.main(["setup", "auto"]) == 0
+    assert ["bash", "-c", install.CLI_INSTALL["pi"]] in ran and install._pi_extension().exists()
+
+
+def test_plain_setup_skips_a_declined_harness_but_a_named_one_is_required(env, monkeypatch, capsys):
+    have, _ = env
+    have.discard("omp")
+    monkeypatch.setattr("builtins.input", lambda q: "n")
+    assert install.main(["setup"]) == 0
+    assert "pengupool setup pi" in capsys.readouterr().out and not install._pi_extension().exists()
+    assert install.main(["setup", "both"]) == 1
+    have.discard("claude")
+    assert install.main(["setup"]) == 1      # nothing wired at all
+
+
+def test_plain_setup_fails_when_wiring_fails(env, monkeypatch):
+    monkeypatch.setattr(install, "wire", lambda h: h == "cc")  # e.g. pi-intercom would not install
+    assert install.main(["setup"]) == 1
 
 
 def test_check_ignores_which_cli_path_was_baked_in(env, monkeypatch):
@@ -132,3 +158,37 @@ def test_check_flags_an_omp_that_cannot_start(env, monkeypatch, capsys):
                         if cmd[-1] == "--version" else real(cmd, **k))
     assert install.main(["setup", "--check", "pi"]) == 1
     assert "bun upgrade" in capsys.readouterr().out
+
+
+def test_a_bun_just_installed_is_on_path_for_the_steps_after_it(env, tmp_path, monkeypatch):
+    """Bun's installer adds ~/.bun/bin only to shell rc files, and puts omp there too: without it on this
+    process's PATH, `bun install -g` and `omp plugin install` failed (127, or a FileNotFoundError)."""
+    have, ran = env
+    have.difference_update({"omp", "bun"})
+    monkeypatch.setenv("BUN_INSTALL", str(tmp_path / "bun"))
+    monkeypatch.setenv("PATH", "/usr/bin")
+    monkeypatch.setattr("builtins.input", lambda q: "y")
+    real = install.subprocess.run
+
+    def run(cmd, **k):
+        if cmd == ["bash", "-c", install.BUN_INSTALL]:
+            (tmp_path / "bun" / "bin").mkdir(parents=True)
+        elif cmd == ["bash", "-c", install.CLI_INSTALL["pi"]]:
+            assert install.os.environ["PATH"].split(":")[0] == str(tmp_path / "bun" / "bin")
+        return real(cmd, **k)
+    monkeypatch.setattr(install.subprocess, "run", run)
+    install.main(["setup", "pi"])
+    assert ["bash", "-c", install.CLI_INSTALL["pi"]] in ran
+
+
+def test_an_omp_off_path_reports_instead_of_crashing(env, monkeypatch, capsys):
+    have, ran = env
+    real = install.subprocess.run
+
+    def run(cmd, **k):
+        if cmd[:2] == ["omp", "plugin"] and cmd[2] == "install":
+            raise FileNotFoundError("omp")
+        return real(cmd, **k)
+    monkeypatch.setattr(install.subprocess, "run", run)
+    assert install.main(["setup", "pi"]) == 1
+    assert "omp plugin install pi-intercom" in capsys.readouterr().out

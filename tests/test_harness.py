@@ -77,6 +77,14 @@ def test_intercom_entries_become_messages():
     assert (m.src, m.dst, m.label, m.incoming) == ("me", "kid", "please run the migration now thanks", False)
     [m] = model.parse_transcript_line(json.dumps(got), "me")
     assert (m.src, m.dst, m.incoming) == ("lead", "me", True)
+    # the receiver's copy (pi.sendMessage): the only record when the sender's file is not read
+    inbound = {"type": "custom_message", "customType": "intercom_message", "timestamp": "2026-01-01T00:00:03Z",
+               "content": "**From lead** (/r)", "display": True,
+               "details": {"from": {"id": SID, "name": "lead", "cwd": "/r"}, "bodyText": "ship it"}}
+    [m] = model.parse_transcript_line(json.dumps(inbound), "me")
+    assert (m.src, m.dst, m.label, m.incoming) == ("lead", "me", "ship it", True)
+    inbound["details"]["from"]["name"] = ""
+    assert model.parse_transcript_line(json.dumps(inbound), "me")[0].src == SID[:8]
 
 
 def test_pi_tool_result_attributes_its_chain():
@@ -249,3 +257,50 @@ def test_sessions_from_plain_pi_still_resume_under_omp(tmp_path, monkeypatch):
     new.parent.mkdir(parents=True)
     new.write_text(old.read_text())
     assert harness.argv_resume("pi", "notes", SID) == ["omp", "--resume", SID]
+
+
+def test_a_shared_omp_folder_lists_and_restores_each_cwd_on_its_own(tmp_path, monkeypatch):
+    """omp names ~/a-b and ~/a/b's folder alike: each cwd's sessions are its own, in its own cwd."""
+    monkeypatch.setattr(model, "CLAUDE", tmp_path / "claude")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    one, two = tmp_path / "a-b", tmp_path / "a" / "b"
+    one.mkdir(), two.mkdir(parents=True)
+    shared = harness.pi_dir(str(one))
+    assert harness.pi_dir(str(two)) == shared                 # the collision itself
+    shared.mkdir(parents=True)
+    other = "0192f7a1-2222-7000-8000-000000000002"
+    for name, sid, cwd in (("2026-10-12T10-00-00-000Z", SID, one), ("2026-10-12T11-00-00-000Z", other, two)):
+        (shared / f"{name}_{sid}.jsonl").write_text(j({"type": "session", "id": sid, "cwd": str(cwd)}) + "\n")
+    assert [r[0] for r in model.past_sessions(str(one))] == [SID]
+    assert [r[0] for r in model.past_sessions(str(two))] == [other]
+    assert sorted((r[0], r[3]) for r in model.past_sessions_all()) == sorted([(SID, str(one)), (other, str(two))])
+
+
+def test_a_process_started_in_the_repeated_dst_hour_is_alive(monkeypatch):
+    """At a DST fall-back 01:30 local happens twice; mktime picks the first, so a process started in
+    the second read as a recycled pid and vanished from the map."""
+    monkeypatch.setenv("TZ", "America/New_York")
+    time.tzset()
+    try:
+        second = 1793511000.0 + 3600               # 2026-11-01 01:30:00 EST, the repeated hour's second pass
+        utc = time.strftime("%a %b %d %H:%M:%S %Y", time.gmtime(second))
+        local = time.strftime("%a %b %d %H:%M:%S %Y", time.localtime(second))
+        assert local.endswith("01:30:00 2026")
+        procs = model.ProcTable()
+        procs.rows = {4242: (1, local, "omp")}
+        assert procs.alive(4242, utc)
+        assert not procs.alive(4242, time.strftime("%a %b %d %H:%M:%S %Y", time.gmtime(second + 7200)))
+    finally:
+        monkeypatch.delenv("TZ")
+        time.tzset()
+
+
+def test_a_canonical_cwd_under_a_symlinked_temp_root_is_still_tmp(tmp_path, monkeypatch):
+    """macOS's $TMPDIR is /var/folders/…, which is /private/var/folders/…: omp compares the canonical
+    root, so a cwd given canonically sits under it too."""
+    real = tmp_path / "real-tmp"
+    (real / "proj").mkdir(parents=True)
+    (tmp_path / "tmp-link").symlink_to(real, target_is_directory=True)
+    monkeypatch.setenv("TMPDIR", str(tmp_path / "tmp-link"))
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    assert harness.pi_dir_names(str(real / "proj"))[0] == "-tmp-proj"

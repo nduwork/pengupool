@@ -6,7 +6,9 @@ BIN := $(STEP_STATUS_HOME)/bin
 PI_AGENT ?= $(HOME)/.omp/agent
 CLAUDE_SKILLS ?= $(HOME)/.claude/skills
 TRACKER_CC := $(if $(filter pi,$(HARNESS)),,1)
-TRACKER_PI := $(if $(filter pi both,$(HARNESS)),1,$(if $(filter auto,$(HARNESS)),$(shell command -v omp >/dev/null && echo 1)))
+# auto: omp is often only in ~/.bun/bin, which make's PATH may lack. Each sub-make re-evaluates this, so the
+# pi steps run after `pengupool setup` see an omp it just installed.
+TRACKER_PI := $(if $(filter pi both,$(HARNESS)),1,$(if $(filter auto,$(HARNESS)),$(shell { command -v omp || test -x "$${BUN_INSTALL:-$$HOME/.bun}/bin/omp"; } >/dev/null && echo 1)))
 WT := skills/workflow-tracker/scripts
 SCRIPTS := steps.sh hook_session_start.sh hook_prompt.sh wire_hooks.sh
 # Scripts older versions installed into $(BIN); install-tracker removes them once settings stop using them.
@@ -23,14 +25,13 @@ EDITOR_CLI ?=
 EDITOR_RUN = EDITOR_CLI="$(EDITOR_CLI)" python3 scripts/editor_cli.py
 VSIX ?= $(or $(TMPDIR),/tmp)/pengupool-local.vsix
 
-.PHONY: install uninstall check-install install-all uninstall-all install-hooks uninstall-hooks install-tracker uninstall-tracker install-pool-groups uninstall-pool-groups install-skill-repo uninstall-skill-repo selfcheck test ext-deps ext-test ext-compile ext-package ext-install ext-uninstall
+.PHONY: install uninstall check-install install-all uninstall-all install-hooks uninstall-hooks install-tracker install-tracker-cc install-tracker-pi uninstall-tracker install-pool-groups uninstall-pool-groups install-skill-repo uninstall-skill-repo selfcheck test ext-deps ext-test ext-compile ext-package ext-install ext-uninstall
 
 install:
 	$(UV) tool install --force $(UV_INSTALL_FLAGS) .
-	$(MAKE) install-tracker
+	$(MAKE) install-tracker-cc
 	CLAUDE_SETTINGS="$(CLAUDE_SETTINGS)" "$(PENGUPOOL)" setup $(HARNESS)
-	$(MAKE) install-pool-groups
-	$(MAKE) install-skill-repo
+	$(MAKE) install-tracker-pi install-pool-groups install-skill-repo
 
 check-install:
 	CLAUDE_SETTINGS="$(CLAUDE_SETTINGS)" "$(PENGUPOOL)" setup --check $(HARNESS)
@@ -53,13 +54,18 @@ uninstall-hooks:
 # Copy the tracker scripts to a stable dir and wire GLOBAL settings from there, so settings.json points
 # at paths that survive a checkout moving. Running wire_hooks.sh FROM $(BIN) registers SessionStart +
 # UserPromptSubmit pointing at $(BIN), and takes down the status line older versions wired. `install`
-# runs this before `pengupool setup`, so PenguPool wraps whatever status line is left.
-install-tracker:
+# runs the cc part before `pengupool setup`, so PenguPool wraps whatever status line is left, and the pi
+# part after it, once setup has installed omp.
+install-tracker: install-tracker-cc install-tracker-pi
+
+install-tracker-cc:
 	mkdir -p "$(BIN)"
 	for f in $(SCRIPTS); do cp "$(WT)/$$f" "$(BIN)/$$f"; done
 	chmod +x "$(BIN)"/*.sh
 	$(if $(TRACKER_CC),$(WIRE_ENV) bash "$(BIN)/wire_hooks.sh")
 	for f in $(OLD_SCRIPTS); do rm -f "$(BIN)/$$f"; done
+
+install-tracker-pi:
 	$(if $(TRACKER_PI),mkdir -p "$(PI_AGENT)/extensions" "$(PI_AGENT)/skills/workflow-tracker")
 	$(if $(TRACKER_PI),sed 's|__STEP_STATUS_BIN__|$(BIN)|' skills/workflow-tracker/pi/workflow-tracker.ts > "$(PI_AGENT)/extensions/workflow-tracker.ts")
 	$(if $(TRACKER_PI),cp skills/workflow-tracker/SKILL.md "$(PI_AGENT)/skills/workflow-tracker/SKILL.md")
@@ -116,18 +122,20 @@ test:
 	uv run pytest -q
 	$(MAKE) ext-test
 
-# Dependency setup is explicit; routine rebuilds reuse the installed toolchain.
+# A missing node_modules is installed on first use; `make ext-deps` refreshes it after the lockfile changes.
+TSC := $(EXT)/node_modules/typescript/bin/tsc
 ext-deps:
+	@command -v npm >/dev/null || { echo "The editor extension needs Node.js (npm): install it, then re-run." >&2; exit 1; }
 	cd "$(EXT)" && npm ci
 
-ext-compile:
-	@test -f "$(EXT)/node_modules/typescript/bin/tsc" || { echo "Run make ext-deps first." >&2; exit 1; }
+$(TSC):
+	$(MAKE) ext-deps
+
+ext-compile: $(TSC)
 	cd "$(EXT)" && npm run compile
 
 # The tests transpile TypeScript in-process, so they need node_modules exactly like the build does.
-# Without them each file that imports the source dies as a module error, not as a test failure.
-ext-test:
-	@test -f "$(EXT)/node_modules/typescript/bin/tsc" || { echo "Run make ext-deps first." >&2; exit 1; }
+ext-test: $(TSC)
 	cd "$(EXT)" && npm test
 
 ext-package: ext-compile

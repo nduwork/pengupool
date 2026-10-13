@@ -185,7 +185,7 @@ test('a subagent never takes over or removes its session\'s pool entry', async (
 
 test('a one-shot run is no pool session and sends as the session that started it', async () => {
   // `omp -p` registered as a live pool session. Started from a pool session's tool, it inherits that
-  // session's id: it keeps it, registers nothing, and its sends are checked as that session's.
+  // session's id: it keeps it, registers nothing, and passes it to ctl, which checks the process tree.
   const x = load({ PENGUPOOL_SESSION: 'parent' });
   const ctx = { ...x.ctx, mode: 'print' };
   await x.handlers.session_start({ type: 'session_start' }, ctx);
@@ -197,6 +197,28 @@ test('a one-shot run is no pool session and sends as the session that started it
   assert.equal(fs.existsSync(path.join(x.home, 'registry.jsonl')), false);
   assert.equal(x.proc.env.PENGUPOOL_SESSION, 'parent');
   assert.deepEqual(x.calls.map((a) => [...a]), [['ctl', 'authorize', 'parent', 'peer']]);
+});
+
+test('a one-shot run with no session in its env is still checked: ctl finds the sender', async () => {
+  // `env -u PENGUPOOL_SESSION omp -p "intercom send …"` from a grouped session's shell skipped the guard
+  const x = load({});
+  const ctx = { ...x.ctx, mode: 'print' };
+  await x.handlers.session_start({ type: 'session_start' }, ctx);
+  await x.handlers.tool_call({ toolName: 'intercom', input: { action: 'send', to: 'far' } }, ctx);
+  assert.deepEqual(x.calls.map((a) => [...a]), [['ctl', 'authorize', '', 'far']]);
+});
+
+test('contact_supervisor is checked against the session id and the target its env names', async () => {
+  const x = load({ PI_SUBAGENT_ORCHESTRATOR_SESSION_ID: 'boss-id', PI_SUBAGENT_ORCHESTRATOR_TARGET: 'boss' },
+                 { authorize: 3 });
+  await x.handlers.session_start({ type: 'session_start' }, x.ctx);
+  const r = await x.handlers.tool_call({ toolName: 'contact_supervisor', input: { reason: 'need_decision' } }, x.ctx);
+  assert.equal(r.block, true);
+  assert.equal(JSON.stringify(x.calls.slice(-2)), JSON.stringify([['ctl', 'authorize', 'sid-1', 'boss-id'],
+                                                                ['ctl', 'authorize', 'sid-1', 'boss']]));
+  const quiet = load({});   // no supervisor named: nothing to deliver to, nothing to check
+  await quiet.handlers.tool_call({ toolName: 'contact_supervisor', input: {} }, quiet.ctx);
+  assert.equal(quiet.calls.length, 0);
 });
 
 test('a CLI that exits before reading its input cannot crash the session', async () => {

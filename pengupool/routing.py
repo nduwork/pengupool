@@ -53,15 +53,36 @@ def live_tree() -> Tree:
     return t
 
 
-def resolve(t: Tree, sender: str, recipient: str) -> set[str]:
-    """Live sessions of the sender's harness that `recipient` (a name, "name [ref]", or id) names."""
-    r = re.sub(r"\s*\[.*\]$", "", str(recipient)).strip()
-    h = t.harness.get(sender)
+def settled_tree() -> Tree:
+    """live_tree, retried briefly past a file caught mid-write; raises when it stays unreadable."""
+    for _ in range(2):
+        try:
+            return live_tree()
+        except Exception:
+            time.sleep(0.1)
+    return live_tree()
+
+
+def resolve(t: Tree, sender: str, recipient: str, via: str = "") -> set[str]:
+    """Live sessions that `recipient` (a name, "name [ref]", or id) names, among the sessions of the
+    harness carrying the message: `via`, else the sender's own."""
+    h = via or t.harness.get(sender)
     same = [s for s in t.name if t.harness[s] == h]
+
+    def by_name(r: str) -> set[str]:  # drop only the pool's own `~<pid>` mark: "foo~bar" is a name
+        return {s for s in same if re.sub(r"~\d+$", "", t.name[s]).strip().casefold() == r.casefold()}
+
+    def by_prefix(r: str) -> set[str]:
+        return {s for s in same if len(r) >= 8 and s.startswith(r)}
+    if h == "pi":
+        # pi-intercom's own order (resolveSessionTarget): exact id, then name, then id prefix; it strips
+        # no "[ref]", so neither does this, or a name could check as one session and deliver to another
+        r = str(recipient).strip()
+        return {r} if r in same else by_name(r) or by_prefix(r)
+    r = re.sub(r"\s*\[.*\]$", "", str(recipient)).strip()
     if r.startswith("uds:"):
         return {t.sock[r]} if t.sock.get(r) in same else set()
-    by_id = {s for s in same if s == r or (len(r) >= 8 and s.startswith(r))}
-    return by_id or {s for s in same if t.name[s].split("~")[0].casefold() == r.casefold()}
+    return ({r} if r in same else by_prefix(r)) or by_name(r)
 
 
 def adjacent(t: Tree, sid: str) -> list[str]:
@@ -75,6 +96,8 @@ def route(t: Tree, current: str, target: str) -> str:
         raise LookupError("unknown session")
     if current == target:
         raise LookupError("that is you")
+    if t.harness.get(current) != t.harness.get(target):  # harnesses never share a tree
+        raise LookupError("owner unknown: it is not in your tree")
     hop = target
     while t.parent.get(hop) and t.parent[hop] != current:
         hop = t.parent[hop]
@@ -156,10 +179,17 @@ def granted(a: str, b: str) -> bool:
     return False
 
 
-def authorize_send(sender: str, recipient: str, t: Tree | None = None) -> tuple[bool, str]:
+def authorize_send(sender: str, recipient: str, t: Tree | None = None, channel: str = "") -> tuple[bool, str]:
     """(allowed, reason). Only a grouped sender is managed; a solo session keeps its normal behaviour.
-    A name that is no live session of this harness (a teammate, a typo) is left to the harness.
-    A session the user tagged with @name in the current prompt is reachable directly (see grant)."""
+    `channel` is the harness carrying the message when it is not the sender's own (an omp run's
+    pi-intercom, started from a Claude Code session's shell).
+    A name that is no live Claude session (a teammate, a typo) is left to Claude. pi-intercom reaches
+    only sessions, and more of them than the pool can name (a short id prefix, the alias it gives an
+    unnamed session, a peer outside PenguPool), so for pi a target the pool cannot resolve is refused.
+    A session the user tagged with @name in the current prompt is reachable directly (see grant).
+    pi-intercom's `reply` is not checked: it goes only to whoever messaged the session, and a grouped
+    sender's message was checked where it was sent. An ungrouped sender is not managed, so a grouped
+    session can answer one from outside its tree; closing that means gating delivery, not replies."""
     t = t or live_tree()
     if sender not in t.parent or not adjacent(t, sender):
         return True, ""
@@ -167,14 +197,17 @@ def authorize_send(sender: str, recipient: str, t: Tree | None = None) -> tuple[
     if not recipient.strip():  # e.g. pi-intercom's send by cwd: no name to check, so no free pass
         who = ", ".join(t.name[s] for s in ok)
         return False, f"PenguPool: name the session you are messaging (to=…); you may message: {who}."
-    hits = resolve(t, sender, recipient)
+    hits = resolve(t, sender, recipient, channel)
     sock = str(recipient).strip().startswith("uds:")
-    if not hits and sock:  # a session address we cannot map: refuse
+    # a session address we cannot map, or a pi target pi-intercom may resolve where the pool cannot: refuse
+    if not hits and (sock or (channel or t.harness.get(sender)) == "pi"):
         who = ", ".join(t.name[s] for s in ok)
         return False, f"PenguPool: {recipient} is not a session you may message; message by name: {who}."
     if not hits:
         return True, ""
     target = next(iter(hits))
+    if hits == {sender}:  # its own session (a subagent reporting back): no other session is reached
+        return True, ""
     if len(hits) == 1 and (target in ok or granted(sender, target)):
         if sock:  # sessions talk by name, so the transcript shows who each message went to
             return False, (f"PenguPool: address sessions by name, not socket: send to=\"{t.name[target]}\" "
@@ -201,15 +234,11 @@ def main() -> None:
         return
     tool = inp.get("tool_input") if isinstance(inp.get("tool_input"), dict) else {}
     sender, to = str(inp.get("session_id", "")), str(tool.get("to") or tool.get("recipient") or "")
-    for attempt in range(3):
-        try:
-            t = live_tree()
-            break
-        except Exception as e:
-            if attempt == 2:
-                print(f"PenguPool routing guard skipped ({e}); the message was sent unchecked", file=sys.stderr)
-                return
-            time.sleep(0.1)
+    try:
+        t = settled_tree()
+    except Exception as e:
+        print(f"PenguPool routing guard skipped ({e}); the message was sent unchecked", file=sys.stderr)
+        return
     ok, reason = authorize_send(sender, to, t)
     if not ok:
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",

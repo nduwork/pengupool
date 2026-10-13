@@ -19,9 +19,10 @@
 //  - a subagent (task tool, eval `agent()`, `/tan` clone) runs in the same process, and omp rebinds this
 //    extension to its session too. It is not a pool session: it never takes over the live file, registry,
 //    profile or env, and its end does not remove them. Its intercom sends are checked as the session's own.
-//  - a one-shot run (`omp -p`, `--mode json`) is not a pool session either: it registers nothing. When a
-//    pool session's tool started it, it inherited that session's PENGUPOOL_SESSION, and its intercom sends
-//    are checked as that session's, so a session cannot reach past its tree through a one-shot run.
+//  - a one-shot run (`omp -p`, `--mode json`) is not a pool session either: it registers nothing. Its
+//    intercom sends are checked as the pool session whose process tree it runs in, which `ctl authorize`
+//    finds itself: the PENGUPOOL_SESSION it inherited is only a hint, since the agent that started it
+//    could have unset or rewritten it.
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent"
 import { execFile } from "node:child_process"
 import * as crypto from "node:crypto"
@@ -89,6 +90,7 @@ const update = (patch: Record<string, unknown>) => {
 const gone = () => { try { fs.unlinkSync(LIVE) } catch {} }
 process.once("exit", gone)
 // The pool session whose tool started this process, read before a binding sets the variable to its own.
+// Only a hint for `ctl authorize`, which trusts the process tree over it.
 const STARTED_BY = process.env.PENGUPOOL_SESSION || ""
 // omp sends no event when the session is renamed (omp's /rename, pi-intercom's /alias, PenguPool's
 // Rename), so the name the pool session's binding reports is polled, as pi-intercom polls it for its
@@ -105,6 +107,7 @@ const pollName = () => {
 export default function (pi: ExtensionAPI) {
   // A pool session is the top-level session of an interactive run (omp's tui or rpc mode): not a
   // subagent, and not a one-shot print or json run, which ends with its answer.
+  // skills/workflow-tracker/pi/workflow-tracker.ts keeps the same rule as `ownSession`
   const pooled = (ctx: AgentCtx) => ctx.agent?.kind !== "sub" && ctx.mode !== "print" && ctx.mode !== "json"
   const saveContext = (ctx: AgentCtx) => {
     const pct = ctx.getContextUsage?.()?.percent
@@ -174,15 +177,22 @@ export default function (pi: ExtensionAPI) {
   pi.on("tool_call", async (event: any) => {
     const input = event.input || {}
     // Every action that delivers to another session, so the adjacent rule cannot be walked around:
-    // `handover` summarizes this session and sends it, `send`/`ask` are the plain ones. A subagent's
-    // send is checked as the session's (`live` is the process's, and a subagent never binds it), and a
-    // one-shot run's as the pool session that started it.
+    // `handover` summarizes this session and sends it, `send`/`ask` are the plain ones, and
+    // `contact_supervisor` sends to the session its env names (pi-intercom tries the id, then the
+    // target, so both are checked). A subagent's send is checked as the session's (`live` is the
+    // process's, and a subagent never binds it); ctl finds a one-shot run's session itself.
+    let targets: string[]
+    if (event.toolName === "intercom" && ["send", "ask", "handover"].includes(input.action)) {
+      targets = [String(input.to || "")]  // a send by cwd alone names no session: "" is refused when grouped
+    } else if (event.toolName === "contact_supervisor") {
+      targets = [process.env.PI_SUBAGENT_ORCHESTRATOR_SESSION_ID, process.env.PI_SUBAGENT_ORCHESTRATOR_TARGET]
+        .map((t) => String(t || "").trim()).filter(Boolean)
+    } else return
     const sender = String(live.sessionId || STARTED_BY)
-    if (event.toolName !== "intercom" || !["send", "ask", "handover"].includes(input.action) || !sender) return
-    // A send by cwd alone names no session: authorize gets "" and refuses it for a grouped session.
-    const r = await run(["ctl", "authorize", sender, String(input.to || "")])
+    const checks = await Promise.all(targets.map((to) => run(["ctl", "authorize", sender, to])))
     // only a checked refusal (exit 3) blocks: a PenguPool fault or timeout never cuts sessions off
-    if (r.code === 3) return { block: true, reason: r.err }
+    const refused = checks.find((r) => r.code === 3)
+    if (refused) return { block: true, reason: refused.err }
   })
   // omp gives no shutdown reason; after /new, /resume or a fork branch the rebind writes it again.
   // A subagent's session ending is not this process's session ending.

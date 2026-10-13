@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { Snapshot } from './serveClient';
 import { CTX_LEVEL_CSS, CTX_LEVEL_JS, SESSION_STATES, SESSION_STATE_CSS } from './sessionState';
-import { findNode, HarnessTabs, HARNESS_TABS_CSS, HARNESS_TABS_HTML, HARNESS_TABS_JS } from './harness';
+import { findNode, flatten, HarnessTabs, HARNESS_TABS_CSS, HARNESS_TABS_HTML, HARNESS_TABS_JS } from './harness';
 import { SESSION_CONTEXT_JS } from './webviewMenu';
 import { runCtl } from './util';
 
@@ -120,7 +120,9 @@ export class MapPanel {
     if (!this.last) { return; }
     const { tabs, snapshot } = this.tabs.view(this.last, this.selectedId);
     void this.panel.webview.postMessage(tabs);
-    void this.panel.webview.postMessage(snapshot);
+    // the pool drawer counts the sessions in each repo across both harnesses, not just the tab's
+    const everyone = flatten(this.last.roots).map(({ id, name, cwd }) => ({ id, name, cwd }));
+    void this.panel.webview.postMessage({ ...snapshot, everyone });
   }
 
   // `ctl pool ls` is the drawer's whole state, reloaded after every pool action.
@@ -762,7 +764,7 @@ ${HARNESS_TABS_HTML}
   function poolRow(cls, name, title){ const row = hel('div', { class:cls, title }); const nm = hel('span', { class:'nm' });
     nm.textContent = name; row.appendChild(nm); return row; }
   // Sessions on the map whose folder is one of dirs (a repo's main checkout or a worktree).
-  function liveIn(dirs){ return last ? flat(last.roots).filter(n => n.cwd && dirs.some(d => n.cwd===d || n.cwd.startsWith(d+'/'))) : []; }
+  function liveIn(dirs){ return last ? last.everyone.filter(n => n.cwd && dirs.some(d => n.cwd===d || n.cwd.startsWith(d+'/'))) : []; }
   function liveButton(nodes){ const b = hel('button', { class:'live', title:'Running here: '+nodes.map(n => n.name).join(', ') });
     b.textContent = '● '+nodes.length;
     b.addEventListener('click', ev => { ev.stopPropagation();   // light their cards for a moment

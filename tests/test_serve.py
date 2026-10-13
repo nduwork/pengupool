@@ -63,6 +63,8 @@ def test_a_pane_no_session_claims_yet_shows_as_a_pending_card(monkeypatch):
         ("review-agent", "/rg", "waiting", "%66", "cc")
     assert "folder trust" in card["status"]
     assert "starting" in pending["pi-pane-3"]["status"] and pending["pi-pane-3"]["harness"] == "pi"
+    assert all(r.get("pending") is True for r in pending.values())   # the extension never groups or follows these
+    assert "pending" not in snap["roots"][0]                             # a real session carries no flag
 
 
 def test_trust_prompt_matches_claude_codes_folder_trust_screens(monkeypatch):

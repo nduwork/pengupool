@@ -26,7 +26,7 @@ const HINTS: Hint[] = [
     { label: '⇧C', description: 'fresh context · keep group and role', icon: 'clear-all',
       tooltip: 'Same as typing /clear in a Claude Code session' },
     { label: '⇧R', description: 'restart & resume · picks up a Claude Code / pi update', icon: 'debug-restart' },
-    { label: '⇧⏎', description: 'prompt newline in Claude terminal', icon: 'newline' },
+    { label: '⇧⏎', description: 'prompt newline in a session terminal', icon: 'newline' },
   ] },
   { label: 'Mouse', icon: 'inspect', children: [
     { label: 'click', description: 'open · focus work session', icon: 'go-to-file' },

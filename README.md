@@ -89,9 +89,9 @@ curl -fsSL https://pengupool.nduwork.com/install.sh | bash
 ```
 
 It needs Python 3 and Make (offered on Linux), installs [uv](https://docs.astral.sh/uv/) if missing, and
-offers tmux 3.2+ and the agent CLIs (y/N each). `PENGUPOOL_REF=vX.Y.Z` pins a release; `HARNESS=cc|pi|both`
-overrides harness detection, and `EDITOR_CLI=/path/to/code` picks the editor CLI. Reload the editor window
-after installing or updating.
+offers tmux 3.2+ and both agent CLIs (y/N each; a declined one is skipped). `PENGUPOOL_REF=vX.Y.Z` pins a
+release; `HARNESS=cc|pi|both` installs only those harnesses and requires each, and `EDITOR_CLI=/path/to/code`
+picks the editor CLI. Reload the editor window after installing or updating.
 
 PenguPool is built and tested with VS Code. Editors built on it, such as Cursor or VSCodium, may work, but
 they are not tested.
@@ -103,8 +103,7 @@ they are not tested.
 git clone https://github.com/nduwork/pengupool.git
 cd pengupool
 make install        # CLI, harness wiring, tracker, skills (HARNESS=auto|cc|pi|both)
-make ext-deps       # once, to build the extension (needs Node.js/npm)
-make install-all    # backend + extension (EDITOR_CLI=/path/to/code to choose)
+make install-all    # backend + extension, needs Node.js/npm (EDITOR_CLI=/path/to/code to choose)
 ```
 
 `make check-install` reports what is missing. `make uninstall-all` removes the extension, hooks, tracker,
@@ -221,7 +220,7 @@ with its own tree, like Claude Code and pi.
 ## Develop
 
 ```sh
-make ext-deps       # once per clone or worktree: installs extension/node_modules
+make ext-deps       # refresh extension/node_modules after the lockfile changes (a missing one installs itself)
 make test           # uv run pytest -q, then the extension tests
 make ext-compile    # build the extension
 ```

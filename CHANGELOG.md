@@ -5,6 +5,34 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- A grouped pi session could message sessions outside its tree. pi-intercom accepts targets PenguPool could
+  not resolve (a short id prefix, the alias it gives an unnamed session, a peer outside the pool), and those
+  were let through. The guard now resolves a pi target in pi-intercom's own order and refuses one it cannot
+  name. A one-shot `omp -p` run is checked as the session whose process tree it runs in, whatever
+  `PENGUPOOL_SESSION` it was started with, and `contact_supervisor` is checked like `send`.
+- A pi subagent no longer gets the workflow-tracker nudge, which could make it overwrite its session's chain.
+- omp files the sessions of `~/a-b` and `~/a/b` in one folder. `ctl past` listed one cwd's sessions under the
+  other, and **Run all** reopened them in the wrong folder.
+- A cwd under macOS's `$TMPDIR` given by its canonical path (`/private/var/…`) now finds its omp sessions.
+- The Log missed a pi-intercom message whenever the sender's own transcript was not read (a subagent, a
+  one-shot run, a session that had exited). It also hid every message to or from a closed session while
+  both harnesses ran.
+- `pengupool setup pi` on a machine without Bun failed after installing it, and crashed when omp was not on
+  `PATH` yet.
+- A session started in the hour a DST change repeats vanished from the map.
+- A child started from a parent's menu landed at the top level when its agent took a moment to start.
+- Shift+Enter adds a new line in the pi terminal too, instead of sending the prompt.
+- The Agent pool drawer counts sessions of both harnesses. Quick Switch names the harness while both run.
+- Renaming a pi session to "menu" or a blank name is refused. pi-intercom opens its alias dialog for those.
+- `make install` wired only the agent CLIs already on `PATH`, so an omp installed after PenguPool ran without
+  the PenguPool extension or pi-intercom. Its sessions showed as `pi-pane-N` cards, stuck at "waiting", that
+  could not be grouped. A plain install now offers both agent CLIs (y/N; a declined one is skipped), finds
+  omp in `~/.bun/bin` when `make`'s `PATH` lacks it, and installs the pi tracker and skills after setup.
+- Starting or resuming an omp session while omp is not wired into PenguPool is refused, with the command
+  that wires it, instead of leaving a card that nothing can group or message.
+- `make install-all` and the extension targets install `extension/node_modules` themselves on first use.
+
 ## [1.4.0] - 2026-10-12
 
 ### Added
