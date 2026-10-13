@@ -1,17 +1,15 @@
 import * as vscode from 'vscode';
 import { Harness, SessionNode } from './serveClient';
+import { flatten } from './harness';
 import { runCtl } from './util';
+
+/** serve's card for a pane whose agent has written no session yet (`pane-3`, `pi-pane-3`, tmux.pending_id):
+ *  it shares the new session's pane and cwd, but is not the session to group or follow. */
+const started = (node: SessionNode): boolean => !/^(?:\w+-)?pane-\d+$/.test(node.id);
 
 const LEGACY_STATE_KEY = 'pengupool.attachedTerminals';
 
 const LAST_SESSION_KEY = 'pengupool.lastSession';   // the session this window last opened
-
-function flatten(roots: SessionNode[]): SessionNode[] {
-  const out: SessionNode[] = [];
-  const walk = (n: SessionNode) => { out.push(n); n.children.forEach(walk); };
-  roots.forEach(walk);
-  return out;
-}
 
 function newViewId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
@@ -66,8 +64,9 @@ export class TerminalManager implements vscode.Disposable {
 
   private updateActiveContext(): void {
     const active = vscode.window.activeTerminal;
-    const owned = !!active && this.slots.get('cc')?.term === active;
-    void vscode.commands.executeCommand('setContext', 'pengupool.claudeTerminal', owned);
+    // both agents' editors (Claude Code, omp's pi-tui) read ESC CR as a newline
+    const owned = !!active && [...this.slots.values()].some((slot) => slot.term === active);
+    void vscode.commands.executeCommand('setContext', 'pengupool.agentTerminal', owned);
   }
 
   /** Old builds restored shell-backed terminals by display name; remove those stale zsh views. */
@@ -103,7 +102,7 @@ export class TerminalManager implements vscode.Disposable {
       this.legacyNames.clear();
     }
     this.placements = this.placements.filter(({ match, parent }) => {
-      const hit = flatten(roots).find(match);
+      const hit = flatten(roots).filter(started).find(match);
       if (hit) {
         void runCtl(['group', hit.id, parent]).then((r) => {
           if (r.code !== 0) { vscode.window.showErrorMessage(`PenguPool: ${r.stderr || 'could not group the new session'}`); }
@@ -114,7 +113,7 @@ export class TerminalManager implements vscode.Disposable {
     for (const [harness, slot] of this.slots) {
       if (!slot.pending) { continue; }
       // pane ids are per tmux server: a cc %3 and a pi %3 are different panes
-      const hit = flatten(roots).find((node) => (node.harness ?? 'cc') === harness &&
+      const hit = flatten(roots).filter(started).find((node) => (node.harness ?? 'cc') === harness &&
         node.tmux_pane === slot.pending?.pane && node.cwd === slot.pending?.cwd,
       );
       if (hit) {
@@ -308,6 +307,6 @@ export class TerminalManager implements vscode.Disposable {
   dispose(): void {
     this.disp.forEach((disposable) => disposable.dispose());
     this.slots.forEach((slot) => slot.term?.dispose());
-    void vscode.commands.executeCommand('setContext', 'pengupool.claudeTerminal', false);
+    void vscode.commands.executeCommand('setContext', 'pengupool.agentTerminal', false);
   }
 }

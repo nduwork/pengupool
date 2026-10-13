@@ -57,7 +57,7 @@ function openMap(answers, warningPick, ui = {}) {
     }
     throw new Error('Unexpected dependency: ' + id);
   }
-  const snap = { topo_hash: 'h', roots: [{ id: 's1', name: 'a', cwd: '/repos/skills/wt', children: [] }], cross: [], msgs: [] };
+  const snap = ui.snap || { topo_hash: 'h', roots: [{ id: 's1', name: 'a', cwd: '/repos/skills/wt', children: [] }], cross: [], msgs: [] };
   load('mapPanel').MapPanel.show({ extensionUri: 'ext' }, snap);
   return { receive, commands, ctl, posted, shown, html: () => webview.html };
 }
@@ -213,6 +213,16 @@ test('the drawer is the Agent pool, with release, live sessions and a menu on ea
   assert.match(html, /type:'poolMenu'/);
   assert.match(html, /contextmenu/);
   assert.match(html, /liveIn\(/);
+});
+
+test('the pool drawer counts sessions of both harnesses while the map shows one tab', () => {
+  const roots = [{ id: 'c', name: 'cc-one', cwd: '/repos/skills', children: [] },
+                 { id: 'p', name: 'pi-one', cwd: '/repos/skills/wt', harness: 'pi', children: [] }];
+  const map = openMap({}, undefined, { snap: { topo_hash: 'h', roots, cross: [], msgs: [] } });
+  const shown = map.posted.filter((m) => m.roots).at(-1);
+  assert.equal(shown.roots.map((n) => n.id).join(), 'c');                      // the Claude Code tab
+  assert.equal(shown.everyone.map((n) => n.id).join(), 'c,p');              // what the drawer counts
+  assert.match(map.html(), /last\.everyone \|\| flat\(last\.roots\)/);
 });
 
 test('the Agent pool panel has a drag handle that sets and remembers its width', () => {

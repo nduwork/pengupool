@@ -86,6 +86,14 @@ test('splitByHarness never lets a namesake in the other harness pull its links o
   assert.deepEqual(splitByHarness(both, 'cc').msgs.map((msg) => msg[3]), ['cc msg']);
 });
 
+test('splitByHarness keeps a tagged message whose session has since exited', () => {
+  const { splitByHarness } = harness().load('harness');
+  const both = { ...snap([ccTree(), piTree()]),
+    msgs: [['t', 'closed', 'beta', 'to a live pi session', true, 'pi'], ['t', 'closed', 'alpha', 'cc one', true, 'cc']] };
+  assert.deepEqual(splitByHarness(both, 'pi').msgs.map((msg) => msg[3]), ['to a live pi session']);
+  assert.deepEqual(splitByHarness(both, 'cc').msgs.map((msg) => msg[3]), ['cc one']);
+});
+
 test('bothHarnesses context key is true only while both harnesses run, set on change', () => {
   const h = harness();
   const sync = h.load('harness').bothHarnessesContext();

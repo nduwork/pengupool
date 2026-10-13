@@ -13,6 +13,13 @@ export function bothHarnesses(roots: readonly SessionNode[]): boolean {
   return running.has('cc') && running.has('pi');
 }
 
+export function flatten(roots: readonly SessionNode[]): SessionNode[] {
+  const out: SessionNode[] = [];
+  const walk = (n: SessionNode) => { out.push(n); n.children.forEach(walk); };
+  roots.forEach(walk);
+  return out;
+}
+
 export function findNode(roots: readonly SessionNode[], id: string): SessionNode | undefined {
   for (const node of roots) {
     const hit = node.id === id ? node : findNode(node.children, id);
@@ -36,7 +43,8 @@ export function splitByHarness(snap: Snapshot, harness: Harness): Snapshot {
     roots,
     topo_hash: `${snap.topo_hash}:${harness}`,
     cross: snap.cross.filter(([src, dst, , h]) => (!h || h === harness) && names.has(src) && names.has(dst)),
-    msgs: snap.msgs.filter(([, src, dst, , , h]) => (!h || h === harness) && names.has(src) && names.has(dst)),
+    // a message's ends may have exited (the log keeps them), so a tagged one is matched by its harness alone
+    msgs: snap.msgs.filter(([, src, dst, , , h]) => h ? h === harness : names.has(src) && names.has(dst)),
   };
 }
 

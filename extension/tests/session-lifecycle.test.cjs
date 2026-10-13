@@ -61,6 +61,7 @@ function harness(options = {}) {
       require: (id) => {
         if (id === 'vscode') return vscode;
         if (id === './util') return ctl;
+        if (id === './harness') return load('harness');
         if (id === 'child_process') return { spawn };
         throw new Error('Unexpected dependency: ' + id);
       },
@@ -97,12 +98,14 @@ test('a window that reloads comes back on the session it was last on', async () 
   assert.ok(h.requests.some((args) => args.includes('b')));
 });
 
-test('Claude terminal shortcut context follows the active terminal', async () => {
+test('the Shift+Enter context follows the active terminal, for both harnesses\' terminals', async () => {
   const h = harness();
   await h.manager.newSession('/repo', 'worker', 'cc', false);
-  assert.deepEqual(h.contexts.at(-1), ['setContext', 'pengupool.claudeTerminal', true]);
+  assert.deepEqual(h.contexts.at(-1), ['setContext', 'pengupool.agentTerminal', true]);
   h.setActive({ name: 'unrelated' });
-  assert.deepEqual(h.contexts.at(-1), ['setContext', 'pengupool.claudeTerminal', false]);
+  assert.deepEqual(h.contexts.at(-1), ['setContext', 'pengupool.agentTerminal', false]);
+  await h.manager.newSession('/repo', 'worker', 'pi', false);   // omp's editor reads ESC CR as a newline too
+  assert.deepEqual(h.contexts.at(-1), ['setContext', 'pengupool.agentTerminal', true]);
 });
 
 test('new worktree terminal is reused despite changed cwd and normalized name', async () => {
@@ -204,6 +207,19 @@ test('a session started from a parent\'s menu is grouped under it once it shows 
   h.manager.reconcile([piTwin, node]);
   h.manager.reconcile([piTwin, node]);
   assert.equal(JSON.stringify(h.requests.filter((args) => args[0] === 'group')), '[["group","sid","lead"]]');
+});
+
+test('a child that is still a starting pane card is grouped once its session shows up, not before', async () => {
+  for (const [harnessName, card] of [['cc', 'pane-9'], ['pi', 'pi-pane-9']]) {
+    const h = harness();
+    await h.manager.newSession('/repo', 'worker', harnessName, true, 'lead');
+    const real = { ...node, ...(harnessName === 'pi' ? { harness: 'pi' } : {}) };
+    h.manager.reconcile([{ ...real, id: card }]);   // serve's card: same pane and cwd, no session yet
+    assert.ok(!h.requests.some((args) => args[0] === 'group'), `${harnessName}: the card is not the session`);
+    h.manager.reconcile([real]);
+    assert.equal(JSON.stringify(h.requests.filter((args) => args[0] === 'group')), '[["group","sid","lead"]]');
+    assert.equal(h.errors.length, 0);
+  }
 });
 
 test('a previous session added from a parent\'s menu is grouped under it, live or resumed', async () => {

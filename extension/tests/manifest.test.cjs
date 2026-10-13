@@ -5,11 +5,11 @@ const path = require('node:path');
 
 const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
 
-test('Shift+Enter uses Claude terminal setup sequence', () => {
+test('Shift+Enter sends the newline sequence in either agent terminal', () => {
   const binding = manifest.contributes.keybindings.find((item) => item.key === 'shift+enter');
   assert.equal(binding.command, 'workbench.action.terminal.sendSequence');
   assert.equal(binding.args.text, '\x1b\r');
-  assert.equal(binding.when, 'terminalFocus && pengupool.claudeTerminal');
+  assert.equal(binding.when, 'terminalFocus && pengupool.agentTerminal');
 });
 
 test('Reveal Session Folder is contributed for the command palette', () => {
@@ -53,7 +53,7 @@ test('terminal shortcuts and settings do not change unrelated terminals', () => 
   assert.equal(manifest.contributes.configurationDefaults, undefined);
   const terminals = fs.readFileSync(path.join(__dirname, '../src/terminals.ts'), 'utf8');
   assert.match(terminals, /onDidChangeActiveTerminal/);
-  assert.match(terminals, /setContext', 'pengupool.claudeTerminal'/);
+  assert.match(terminals, /setContext', 'pengupool.agentTerminal'/);
 });
 
 test('extension package carries the repository MIT license', () => {
@@ -89,7 +89,7 @@ test('shortcuts avoid a Terminal section and describe PenguPool-specific behavio
   const hints = fs.readFileSync(path.join(__dirname, '../src/hintsView.ts'), 'utf8');
   assert.doesNotMatch(hints, /label: 'Terminal'/);
   assert.match(hints, /folder or new worktree · Claude Code or pi/);
-  assert.match(hints, /prompt newline in Claude terminal/);
+  assert.match(hints, /prompt newline in a session terminal/);
   assert.match(hints, /map cards refresh phase chain · context use/);
 });
 
