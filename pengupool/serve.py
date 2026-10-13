@@ -7,8 +7,8 @@ Wire format (one JSON object per line):
 
     {"rev": 7, "ts": 1732., "topo_hash": "ab12…",
      "roots": [ {id,name,cwd,repo,pid,state,status,label,ctx_pct,started,children:[…]} ],
-     "cross": [ [src_name, dst_name, label] ],
-     "msgs":  [ [ts, src, dst, label, incoming] ],
+     "cross": [ [src_name, dst_name, label, harness] ],
+     "msgs":  [ [ts, src, dst, label, incoming, harness] ],
      "group_plan": {"created": ts, "note": "", "moves": [{"child", "parent", "label"}]} | null}
 
 `topo_hash` covers structure only (ids + parent/child + cross edges), NOT status — so a client can
@@ -36,12 +36,12 @@ def _node(n: model.Node) -> dict:
             "children": [_node(c) for c in n.children]}
 
 
-def _topo(roots: list[model.Node], cross: list[model.Edge]) -> str:
+def _topo(roots: list[model.Node], cross: list[tuple[str, str, str, str]]) -> str:
     """Hash of structure only (node ids + child order + cross edges), so status-only ticks don't
     trigger a client relayout."""
     def ids(n: model.Node):
         return [n.session_id, [ids(c) for c in n.children]]
-    shape = [[ids(r) for r in roots], sorted((s, d) for s, d, _ in cross)]
+    shape = [[ids(r) for r in roots], sorted((s, d, h) for s, d, _, h in cross)]
     return hashlib.sha1(json.dumps(shape).encode()).hexdigest()[:12]
 
 
@@ -76,7 +76,7 @@ def build() -> dict:
     return {"topo_hash": _topo(roots, cross),
             "roots": [_node(r) for r in roots],
             "cross": [list(e) for e in cross],
-            "msgs": [[m.ts, m.src, m.dst, m.label, m.incoming] for m in msgs[-60:]],
+            "msgs": [[m.ts, m.src, m.dst, m.label, m.incoming, m.harness] for m in msgs[-60:]],
             "group_plan": model.load_plan() or None}
 
 

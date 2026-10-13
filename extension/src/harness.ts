@@ -21,9 +21,11 @@ export function findNode(roots: readonly SessionNode[], id: string): SessionNode
   return undefined;
 }
 
-/** A copy of `snap` with only `harness`'s trees, plus the cross links and messages whose endpoints (by
- *  name) are both that harness's sessions. `topo_hash` gains the harness, so switching harness
- *  relayouts the map while a status-only tick still restyles in place. */
+/** A copy of `snap` with only `harness`'s trees, plus the cross links and messages of that harness whose
+ *  endpoints (by name) are both its sessions. A name can repeat across harnesses, so a link or message is
+ *  matched by the harness it carries, and by name alone only from an older backend that sends none.
+ *  `topo_hash` gains the harness, so switching harness relayouts the map while a status-only tick still
+ *  restyles in place. */
 export function splitByHarness(snap: Snapshot, harness: Harness): Snapshot {
   const roots = snap.roots.filter((root) => harnessOf(root) === harness);
   const names = new Set<string>();
@@ -33,8 +35,8 @@ export function splitByHarness(snap: Snapshot, harness: Harness): Snapshot {
     ...snap,
     roots,
     topo_hash: `${snap.topo_hash}:${harness}`,
-    cross: snap.cross.filter(([src, dst]) => names.has(src) && names.has(dst)),
-    msgs: snap.msgs.filter(([, src, dst]) => names.has(src) && names.has(dst)),
+    cross: snap.cross.filter(([src, dst, , h]) => (!h || h === harness) && names.has(src) && names.has(dst)),
+    msgs: snap.msgs.filter(([, src, dst, , , h]) => (!h || h === harness) && names.has(src) && names.has(dst)),
   };
 }
 

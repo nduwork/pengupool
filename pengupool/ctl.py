@@ -169,41 +169,42 @@ def _adopt(sid: str, json_output: bool = False, view_id: str = "") -> int:
     return _emit_view(pane, name, cwd, json_output, view_id, h)
 
 
-def restart(sid: str) -> tuple[str, str]:
+def restart(sid: str) -> tuple[str, str, dict]:
     """Stop a live PenguPool session and resume it in the same pane: the fresh process runs the current
     agent binary and extensions, and the pane id is unchanged so every view stays attached.
-    Returns (pane, error); pane "" with no error means it is outside PenguPool (adopt it instead)."""
+    Returns (pane, error, session); pane "" with no error means it is outside PenguPool (adopt it instead).
+    The session is its record from before the stop: the stopped process removed its live file, and the
+    fresh one has not written its own yet."""
     from . import tmux
     if tmux.pending_pane(sid):  # a card for a pane whose agent has no session yet: nothing to resume
         return "", (f"{sid} is a pane whose agent has not started a session yet (it may be waiting on a "
-                    "question): open it to see it, or close it")
+                    "question): open it to see it, or close it"), {}
     reg, sessions = _index()
     s = sessions.get(sid)
     if not s:
-        return "", f"session {sid} is not alive; resume it instead"
+        return "", f"session {sid} is not alive; resume it instead", {}
     pane = _session_pane(sid, reg, sessions)
     if not pane:
-        return "", ""
+        return "", "", s
     name, cwd, pid, h = s.get("name") or sid[:8], s.get("cwd", ""), int(s.get("pid", 0) or 0), harness.of(s)
     if not model.resumable_transcript(sid, cwd, h):
-        return "", f"{harness.LABEL[h]} has not written this session's transcript yet; send it a prompt first"
+        return "", f"{harness.LABEL[h]} has not written this session's transcript yet; send it a prompt first", s
     if not tmux.hold(pane, h):
-        return "", "could not keep the session's pane open; not restarting"
+        return "", "could not keep the session's pane open; not restarting", s
     if not tmux.stop(pid):
-        return "", f"could not stop {harness.LABEL[h]} (pid {pid}); not restarting"
+        return "", f"could not stop {harness.LABEL[h]} (pid {pid}); not restarting", s
     if not tmux.start_reserved(pane, cwd, name, sid, h):
-        return "", f"could not restart {harness.LABEL[h]} in pane {pane}; resume session {sid} manually"
-    return pane, ""
+        return "", f"could not restart {harness.LABEL[h]} in pane {pane}; resume session {sid} manually", s
+    return pane, "", s
 
 
 def _restart(sid: str, json_output: bool = False, view_id: str = "") -> int:
-    pane, err = restart(sid)
+    pane, err, s = restart(sid)
     if err:
         print(err, file=sys.stderr)
         return 1
     if not pane:
         return _adopt(sid, json_output, view_id)
-    s = {x["sessionId"]: x for x in model.load_sessions()}.get(sid, {})
     return _emit_view(pane, s.get("name") or sid[:8], s.get("cwd", ""), json_output, view_id, harness.of(s))
 
 

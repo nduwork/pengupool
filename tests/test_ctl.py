@@ -252,19 +252,22 @@ def test_adopt_stops_then_resumes_with_its_harness(monkeypatch, capsys, h):
 @pytest.mark.parametrize("h", ["cc", "pi"])
 def test_restart_resumes_in_the_same_pane(monkeypatch, capsys, h):
     monkeypatch.setattr(model, "load_registry", lambda: {"sid": "%7"})
-    monkeypatch.setattr(model, "load_sessions",
-                        lambda: [{"sessionId": "sid", "name": "worker", "cwd": "/repo", "pid": 4242, "harness": h}])
+    calls = []
+    # the stopped process removes its live file, and the resumed one has not written its own yet
+    monkeypatch.setattr(model, "load_sessions", lambda: [] if ("stop", 4242) in calls else
+                        [{"sessionId": "sid", "name": "worker", "cwd": "/repo", "pid": 4242, "harness": h}])
     monkeypatch.setattr("pengupool.tmux.pane_owns", lambda pane, pid, h: pane == "%7")
     monkeypatch.setattr(model, "resumable_transcript", lambda sid, cwd, h: True)
-    calls = []
     monkeypatch.setattr("pengupool.tmux.hold", lambda pane, h: calls.append(("hold", pane)) or True)
     monkeypatch.setattr("pengupool.tmux.stop", lambda pid, **k: calls.append(("stop", pid)) or True)
     monkeypatch.setattr("pengupool.tmux.start_reserved", lambda pane, cwd, name, sid, h:
                         calls.append(("start", pane, cwd, name, sid, h)) or True)
-    monkeypatch.setattr("pengupool.tmux.view_command", lambda pane, name, view, h: f"VIEW {pane} {view}")
+    # each harness has its own tmux server: the view must look for the pane on the session's
+    monkeypatch.setattr("pengupool.tmux.view_command", lambda pane, name, view, vh:
+                        f"VIEW {pane} {name} {view}" if vh == h else "")
     assert ctl.main(["restart", "sid", "editor-1"]) == 0
     assert calls == [("hold", "%7"), ("stop", 4242), ("start", "%7", "/repo", "worker", "sid", h)]
-    assert capsys.readouterr().out.strip() == "VIEW %7 editor-1"
+    assert capsys.readouterr().out.strip() == "VIEW %7 worker editor-1"
 
 
 def test_restart_refuses_a_session_without_a_transcript(monkeypatch):

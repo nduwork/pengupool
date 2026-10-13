@@ -37,8 +37,11 @@ function load(env = {}, opts = {}) {
   const proc = Object.assign(Object.create(process), { env: { PENGUPOOL_HOME: home, ...env }, once() {} });
   const req = (id) => ({ 'node:child_process': childProcess, 'node:crypto': require('node:crypto'),
     'node:fs': fs, 'node:os': os, 'node:path': path })[id];
+  // the name poll's timer, ticked by hand: tick() runs every interval callback once
+  const timers = [];
+  const setInterval = (fn) => { timers.push(fn); return { unref() {} }; };
   vm.runInNewContext(js, { module, exports: module.exports, require: req, process: proc, Date, JSON, Object,
-    String, Promise, setImmediate, Array });
+    String, Promise, setImmediate, setInterval, Array });
   let name = '';
   const bindPi = () => {
     const handlers = {};
@@ -57,7 +60,9 @@ function load(env = {}, opts = {}) {
   // omp calls the factory again, in the same process, for every subagent the session spawns
   const subagent = () => ({ handlers: bindPi(), ctx: { ...ctx, agent: { kind: 'sub', id: '0-Probe' },
     sessionManager: { getSessionId: () => 'sub-1', getSessionFile: () => '/sub.jsonl' } } });
-  return { handlers, ctx, live, livePath, calls, proc, name: () => name, switchTo, subagent, home };
+  const rename = (n) => { name = n; };
+  const tick = () => timers.forEach((fn) => fn());
+  return { handlers, ctx, live, livePath, calls, proc, name: () => name, switchTo, subagent, home, rename, tick };
 }
 
 test('a new omp session takes its name from PENGUPOOL_SESSION_NAME, once', async () => {
@@ -66,6 +71,18 @@ test('a new omp session takes its name from PENGUPOOL_SESSION_NAME, once', async
   assert.equal(x.name(), 'notes');
   assert.equal(x.live().name, 'notes');
   assert.equal(x.proc.env.PENGUPOOL_SESSION_NAME, undefined);  // a later /new is not named "notes" too
+});
+
+test('a rename between turns reaches the live file without waiting for a run to end', async () => {
+  const x = load({ PENGUPOOL_SESSION_NAME: 'notes' });
+  await x.handlers.session_start({ type: 'session_start' }, x.ctx);
+  x.rename('api');                                   // /rename, /alias or PenguPool's Rename: omp sends no event
+  x.tick();
+  assert.equal(x.live().name, 'api');
+  await x.handlers.session_shutdown({ type: 'session_shutdown' }, x.ctx);
+  x.rename('later');
+  x.tick();
+  assert.equal(fs.existsSync(x.livePath), false);    // a gone session's file is not written back
 });
 
 test('the tree context is appended to an omp string[] system prompt', async () => {

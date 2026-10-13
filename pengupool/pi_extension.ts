@@ -90,6 +90,17 @@ const gone = () => { try { fs.unlinkSync(LIVE) } catch {} }
 process.once("exit", gone)
 // The pool session whose tool started this process, read before a binding sets the variable to its own.
 const STARTED_BY = process.env.PENGUPOOL_SESSION || ""
+// omp sends no event when the session is renamed (omp's /rename, pi-intercom's /alias, PenguPool's
+// Rename), so the name the pool session's binding reports is polled, as pi-intercom polls it for its
+// presence. Unset between a session's shutdown and the next binding, so the poll never rewrites a live
+// file that `gone` removed.
+let poolName: (() => string) | undefined
+let polling = false
+const pollName = () => {
+  let name: string
+  try { name = poolName?.() ?? "" } catch { return }
+  if (poolName && live.sessionId && name && name !== live.name) update({ name })
+}
 
 export default function (pi: ExtensionAPI) {
   // A pool session is the top-level session of an interactive run (omp's tui or rpc mode): not a
@@ -123,6 +134,8 @@ export default function (pi: ExtensionAPI) {
     }
     update({ sessionId, cwd: ctx.cwd, name: pi.getSessionName() || "", sessionFile: ctx.sessionManager.getSessionFile(),
              ...(moved ? { status: "idle" } : {}) })
+    poolName = () => pi.getSessionName() || ""  // this binding's: a subagent's never takes over the poll
+    if (!polling) { polling = true; setInterval(pollName, 1000).unref?.() }
     if (!moved) return
     saveContext(ctx)  // a resumed or forked session's window is already in use: show it before its first turn
     try {
@@ -139,7 +152,6 @@ export default function (pi: ExtensionAPI) {
   // the previous session's id, name and context for this pane. omp's own SESSION_IDENTITY_EVENTS.
   pi.on("session_switch", async (event, ctx) => { await bind(ctx, event.reason) })
   pi.on("session_branch", async (_event, ctx) => { await bind(ctx) })
-  // omp sends no session_info_changed, so a rename shows up when the run ends
   pi.on("agent_start", async (_event, ctx) => { if (pooled(ctx)) update({ status: "busy" }) })
   pi.on("turn_end", async (_event, ctx) => saveContext(ctx))
   pi.on("session_compact", async (_event, ctx) => saveContext(ctx))  // a compaction frees the window now
@@ -174,5 +186,5 @@ export default function (pi: ExtensionAPI) {
   })
   // omp gives no shutdown reason; after /new, /resume or a fork branch the rebind writes it again.
   // A subagent's session ending is not this process's session ending.
-  pi.on("session_shutdown", async (_event, ctx) => { if (pooled(ctx)) gone() })
+  pi.on("session_shutdown", async (_event, ctx) => { if (pooled(ctx)) { poolName = undefined; gone() } })
 }
