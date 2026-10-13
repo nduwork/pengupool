@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.12.0
+
+- Fresh Context for omp sessions keeps their group and role (#97)
+
+Ships with PenguPool v1.4.0.
+
 ## 0.11.0
 
 - run pi sessions in oh-my-pi (v1.3.0) (#96)

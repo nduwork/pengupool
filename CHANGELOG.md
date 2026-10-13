@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-10-12
+
 ### Added
 - Fresh Context for pi sessions. `Shift+C` (or right-click → **Fresh Context**) types `/new` into an omp
   session, and the new session keeps the old one's group and role, as Claude Code's `/clear` does, and its name.
@@ -23,6 +25,7 @@ All notable changes to this project are documented here. The format follows
   restarted. The stopped process removes its live file, so ctl lost the session's harness and looked for the
   pane on Claude Code's tmux server. It now keeps the session's record from before the stop.
 
+- Editor extension: 0.12.0 (install both with `install.sh`; they ship together in this tag).
 ## [1.3.0] - 2026-10-12
 
 ### Changed
