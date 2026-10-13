@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.12.1
+
+- close routing bypasses and fix pi gaps found reviewing 1.4.0 (#99)
+
+Ships with PenguPool v1.4.2.
+
 ## 0.12.0
 
 - Fresh Context for omp sessions keeps their group and role (#97)

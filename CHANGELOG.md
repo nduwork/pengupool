@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-10-13
+
 ### Fixed
 - A grouped pi session could message sessions outside its tree. pi-intercom accepts targets PenguPool could
   not resolve (a short id prefix, the alias it gives an unnamed session, a peer outside the pool), and those
@@ -33,6 +35,7 @@ All notable changes to this project are documented here. The format follows
   that wires it, instead of leaving a card that nothing can group or message.
 - `make install-all` and the extension targets install `extension/node_modules` themselves on first use.
 
+- Editor extension: 0.12.1 (install both with `install.sh`; they ship together in this tag).
 ## [1.4.0] - 2026-10-12
 
 ### Added
