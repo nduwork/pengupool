@@ -172,6 +172,9 @@ def restart(sid: str) -> tuple[str, str]:
     agent binary and extensions, and the pane id is unchanged so every view stays attached.
     Returns (pane, error); pane "" with no error means it is outside PenguPool (adopt it instead)."""
     from . import tmux
+    if tmux.pending_pane(sid):  # a card for a pane whose agent has no session yet: nothing to resume
+        return "", (f"{sid} is a pane whose agent has not started a session yet (it may be waiting on a "
+                    "question): open it to see it, or close it")
     reg, sessions = _index()
     s = sessions.get(sid)
     if not s:

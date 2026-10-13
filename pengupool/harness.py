@@ -1,4 +1,5 @@
-"""The few things that differ between agent harnesses: Claude Code ("cc") and pi ("pi").
+"""The few things that differ between agent harnesses: Claude Code ("cc") and pi ("pi"), which PenguPool
+runs as oh-my-pi (`omp`), a pi fork that loads pi extensions and keeps pi's session layout.
 
 Everything else is shared: a pi session is made to look like a Claude one. The PenguPool pi
 extension (pi-extension/) writes a live-session file in the same shape as Claude Code's
@@ -13,14 +14,16 @@ import re
 from pathlib import Path
 
 HARNESSES = ("cc", "pi")
-CLI = {"cc": "claude", "pi": "pi"}
-LABEL = {"cc": "Claude Code", "pi": "pi"}
+CLI = {"cc": "claude", "pi": "omp"}
+LABEL = {"cc": "Claude Code", "pi": "oh-my-pi"}
 SOCK = {"cc": "pengupool", "pi": "pengupool-pi"}  # one tmux sessions server (-L) per harness
 TOOL = {"cc": "SendMessage", "pi": "the intercom tool (action send or ask)"}
 # slash command that renames a live session; pi-intercom's /alias sets the name intercom addresses
 RENAME = {"cc": "/rename", "pi": "/alias"}
 
-PI = Path(os.environ.get("PI_CODING_AGENT_DIR", Path.home() / ".pi" / "agent"))
+PI = Path(os.environ.get("PI_CODING_AGENT_DIR", Path.home() / ".omp" / "agent"))
+# plain pi's dir, where sessions started before 1.3.0 keep their transcripts; omp resumes them by path
+LEGACY_PI = Path.home() / ".pi" / "agent"
 
 
 def check(h: str) -> str:
@@ -42,22 +45,101 @@ CC_FLAGS = ["--teammate-mode", "in-process"]
 
 
 def argv_new(h: str, name: str) -> list[str]:
-    return [CLI["cc"], *CC_FLAGS, "--name", name] if check(h) == "cc" else [CLI["pi"], "--name", name]
+    # omp has no --name: the PenguPool extension names the session from this env var on its first start
+    return [CLI["cc"], *CC_FLAGS, "--name", name] if check(h) == "cc" else \
+        ["env", f"PENGUPOOL_SESSION_NAME={name}", CLI["pi"]]
 
 
 def argv_resume(h: str, name: str, sid: str) -> list[str]:
-    # pi keeps the session's name in the session file itself (session_info entry)
+    # omp keeps the session's name in the session file itself
     if check(h) == "cc":
         return [CLI["cc"], *CC_FLAGS, "--name", name, "--resume", sid]
-    return [CLI["pi"], "--session", sid]
+    hit = _pi_file(sid)
+    return [CLI["pi"], "--resume", str(hit) if hit and not hit.is_relative_to(PI) else sid]
+
+
+def _slug(text: str) -> str:
+    return re.sub(r"[/\\:]", "-", text)
+
+
+def _abs_dir_name(cwd: str) -> str:
+    """`--<cwd without leading slash, / \\ : → ->--`: omp's folder name for a cwd under neither home nor
+    the temp root, and every version of pi's own name for any cwd."""
+    return "--" + _slug(re.sub(r"^[/\\]", "", cwd)) + "--"
+
+
+def _inside(cwd: str, root: str) -> str | None:
+    """`cwd` relative to `root` when it sits inside it (the root itself counts, as omp's
+    isRelativeWithin does), else None."""
+    rel = os.path.relpath(cwd, root)
+    if rel == os.curdir:
+        return ""  # the root itself: omp's path.relative gives "" and counts as inside
+    return None if rel.startswith(os.pardir) else rel
+
+
+def _rel_dir_name(prefix: str, relative: str) -> str:
+    """omp's encodeRelativeSessionDirName: the scope prefix, then the slugged relative path, joined with
+    a dash unless the prefix already ends in one."""
+    slug = _slug(relative)
+    if not slug:
+        return prefix
+    return prefix + slug if prefix.endswith("-") else f"{prefix}-{slug}"
+
+
+def _tmp_root() -> str:
+    """The temp root omp scopes a cwd under: $TMPDIR, which Node's os.tmpdir() reads."""
+    return os.environ.get("TMPDIR") or "/tmp"
+
+
+def pi_dir_names(cwd: str) -> list[str]:
+    """omp's session folder for `cwd`, best first: a cwd under the temp root is `-tmp-<relative>`, one
+    under $HOME is `-<relative>`, anything else is `--<absolute>--`; last comes the `--<absolute>--`
+    name omp migrates away from, which an install it has not migrated yet still holds. Mirrors omp's
+    getDefaultSessionDirName (`src/session/session-paths.ts`, omp 18.10)."""
+    home, temp = _inside(cwd, os.path.expanduser("~")), _inside(cwd, _tmp_root())
+    names: list[str] = []
+    if temp is not None:
+        names.append(_rel_dir_name("-tmp", temp))
+        if home is not None:  # the temp root nests inside home on Windows
+            names.append(_rel_dir_name("-", home))
+    elif home is not None:
+        names.append(_rel_dir_name("-", home))
+    absolute = _abs_dir_name(cwd)
+    return names if absolute in names else [*names, absolute]
 
 
 def pi_dir(cwd: str) -> Path:
-    """pi's per-cwd session folder: `--<cwd without leading slash, / \\ : → ->--` (session-manager.js)."""
-    return PI / "sessions" / ("--" + re.sub(r"[/\\:]", "-", re.sub(r"^[/\\]", "", cwd)) + "--")
+    """omp's per-cwd session folder, the one it writes today."""
+    return PI / "sessions" / pi_dir_names(cwd)[0]
+
+
+def pi_dirs(cwd: str) -> list[Path]:
+    """Every folder the cwd's sessions can live in, best first: omp's — for the cwd as given and as
+    resolved, since omp names the folder after the canonical path (`/tmp/x` becomes `/private/tmp/x`) —
+    then plain pi's from before 1.3.0, which always used the absolute name."""
+    names = pi_dir_names(cwd)
+    real = os.path.realpath(cwd)
+    if real != cwd:
+        names += [n for n in pi_dir_names(real) if n not in names]
+    dirs = [PI / "sessions" / name for name in names]
+    if LEGACY_PI != PI:
+        dirs += [LEGACY_PI / "sessions" / name for name in dict.fromkeys([_abs_dir_name(cwd), _abs_dir_name(real)])]
+    return dirs
+
+
+def pi_roots() -> list[Path]:
+    return [PI] if LEGACY_PI == PI else [PI, LEGACY_PI]
+
+
+def _newest(paths) -> Path | None:
+    """Files are named `<timestamp>_<uuid>.jsonl`; omp's own copy wins over a plain-pi one."""
+    hits = sorted(paths, key=lambda p: (p.is_relative_to(PI), p.name))
+    return hits[-1] if hits else None
 
 
 def pi_transcript(cwd: str, sid: str) -> Path | None:
-    """pi names files `<timestamp>_<uuid>.jsonl`; newest wins if a session was ever re-created."""
-    hits = sorted(pi_dir(cwd).glob(f"*_{sid}.jsonl"))
-    return hits[-1] if hits else None
+    return _newest(f for d in pi_dirs(cwd) for f in d.glob(f"*_{sid}.jsonl"))
+
+
+def _pi_file(sid: str) -> Path | None:
+    return _newest(f for root in pi_roots() for f in (root / "sessions").glob(f"*/*_{sid}.jsonl"))

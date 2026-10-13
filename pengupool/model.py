@@ -597,6 +597,12 @@ def harness_of_past(sid: str, cwd: str) -> str:
     return "pi" if resumable_transcript(sid, cwd, "pi") else "cc"
 
 
+NAME_MARK = re.compile(r'"custom-title"|"session_info"|"titleSource"|"type"\s*:\s*"title')
+# a session's own name in a transcript: Claude's /rename and session_info, pi's /alias, and omp's
+# title slot (a `title` entry and/or `titleSource` in the header), which omp writes with or without
+# spaces after the colons
+
+
 def past_sessions(cwd: str, limit: int = 20) -> list[tuple[str, str, str]]:
     """(session_id, title, harness) for a cwd across harnesses, newest first. Title = the session's
     own name (Claude /rename, pi /alias or --name) or its first user line.
@@ -607,7 +613,7 @@ def past_sessions(cwd: str, limit: int = 20) -> list[tuple[str, str, str]]:
         except OSError:
             return 0.0
     files = [(f, "cc") for d in _cc_dirs(cwd) for f in d.glob("*.jsonl")] + \
-            [(f, "pi") for f in harness.pi_dir(cwd).glob("*_*.jsonl")]
+            [(f, "pi") for d in harness.pi_dirs(cwd) for f in d.glob("*_*.jsonl")]
     out = []
     for f, h in sorted(files, key=lambda fh: mtime(fh[0]), reverse=True):
         if len(out) >= limit:
@@ -621,11 +627,12 @@ def past_sessions(cwd: str, limit: int = 20) -> list[tuple[str, str, str]]:
                 for i, line in enumerate(fh):
                     if i > 4000:
                         break
-                    if '"custom-title"' in line or '"session_info"' in line:
+                    if NAME_MARK.search(line):  # Claude /rename, pi /alias, omp's own title slot
                         d = json.loads(line)
-                        t = d.get("customTitle", d.get("name")) if isinstance(d, dict) else None
-                        if isinstance(t, str):
-                            title = t
+                        t = (d.get("customTitle") or d.get("name") or d.get("title")) \
+                            if isinstance(d, dict) else None
+                        if isinstance(t, str) and t.strip():
+                            title = t.strip()
                     elif not first and ('"type":"user"' in line or '"role":"user"' in line):
                         d = json.loads(line)
                         m = d.get("message", {}) if isinstance(d, dict) else {}
@@ -666,7 +673,7 @@ def _transcript_cwd(d: Path, h: str) -> str:
 def _transcript_dirs(window: float) -> list[tuple[str, str]]:
     """(cwd, harness) for every transcript directory touched inside the window, newest first."""
     found = []
-    dirs = [(d, "pi") for d in (harness.PI / "sessions").glob("*")] + \
+    dirs = [(d, "pi") for root in harness.pi_roots() for d in (root / "sessions").glob("*")] + \
            [(d, "cc") for d in (CLAUDE / "projects").glob("*")]
     for d, h in dirs:
         if not d.is_dir() or time.time() - max((_mtime(f) for f in d.glob("*.jsonl")), default=0.0) > window:

@@ -1,5 +1,5 @@
-// PenguPool pi extension: makes this pi session look to PenguPool exactly like a Claude Code session.
-// Installed by `pengupool setup pi` into ~/.pi/agent/extensions/pengupool.ts.
+// PenguPool pi extension: makes this oh-my-pi (omp) session look to PenguPool exactly like a Claude Code
+// session. Installed by `pengupool setup pi` into ~/.omp/agent/extensions/pengupool.ts.
 //
 //  - ~/.pengupool/pi-sessions/<pid>.json   live-session file, same shape as ~/.claude/sessions/*.json
 //  - ~/.pengupool/registry.jsonl           session -> tmux pane line, like the Claude SessionStart hook
@@ -8,9 +8,19 @@
 //  - before each prompt, `pengupool ctl context <sid>` is appended to the system prompt: where this
 //    session sits in its PenguPool tree and who it may message with pi-intercom (plus any session the
 //    user @-tagged in that prompt)
-//  - every intercom send/ask goes through `pengupool ctl authorize` first; a non-adjacent target blocks it;
-//    PenguPool failing to answer does not (the same rule Claude's SendMessage guard applies)
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent"
+//  - every intercom send/ask/handover goes through `pengupool ctl authorize` first; a non-adjacent
+//    target blocks it; PenguPool failing to answer does not (the same rule Claude's SendMessage guard
+//    applies)
+//  - omp has no --name flag: `ctl new` passes the name in PENGUPOOL_SESSION_NAME and the first start sets it
+//  - a process that comes to host another session (`/new`, `/resume`, `/fork`, a fork branch) is rebound
+//    from scratch — live file, profile, registry line, env — so the pool never points at the old one
+//  - a subagent (task tool, eval `agent()`, `/tan` clone) runs in the same process, and omp rebinds this
+//    extension to its session too. It is not a pool session: it never takes over the live file, registry,
+//    profile or env, and its end does not remove them. Its intercom sends are checked as the session's own.
+//  - a one-shot run (`omp -p`, `--mode json`) is not a pool session either: it registers nothing. When a
+//    pool session's tool started it, it inherited that session's PENGUPOOL_SESSION, and its intercom sends
+//    are checked as that session's, so a session cannot reach past its tree through a one-shot run.
+import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent"
 import { execFile } from "node:child_process"
 import * as crypto from "node:crypto"
 import * as fs from "node:fs"
@@ -26,6 +36,9 @@ const GRANT_KEY = crypto.randomBytes(24).toString("hex")
 const run = (args: string[], input = "") => new Promise<{ code: number; out: string; err: string }>((resolve) => {
   const child = execFile(CLI, args, { timeout: 3000 }, (e: any, out, err) =>
     resolve({ code: e ? (typeof e.code === "number" ? e.code : 1) : 0, out: String(out).trim(), err: String(err).trim() }))
+  // a CLI that exits before reading its input closes the pipe: EPIPE here would be uncaught and end omp.
+  // The exit status still reaches the callback above, so the failure is reported there.
+  child.stdin?.on("error", () => {})
   child.stdin?.end(input)
 })
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
@@ -50,58 +63,107 @@ function procStart(): string {
   return `${DAYS[d.getUTCDay()]} ${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()} ${t} ${d.getUTCFullYear()}`
 }
 
+// The parts of omp's ExtensionContext this extension reads, so `bind` is checked: omp resolves the
+// session under a live process from the same context. Plain pi sends no `agent`: it has no subagents.
+interface AgentCtx {
+  agent?: { kind: "main" | "sub" }
+  mode?: string
+  getContextUsage?(): { percent: number } | undefined
+}
+interface SessionCtx extends AgentCtx {
+  cwd: string
+  sessionManager: { getSessionId(): string; getSessionFile(): string | undefined }
+}
+
+// One live file per process, describing the top-level session the process hosts. omp calls the factory
+// below again for every subagent session, so this state is the process's, shared by every binding.
+const live: Record<string, unknown> = {
+  pid: process.pid, kind: "interactive", status: "idle", startedAt: Date.now(), procStart: procStart(),
+}
+const update = (patch: Record<string, unknown>) => {
+  Object.assign(live, patch, { updatedAt: Date.now() })
+  if (live.sessionId) writeJson(LIVE, live)
+}
+const gone = () => { try { fs.unlinkSync(LIVE) } catch {} }
+process.once("exit", gone)
+// The pool session whose tool started this process, read before a binding sets the variable to its own.
+const STARTED_BY = process.env.PENGUPOOL_SESSION || ""
+
 export default function (pi: ExtensionAPI) {
-  const live: Record<string, unknown> = {
-    pid: process.pid, kind: "interactive", status: "idle", startedAt: Date.now(), procStart: procStart(),
-  }
-  const update = (patch: Record<string, unknown>) => {
-    Object.assign(live, patch, { updatedAt: Date.now() })
-    if (live.sessionId) writeJson(LIVE, live)
-  }
-  const saveContext = (ctx: any) => {
+  // A pool session is the top-level session of an interactive run (omp's tui or rpc mode): not a
+  // subagent, and not a one-shot print or json run, which ends with its answer.
+  const pooled = (ctx: AgentCtx) => ctx.agent?.kind !== "sub" && ctx.mode !== "print" && ctx.mode !== "json"
+  const saveContext = (ctx: AgentCtx) => {
     const pct = ctx.getContextUsage?.()?.percent
-    if (live.sessionId && typeof pct === "number") {
+    if (pooled(ctx) && live.sessionId && typeof pct === "number") {
       writeJson(path.join(HOME, "context", `${live.sessionId}.json`), { pct, ts: Date.now() / 1000 })
     }
   }
 
-  pi.on("session_start", async (_event, ctx) => {
-    // also fires after /new, /resume and /fork: the same process now hosts a different session
+  // Everything that follows the session id: the live file PenguPool polls, the cwd→pane registry
+  // line and the workspace profile, plus the env var this session's tools inherit so `ctl` knows who
+  // is calling. Runs again for every session the process comes to host.
+  const bind = async (ctx: SessionCtx) => {
+    if (!pooled(ctx)) return
     const sessionId = ctx.sessionManager.getSessionId()
-    process.env.PENGUPOOL_SESSION = sessionId  // tools this session runs inherit it: ctl knows who is calling
-    await run(["ctl", "register", sessionId, ctx.cwd, "--key-stdin"], `${GRANT_KEY}\n`)  // before the first prompt
-    update({ sessionId, cwd: ctx.cwd, name: pi.getSessionName() || "", status: "idle",
-             sessionFile: ctx.sessionManager.getSessionFile() })
+    const wanted = process.env.PENGUPOOL_SESSION_NAME
+    delete process.env.PENGUPOOL_SESSION_NAME  // only the session ctl started: a later /new is not named alike
+    if (wanted && !pi.getSessionName()) pi.setSessionName(wanted)
+    process.env.PENGUPOOL_SESSION = sessionId
+    const moved = sessionId !== live.sessionId
+    if (moved) await run(["ctl", "register", sessionId, ctx.cwd, "--key-stdin"], `${GRANT_KEY}\n`)  // before the first prompt
+    update({ sessionId, cwd: ctx.cwd, name: pi.getSessionName() || "", sessionFile: ctx.sessionManager.getSessionFile(),
+             ...(moved ? { status: "idle" } : {}) })
+    if (!moved) return
+    saveContext(ctx)  // a resumed or forked session's window is already in use: show it before its first turn
     try {
       fs.mkdirSync(HOME, { recursive: true })
       fs.appendFileSync(path.join(HOME, "registry.jsonl"), JSON.stringify({
         sessionId, cwd: ctx.cwd, tmuxPane: process.env.TMUX_PANE || "", ts: Math.floor(Date.now() / 1000), harness: "pi",
       }) + "\n")
     } catch {}
-  })
-  pi.on("session_info_changed", async (event) => update({ name: event.name || "" }))
-  pi.on("agent_start", async () => update({ status: "busy" }))
+  }
+
+  pi.on("session_start", async (_event, ctx) => { await bind(ctx) })
+  // omp keeps the process and swaps the session under it on /new, /resume, /fork (`session_switch`)
+  // and on a branch that forks (`session_branch`): without rebinding there, PenguPool keeps showing
+  // the previous session's id, name and context for this pane. omp's own SESSION_IDENTITY_EVENTS.
+  pi.on("session_switch", async (_event, ctx) => { await bind(ctx) })
+  pi.on("session_branch", async (_event, ctx) => { await bind(ctx) })
+  // omp sends no session_info_changed, so a rename shows up when the run ends
+  pi.on("agent_start", async (_event, ctx) => { if (pooled(ctx)) update({ status: "busy" }) })
   pi.on("turn_end", async (_event, ctx) => saveContext(ctx))
-  pi.on("agent_settled", async (_event, ctx) => {
-    update({ status: "idle" })
+  pi.on("session_compact", async (_event, ctx) => saveContext(ctx))  // a compaction frees the window now
+  pi.on("agent_end", async (event: any, ctx) => {
+    // omp is about to run the next step, or a subagent finished while the session waits on it: still busy
+    if (event?.willContinue || !pooled(ctx)) return
+    update({ status: "idle", name: pi.getSessionName() || "" })
     saveContext(ctx)
   })
-  pi.on("before_agent_start", async (event) => {
-    if (!live.sessionId) return
+  pi.on("before_agent_start", async (event, ctx) => {
+    if (!live.sessionId || !pooled(ctx)) return  // the tree and its role prompt are the session's alone
     // the user's prompt goes along: its @session tags lift the adjacent rule for those sessions
     const r = await run(["ctl", "context", String(live.sessionId), "--keyed-prompt-stdin"],
                         `${GRANT_KEY}\n${String(event.prompt || "")}`)
-    if (!r.code && r.out) return { systemPrompt: `${event.systemPrompt}\n\n${r.out}` }
+    if (r.code || !r.out) return
+    // omp passes the system prompt as parts (string[]); plain pi as one string
+    const sp: unknown = event.systemPrompt
+    return { systemPrompt: Array.isArray(sp) ? [...sp, r.out] : `${sp}\n\n${r.out}` } as any
   })
   pi.on("tool_call", async (event: any) => {
     const input = event.input || {}
-    if (event.toolName !== "intercom" || !["send", "ask"].includes(input.action) || !live.sessionId) return
+    // Every action that delivers to another session, so the adjacent rule cannot be walked around:
+    // `handover` summarizes this session and sends it, `send`/`ask` are the plain ones. A subagent's
+    // send is checked as the session's (`live` is the process's, and a subagent never binds it), and a
+    // one-shot run's as the pool session that started it.
+    const sender = String(live.sessionId || STARTED_BY)
+    if (event.toolName !== "intercom" || !["send", "ask", "handover"].includes(input.action) || !sender) return
     // A send by cwd alone names no session: authorize gets "" and refuses it for a grouped session.
-    const r = await run(["ctl", "authorize", String(live.sessionId), String(input.to || "")])
+    const r = await run(["ctl", "authorize", sender, String(input.to || "")])
     // only a checked refusal (exit 3) blocks: a PenguPool fault or timeout never cuts sessions off
     if (r.code === 3) return { block: true, reason: r.err }
   })
-  const gone = () => { try { fs.unlinkSync(LIVE) } catch {} }
-  pi.on("session_shutdown", async (event) => { if (event.reason === "quit") gone() })
-  process.once("exit", gone)
+  // omp gives no shutdown reason; after /new, /resume or a fork branch the rebind writes it again.
+  // A subagent's session ending is not this process's session ending.
+  pi.on("session_shutdown", async (_event, ctx) => { if (pooled(ctx)) gone() })
 }

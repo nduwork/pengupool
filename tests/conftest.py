@@ -9,6 +9,7 @@ def _no_real_pi(tmp_path_factory, monkeypatch):
     root = tmp_path_factory.mktemp("pi")
     monkeypatch.setattr(model, "PI_LIVE", root / "live")
     monkeypatch.setattr(harness, "PI", root / "agent")
+    monkeypatch.setattr(harness, "LEGACY_PI", root / "legacy-pi")  # setup pi clears it: never the real ~/.pi
 
 
 @pytest.fixture(autouse=True)

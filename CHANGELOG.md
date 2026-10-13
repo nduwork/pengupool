@@ -5,6 +5,48 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- pi sessions now run in **oh-my-pi** (`omp`), a pi fork. New pi sessions start with `omp` and resume with
+  `omp --resume`. omp has no `--name` flag, so `ctl new` passes the name in `PENGUPOOL_SESSION_NAME` and the
+  PenguPool extension sets it when the session first starts. Extensions, skills and transcripts live in
+  `~/.omp/agent`. The editor labels the harness "oh-my-pi". Sessions started in plain pi still list as past
+  sessions, and they resume in omp from their `~/.pi/agent` transcript
+- `pengupool setup pi` installs Bun if it is missing and then omp (`bun install -g
+  @oh-my-pi/pi-coding-agent`), each after a y/N prompt. It installs pi-intercom as an omp plugin and removes
+  the old PenguPool extension from `~/.pi/agent`. `setup --check pi` also checks that omp starts: it needs
+  Bun 1.3.14 or later
+- The PenguPool and workflow-tracker pi extensions handle omp's events. A run ends on `agent_end`, since omp
+  has no `agent_settled`. The system prompt arrives as a list of parts. A rename shows up when the run ends,
+  since omp sends no `session_info_changed`
+
+### Fixed
+- a pi session omp moves under the same process is rebound: the live-session file, its profile, its
+  cwd→pane registry line and `PENGUPOOL_SESSION` all follow the new session, so the map, the routing rule
+  and the ctx % no longer describe the session the process left behind. The workflow tracker's session key
+  follows the same events, so a chain is filed under the session actually running it
+- pi session folders are found the way oh-my-pi 18 names them: `-<relative>` under `$HOME`,
+  `-tmp-<relative>` under the temp root, `--<absolute>--` anywhere else — plus the absolute name omp
+  migrates away from, pi's own name for the cwd, and the resolved path when the cwd is a symlink. A
+  session whose cwd is under home was invisible to `ctl past`, `ctl resume` and the message log before
+- a pi-intercom `handover` is authorized like `send` and `ask`: it delivers a session's summary to
+  another session, so leaving it out let the adjacent rule be walked around
+- `ctl past` reads a pi session's name from omp's `title` entry (and `titleSource` in the header) as well
+  as from Claude's `custom-title`/`session_info` and pi's `session_info`, instead of falling back to the
+  first line of the session's first prompt
+- an omp subagent no longer takes over its session's pool entry. omp runs the PenguPool extension for every
+  subagent in the session's process: the subagent overwrote the live-session file, registry line and
+  `PENGUPOOL_SESSION` with its own id, and its end deleted the file, so until the next prompt the session
+  left the map and its children showed ungrouped. A subagent's intercom sends are checked as its session's
+- a one-shot omp run (`omp -p`, `--mode json`) is not registered as a pool session. Started from a pool
+  session's tool, its intercom sends are checked as that session's
+- a `pengupool` CLI that exits without reading its input no longer crashes the omp session (EPIPE)
+- a resumed or forked pi session shows its ctx % right away, not after its first turn
+- `ctl restart` on a card for a pane with no session yet says so, instead of "not alive; resume it instead"
+
+### Known issues
+- Under omp, pi-intercom's "New intercom message above." nudge can reach the model one step before the
+  message itself does. The message still arrives in the same turn
+
 ## [1.2.0] - 2026-10-12
 
 ### Added

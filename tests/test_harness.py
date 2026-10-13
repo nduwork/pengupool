@@ -14,9 +14,46 @@ def j(d) -> str:
     return json.dumps(d, separators=(",", ":"))  # both harnesses write compact JSONL
 
 
-def test_pi_dir_matches_pi_session_manager():
-    assert harness.pi_dir("/Users/a/my.repo").name == "--Users-a-my.repo--"   # "." kept, unlike Claude's slug
+def test_pi_dir_matches_omp_session_manager(tmp_path, monkeypatch):
+    # omp nests a cwd under the temp root as `-tmp-<relative>`, under $HOME as `-<relative>`, and keeps
+    # the absolute `--<path>--` for anything else (getDefaultSessionDirName in src/session/session-paths.ts)
+    home, temp = tmp_path / "home", tmp_path / "tmp"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("TMPDIR", str(temp))
+    assert harness.pi_dir(str(home / "repos" / "my.repo")).name == "-repos-my.repo"  # "." kept, unlike Claude's slug
+    assert harness.pi_dir(str(temp / "scratch")).name == "-tmp-scratch"
+    assert harness.pi_dir(str(home)).name == "-"          # the home directory itself
+    assert harness.pi_dir(str(temp)).name == "-tmp"       # and the temp root
+    assert harness.pi_dir("/opt/work").name == "--opt-work--"
+    assert harness.pi_dir("/opt/nested/my.repo").name == "--opt-nested-my.repo--"
     assert harness.pi_dir("C:\\w\\x").name == "--C--w-x--"
+    # the absolute name omp migrates away from is looked up too: an install it has not migrated still reads
+    assert harness.pi_dir_names(str(home / "repos" / "s")) == \
+        ["-repos-s", "--" + str(home).lstrip("/").replace("/", "-") + "-repos-s--"]
+
+
+def test_pi_dirs_cover_both_roots(tmp_path, monkeypatch):
+    # a session from before 1.3.0 lives under ~/.pi/agent, whose name was always the absolute one
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("TMPDIR", str(tmp_path / "tmp"))
+    monkeypatch.setattr(harness, "PI", tmp_path / "omp")
+    monkeypatch.setattr(harness, "LEGACY_PI", tmp_path / "pi")
+    cwd = str(tmp_path / "home" / "r")
+    dirs = harness.pi_dirs(cwd)
+    assert dirs[0] == tmp_path / "omp" / "sessions" / "-r"                     # what omp writes today
+    absolute = "--" + cwd.lstrip("/").replace("/", "-") + "--"
+    assert (tmp_path / "omp" / "sessions" / absolute) in dirs                  # the name omp migrates from
+    assert (tmp_path / "pi" / "sessions" / absolute) in dirs                   # and plain pi's own name
+    # omp names the folder after the canonical cwd, so a symlinked one is looked up both ways
+    real, link = tmp_path / "real" / "x", tmp_path / "link"
+    real.mkdir(parents=True)
+    try:
+        link.symlink_to(tmp_path / "real")
+    except OSError:
+        return  # this filesystem takes no symlinks
+    got = [d.name for d in harness.pi_dirs(str(link / "x"))]
+    assert got[0] == harness.pi_dir(str(link / "x")).name
+    assert harness.pi_dir(str(real)).name in got
 
 
 def test_pi_live_sessions_are_discovered_and_tagged(tmp_path, monkeypatch):
@@ -64,6 +101,23 @@ def test_past_sessions_cover_both_harnesses(tmp_path, monkeypatch):
     assert got == [(SID, "pi worker", "pi"), ("cc-id", "fix the bug", "cc")]
     assert model.harness_of_past(SID, "/r") == "pi"
     assert model.harness_of_past("abcdef12-0000", "/r") == "cc"
+
+
+def test_past_sessions_read_omp_titles(tmp_path, monkeypatch):
+    """omp keeps the session's own name in a `title` entry (and titleSource in the header), not in
+    pi's session_info — and writes that entry with spaces after the colons."""
+    monkeypatch.setattr(model, "CLAUDE", tmp_path / "claude")
+    d = harness.pi_dir("/r")
+    d.mkdir(parents=True)
+    (d / f"2026-10-12T10-00-00-000Z_{SID}.jsonl").write_text(
+        '{"type": "session", "version": 3, "id": "%s", "cwd": "/r"}\n' % SID +
+        '{"type": "title", "v": 1, "title": "\U0001f427 POOL: brainstorm omp", "source": "auto"}\n' +
+        j({"type": "message", "message": {"role": "user", "content": [{"type": "text", "text": "hi"}]}}) + "\n")
+    assert model.past_sessions("/r") == [(SID, "\U0001f427 POOL: brainstorm omp", "pi")]
+    # a rename lands in the header as title + titleSource, and names the session like the title entry did
+    (d / f"2026-10-12T10-00-00-000Z_{SID}.jsonl").write_text(
+        '{"type":"session","version":3,"id":"%s","cwd":"/r","title":"omp setup","titleSource":"user"}\n' % SID)
+    assert model.past_sessions("/r") == [(SID, "omp setup", "pi")]
 
 
 def test_past_sessions_all_offers_dead_sessions_once_and_never_ghosts(tmp_path, monkeypatch):
@@ -156,3 +210,29 @@ def test_a_long_busy_turn_is_never_stale(tmp_path, monkeypatch):
         model.write_json(model.PI_LIVE / f"{os.getpid()}.json", {**live, "status": status})
         [s] = model.load_sessions()
         assert s["state"] == state, status
+
+
+def test_pi_harness_runs_oh_my_pi(monkeypatch):
+    import importlib
+    monkeypatch.delenv("PI_CODING_AGENT_DIR", raising=False)
+    assert importlib.reload(harness).PI == Path.home() / ".omp" / "agent"
+    assert (harness.CLI["pi"], harness.LABEL["pi"]) == ("omp", "oh-my-pi")
+    # omp has no --name: the PenguPool extension names the session from the env on its first start
+    assert harness.argv_new("pi", "notes") == ["env", "PENGUPOOL_SESSION_NAME=notes", "omp"]
+    assert harness.argv_resume("pi", "notes", SID) == ["omp", "--resume", SID]
+
+
+def test_sessions_from_plain_pi_still_resume_under_omp(tmp_path, monkeypatch):
+    # sessions started before 1.3.0 live in ~/.pi/agent; omp resumes them by transcript path
+    monkeypatch.setattr(harness, "LEGACY_PI", tmp_path / "legacy")
+    old = harness.LEGACY_PI / "sessions" / harness.pi_dir("/r").name / f"2026-09-22T10-00-00-000Z_{SID}.jsonl"
+    old.parent.mkdir(parents=True)
+    old.write_text(j({"type": "session", "id": SID, "cwd": "/r"}) + "\n")
+    assert harness.pi_transcript("/r", SID) == old
+    assert harness.argv_resume("pi", "notes", SID) == ["omp", "--resume", str(old)]
+    assert model.harness_of_past(SID, "/r") == "pi"
+    assert [s[0] for s in model.past_sessions("/r")] == [SID]
+    new = harness.pi_dir("/r") / f"2026-10-12T10-00-00-000Z_{SID}.jsonl"   # once omp has its own copy
+    new.parent.mkdir(parents=True)
+    new.write_text(old.read_text())
+    assert harness.argv_resume("pi", "notes", SID) == ["omp", "--resume", SID]

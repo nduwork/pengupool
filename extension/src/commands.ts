@@ -9,7 +9,7 @@ import { MapPanel } from './mapPanel';
 import { LogPanel } from './logPanel';
 
 const LAST_ADD_PATH_KEY = 'pengupool.lastAddPath';
-const HARNESS_LABEL: Record<Harness, string> = { cc: 'Claude Code', pi: 'pi' };
+const HARNESS_LABEL: Record<Harness, string> = { cc: 'Claude Code', pi: 'oh-my-pi' };
 
 /** "3 h ago" for a session's last update, so the restore list reads as a timeline. */
 export function ago(at: number): string {

@@ -108,7 +108,7 @@ test('run-all is listed under Views, not among the session keys', () => {
 test('new session picks a harness instead of a free-text launch command', () => {
   const commands = fs.readFileSync(path.join(__dirname, '../src/commands.ts'), 'utf8');
   assert.doesNotMatch(commands, /launchCommand/);
-  assert.match(commands, /cc: 'Claude Code', pi: 'pi'/);
+  assert.match(commands, /cc: 'Claude Code', pi: 'oh-my-pi'/);
   assert.match(commands, /label: 'Create a worktree'/);
   assert.match(commands, /label: 'Use selected folder'/);
   // the quick pick pre-selects its first item: the folder as picked, a worktree only on request

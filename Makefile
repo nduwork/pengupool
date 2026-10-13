@@ -2,10 +2,11 @@ HARNESS ?= auto
 CLAUDE_SETTINGS ?= $(HOME)/.claude/settings.json
 STEP_STATUS_HOME ?= $(HOME)/.claude/step-status
 BIN := $(STEP_STATUS_HOME)/bin
-PI_AGENT ?= $(HOME)/.pi/agent
+# pi sessions run in oh-my-pi (omp)
+PI_AGENT ?= $(HOME)/.omp/agent
 CLAUDE_SKILLS ?= $(HOME)/.claude/skills
 TRACKER_CC := $(if $(filter pi,$(HARNESS)),,1)
-TRACKER_PI := $(if $(filter pi both,$(HARNESS)),1,$(if $(filter auto,$(HARNESS)),$(shell command -v pi >/dev/null && echo 1)))
+TRACKER_PI := $(if $(filter pi both,$(HARNESS)),1,$(if $(filter auto,$(HARNESS)),$(shell command -v omp >/dev/null && echo 1)))
 WT := skills/workflow-tracker/scripts
 SCRIPTS := steps.sh hook_session_start.sh hook_prompt.sh wire_hooks.sh
 # Scripts older versions installed into $(BIN); install-tracker removes them once settings stop using them.
@@ -63,14 +64,14 @@ install-tracker:
 	$(if $(TRACKER_PI),sed 's|__STEP_STATUS_BIN__|$(BIN)|' skills/workflow-tracker/pi/workflow-tracker.ts > "$(PI_AGENT)/extensions/workflow-tracker.ts")
 	$(if $(TRACKER_PI),cp skills/workflow-tracker/SKILL.md "$(PI_AGENT)/skills/workflow-tracker/SKILL.md")
 	$(if $(TRACKER_PI),ln -sfn "$(BIN)" "$(PI_AGENT)/skills/workflow-tracker/scripts")
-	$(if $(TRACKER_PI),@echo "workflow-tracker: pi extension + skill → $(PI_AGENT) (restart pi sessions to load)")
+	$(if $(TRACKER_PI),@echo "workflow-tracker: pi extension + skill → $(PI_AGENT) (restart oh-my-pi sessions to load)")
 
 # The pool-groups skill is instructions only: the single write it makes (`ctl group-plan`) belongs to the
 # backend, and applying a proposal stays the user's step.
 install-pool-groups:
 	$(if $(TRACKER_PI),mkdir -p "$(PI_AGENT)/skills/pool-groups")
 	$(if $(TRACKER_PI),cp skills/pool-groups/SKILL.md "$(PI_AGENT)/skills/pool-groups/SKILL.md")
-	$(if $(TRACKER_PI),@echo "pool-groups: skill → $(PI_AGENT) (restart pi sessions to load; ask for it by name)")
+	$(if $(TRACKER_PI),@echo "pool-groups: skill → $(PI_AGENT) (restart oh-my-pi sessions to load; ask for it by name)")
 
 uninstall-pool-groups:
 	rm -rf "$(PI_AGENT)/skills/pool-groups"
