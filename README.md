@@ -37,8 +37,8 @@ who is messaging whom. Sessions run in tmux, so they keep working when you close
 - **A live Map and Log**: lines light green when a parent messages a child and blue for the reply. Each card
   shows the session's state, context use and current workflow phase.
 - **One terminal per harness**: tmux-backed, so a session survives the editor. Restart in place after an
-  update (`Shift+R`), compact (`c`), or give a session a fresh context that keeps its place in the tree
-  (`Shift+C`).
+  update (`Shift+R`) — a pi session picks up a PenguPool update only then — compact (`c`), or give a session
+  a fresh context that keeps its place in the tree (`Shift+C`).
 - **Rebuild after a reboot**: **Resume Previous Sessions…** puts every session you tick back on the tmux
   server, in its folder and its group.
 - **Skills that ship with it**: a workflow tracker, a regrouping proposer, and **skill-repo**, which offloads
@@ -137,7 +137,7 @@ these keys:
 | `r`, `d` | Rename the session, or describe its role |
 | `x`, `c` | Close or compact the session |
 | `Shift+C` | Fresh context (`/clear`) for a Claude Code session; it keeps its place in the tree and its role |
-| `Shift+R` | Restart & resume in place, e.g. after a Claude Code or pi update |
+| `Shift+R` | Restart & resume in place, e.g. after a Claude Code, pi or PenguPool update |
 | `Shift+Enter` | New line in a Claude Code prompt, in the PenguPool terminal |
 
 **Right-click** a session, in Sessions or on the Map, for every action in one menu:

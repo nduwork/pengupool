@@ -95,6 +95,28 @@ def _unbaked(source: str) -> str:
     return re.sub(r'(PENGUPOOL_CLI \|\| )"[^"]*"', r'\1"pengupool"', source, count=1)
 
 
+def _stale_running_pi() -> list[str]:
+    """Names of live pi sessions whose process started before the installed extension last changed. omp
+    imports an extension once, at process startup: a session started earlier keeps the code it loaded
+    then, so `/new` there does not hand the new id its group and role, and no other extension fix
+    reaches it either. Restart & Resume (`Shift+R`) starts a new omp process and loads the current one.
+    setup writes the file only when its content changes, so its mtime is the last change, not the last
+    run: re-running setup over an unchanged extension leaves running sessions alone."""
+    changed = _pi_extension().stat().st_mtime * 1000 if _pi_extension().is_file() else 0
+    if not changed:
+        return []
+    return sorted(s["name"] for s in model.load_sessions()
+                  if harness.of(s) == "pi" and s["startedAt"] and s["startedAt"] < changed)
+
+
+def _report_stale_pi() -> None:
+    """Name the running pi sessions that need a restart before they run the extension setup just wired."""
+    stale = _stale_running_pi()
+    if stale:
+        print(f"! {', '.join(stale)} still run{'' if len(stale) > 1 else 's'} the extension loaded at "
+              "startup: press Shift+R (Restart & Resume) in PenguPool, once per session, to pick up the new one")
+
+
 def wire(h: str) -> bool:
     if h == "cc":
         hook.install(_settings())
@@ -110,8 +132,13 @@ def wire(h: str) -> bool:
         print(f"removed the plain-pi PenguPool extension → {legacy} (pi sessions now run in oh-my-pi)")
     target = _pi_extension()
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(_extension_source())
-    print(f"installed PenguPool pi extension → {target}")
+    source = _extension_source()
+    if target.is_file() and target.read_text() == source:  # unchanged: keep its mtime = the last change
+        print(f"✓ PenguPool pi extension already current → {target}")
+    else:
+        target.write_text(source)
+        print(f"installed PenguPool pi extension → {target}")
+    _report_stale_pi()
     return True
 
 
@@ -147,6 +174,7 @@ def check(h: str) -> bool:
     wired = _pi_extension().is_file() and _unbaked(_pi_extension().read_text()) == EXTENSION.read_text()
     print(f"{'✓' if wired else '✗'} PenguPool pi extension at {_pi_extension()}"
           + ("" if wired or not _pi_extension().is_file() else " (outdated: re-run setup)"))
+    _report_stale_pi()
     intercom = ok and _has_intercom()
     print(f"{'✓' if intercom else '✗'} pi-intercom installed")
     return runs and wired and intercom

@@ -113,6 +113,9 @@ Worktrees are created next to the repo as `<repo>-wt-<name>` on a `pengupool/<na
   session or `/new` in a pi session: the session keeps its group and role.
 - After a Claude Code or pi update, press `Shift+R` (or right-click → **Restart & Resume**). The session
   stops and resumes in the same terminal with the new version, keeping its id, group and role.
+- After a PenguPool update, restart the pi sessions that were already running (`Shift+R`): omp loads the
+  PenguPool extension at startup, so `/new` in a session that predates the update would keep neither its group
+  nor its role. `pengupool setup` names the sessions that still hold the previous extension.
 - To reorganise, drag rows in Sessions or cards on the Map. Dropping on empty space moves a session to the top level.
 - To add a session straight under another, right-click it → **New Child Session** or **Add Previous Session as Child**.
 - To reorganise by asking, say so in a session ("group these sessions") and the
@@ -138,5 +141,5 @@ Worktrees are created next to the repo as `<repo>-wt-<name>` on a `pengupool/<na
 | `? Approval` | The session is waiting for you to approve a tool call. |
 | "routing skipped for `<name>`" | A prompt matched a child, but the session answered it itself. It gets sent back once to route it. |
 | A message was refused | The recipient isn't adjacent. The refusal names the next hop. |
-| A session dropped out of its group | It ran pi's `/new` (or `/clear` outside a PenguPool terminal). Press `a` (Add Previous Session) to resume the old session; groups are kept by session id, so it returns to its place. |
-| Roles, tree or hooks look out of date | Reload the editor window. Restart any Claude session that predates an install (`Shift+R`). |
+| A session dropped out of its group | `/clear` ran outside a PenguPool terminal, or `/new` ran in a pi session started before a PenguPool update, which still runs the previous extension. Restart it (`Shift+R`), or press `a` (Add Previous Session) to bring the old session back instead — groups are kept by session id. |
+| Roles, tree or hooks look out of date | Reload the editor window. Restart any session that predates an install (`Shift+R`): a pi session runs the extension it loaded at startup, so `/new` there loses the group and role. |
