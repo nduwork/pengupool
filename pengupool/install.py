@@ -33,7 +33,7 @@ def _settings() -> Path:
 
 
 def _pi_extension() -> Path:
-    return harness.PI / "extensions" / "pengupool.ts"
+    return harness.pi_extension()
 
 
 def _confirm(question: str) -> bool:
@@ -168,7 +168,8 @@ def check(h: str) -> bool:
 def _harnesses(arg: str) -> list[str]:
     if arg in ("both", "all"):
         return list(harness.HARNESSES)
-    if arg == "auto":  # a pi user who just runs `make install` must not end up with pi unwired
+    if arg == "auto":  # check and teardown: the harnesses this machine has (setup offers them all)
+        _bun_on_path()  # omp lives in ~/.bun/bin, which a non-login shell (make, an editor task) may lack
         return [h for h in harness.HARNESSES if shutil.which(harness.CLI[h])] or ["cc"]
     return [harness.check(arg)]
 
@@ -192,16 +193,28 @@ def main(args: list[str]) -> int:
         return 0 if all([check(h) for h in hs]) and ok else 1
     if not ensure("tmux", "tmux", _pkg_install("tmux")):
         return 1
-    ok = True
+    # A plain setup offers every harness, not just the ones already on PATH: an agent CLI installed after
+    # PenguPool would otherwise run unwired. A CLI declined here is skipped, and only a named one is required.
+    optional = not rest or rest[0] == "auto"
+    if optional:
+        hs = list(harness.HARNESSES)
+    ok, wired = True, []
     for h in hs:
-        if h == "pi":
-            _bun_on_path()   # an omp from an earlier setup, in a shell whose rc has not run
-            if not shutil.which(harness.CLI["pi"]) and not ensure("Bun (needed to install oh-my-pi)", "bun", BUN_INSTALL):
-                ok = False
-                continue
-            _bun_on_path()   # a Bun just installed
-        if ensure(f"{harness.LABEL[h]} ({harness.CLI[h]})", harness.CLI[h], CLI_INSTALL[h]):
-            ok = wire(h) and ok
-        else:
-            ok = False
-    return 0 if ok else 1
+        if not _cli(h):
+            if optional:
+                print(f"  skipped {harness.LABEL[h]}: run `pengupool setup {h}` to add it later")
+            ok = optional and ok
+            continue
+        wired.append(h)
+        ok = wire(h) and ok
+    return 0 if ok and wired else 1
+
+
+def _cli(h: str) -> bool:
+    """The harness's CLI is on PATH, installed after a y/N prompt if missing (omp needs Bun first)."""
+    if h == "pi":
+        _bun_on_path()   # an omp from an earlier setup, in a shell whose rc has not run
+        if not shutil.which(harness.CLI["pi"]) and not ensure("Bun (needed to install oh-my-pi)", "bun", BUN_INSTALL):
+            return False
+        _bun_on_path()   # a Bun just installed
+    return ensure(f"{harness.LABEL[h]} ({harness.CLI[h]})", harness.CLI[h], CLI_INSTALL[h])

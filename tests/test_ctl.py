@@ -10,6 +10,12 @@ from pengupool import ctl, harness, model
 PI_SID = "0192f7a1-1111-7000-8000-000000000001"
 
 
+@pytest.fixture
+def pi_wired():
+    harness.pi_extension().parent.mkdir(parents=True, exist_ok=True)
+    harness.pi_extension().write_text("// installed\n")
+
+
 def test_group_set_and_clear(tmp_path, monkeypatch):
     monkeypatch.setattr(model, "GROUPS", tmp_path / "groups.json")
     monkeypatch.setattr(ctl.profiles, "caller", lambda: "")  # the user, from the editor
@@ -137,7 +143,7 @@ def test_new_starts_and_prints_view(monkeypatch, capsys):
     assert capsys.readouterr().out.strip() == "VIEW %9"
 
 
-def test_new_starts_the_selected_harness(monkeypatch, capsys):
+def test_new_starts_the_selected_harness(monkeypatch, capsys, pi_wired):
     monkeypatch.setattr("pengupool.tmux.worktree_add", lambda d, n: "/wt")
     calls = []
     monkeypatch.setattr("pengupool.tmux.new_window", lambda cwd, name, h: calls.append((cwd, name, h)) or "%9")
@@ -146,6 +152,19 @@ def test_new_starts_the_selected_harness(monkeypatch, capsys):
     assert calls == [("/wt", "x", "pi")]
     out = json.loads(capsys.readouterr().out)
     assert out["command"] == "VIEW %9 editor-1 pi" and out["harness"] == "pi"
+
+
+def test_new_and_resume_refuse_omp_without_the_pengupool_extension(monkeypatch, capsys):
+    """Unwired omp would run, never register, and leave a 'waiting' pi-pane-N card that cannot be grouped."""
+    monkeypatch.setattr("pengupool.tmux.new_window", lambda *a: pytest.fail("must not start anything"))
+    monkeypatch.setattr("pengupool.tmux.resume_window", lambda *a: pytest.fail("must not start anything"))
+    monkeypatch.setattr(model, "load_registry", lambda: {})
+    monkeypatch.setattr(model, "load_sessions", lambda: [])
+    monkeypatch.setattr(model, "harness_of_past", lambda sid, d: "pi")
+    monkeypatch.setattr("pengupool.tmux.pane_resuming", lambda sid, h: "")
+    assert ctl.main(["new", "/dir", "x", "editor-1", "pi", "folder"]) == 1
+    assert ctl.main(["resume", "/repo", "worker", PI_SID]) == 1
+    assert capsys.readouterr().err.count("pengupool setup pi") == 2
 
 
 def test_new_rejects_an_unknown_harness(monkeypatch, capsys):
@@ -212,7 +231,7 @@ def test_pane_resuming_matches_the_pi_cli(monkeypatch):
     assert tmux.pane_resuming("abcdef12-0000", "pi") == "%9"
 
 
-def test_resume_detects_a_past_pi_session(tmp_path, monkeypatch, capsys):
+def test_resume_detects_a_past_pi_session(tmp_path, monkeypatch, capsys, pi_wired):
     monkeypatch.setattr(model, "load_registry", lambda: {})
     monkeypatch.setattr(model, "load_sessions", lambda: [])
     d = harness.pi_dir("/repo")

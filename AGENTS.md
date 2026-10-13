@@ -18,6 +18,6 @@ Notes for agent sessions. The contributor-facing rules are in
   area and ship one PR with a test for each fix. A string of ten-line PRs costs a review round each and
   reads worse.
 - Run the checks the change needs before pushing: `make test` runs both suites (`uv run pytest -q`, and
-  `make ext-test` for `extension/`). A fresh clone or git worktree has no `extension/node_modules`, so run
-  `make ext-deps` once first, or the extension tests fail with `Cannot find module 'typescript'`.
+  `make ext-test` for `extension/`). A fresh clone or git worktree has no `extension/node_modules`; the
+  extension targets run `npm ci` for it on first use, and `make ext-deps` refreshes it after a lockfile change.
 - Leave unrelated edits out of the diff, so a reviewer sees one intent.

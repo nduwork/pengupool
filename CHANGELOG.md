@@ -25,6 +25,13 @@ All notable changes to this project are documented here. The format follows
 - Shift+Enter adds a new line in the pi terminal too, instead of sending the prompt.
 - The Agent pool drawer counts sessions of both harnesses. Quick Switch names the harness while both run.
 - Renaming a pi session to "menu" or a blank name is refused. pi-intercom opens its alias dialog for those.
+- `make install` wired only the agent CLIs already on `PATH`, so an omp installed after PenguPool ran without
+  the PenguPool extension or pi-intercom. Its sessions showed as `pi-pane-N` cards, stuck at "waiting", that
+  could not be grouped. A plain install now offers both agent CLIs (y/N; a declined one is skipped), finds
+  omp in `~/.bun/bin` when `make`'s `PATH` lacks it, and installs the pi tracker and skills after setup.
+- Starting or resuming an omp session while omp is not wired into PenguPool is refused, with the command
+  that wires it, instead of leaving a card that nothing can group or message.
+- `make install-all` and the extension targets install `extension/node_modules` themselves on first use.
 
 ## [1.4.0] - 2026-10-12
 

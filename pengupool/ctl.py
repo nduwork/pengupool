@@ -90,6 +90,14 @@ def _emit_view(pane: str, name: str, cwd: str = "", json_output: bool = False,
     return 0
 
 
+def _unwired(h: str) -> bool:
+    if harness.wired(h):
+        return False
+    print("oh-my-pi is not wired into PenguPool: run `pengupool setup pi`, then start the session again",
+          file=sys.stderr)
+    return True
+
+
 def _new(directory: str, name: str, json_output: bool = False, view_id: str = "",
          h: str = "cc", location: str = "worktree") -> int:
     from . import tmux
@@ -97,6 +105,8 @@ def _new(directory: str, name: str, json_output: bool = False, view_id: str = ""
     if location not in ("worktree", "folder"):
         print(f"invalid session location: {location}", file=sys.stderr)
         return 2
+    if _unwired(h):
+        return 1
     if location == "worktree":
         directory = tmux.worktree_add(directory, name) or directory
     pane = tmux.new_window(directory, name, h)
@@ -122,6 +132,8 @@ def _resume(directory: str, name: str, sid: str, json_output: bool = False,
               file=sys.stderr)
         return 2
     h = model.harness_of_past(sid, directory)
+    if _unwired(h):
+        return 1
     # A prior resume may still be starting up, before its lifecycle hook is visible.
     pane = tmux.pane_resuming(sid, h)
     if pane:

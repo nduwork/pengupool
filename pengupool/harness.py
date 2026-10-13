@@ -30,6 +30,16 @@ PI = Path(os.environ.get("PI_CODING_AGENT_DIR", Path.home() / ".omp" / "agent"))
 LEGACY_PI = Path.home() / ".pi" / "agent"
 
 
+def pi_extension() -> Path:
+    return PI / "extensions" / "pengupool.ts"
+
+
+def wired(h: str) -> bool:
+    """omp without the PenguPool extension starts fine but never registers itself, so its card stays a
+    'waiting' pane placeholder that nothing can group or message (`pengupool setup pi` installs it)."""
+    return h != "pi" or pi_extension().is_file()
+
+
 def check(h: str) -> str:
     """Validate a harness name from argv or JSON; raise so ctl reports it instead of guessing."""
     if h not in HARNESSES:
