@@ -1,6 +1,9 @@
 """`pengupool setup/teardown`: nothing system-wide is installed without a yes, and each harness gets
 its own wiring (Claude hooks / pi-intercom + the PenguPool pi extension)."""
+import json
+import os
 import subprocess
+import time
 
 import pytest
 
@@ -132,3 +135,43 @@ def test_check_flags_an_omp_that_cannot_start(env, monkeypatch, capsys):
                         if cmd[-1] == "--version" else real(cmd, **k))
     assert install.main(["setup", "--check", "pi"]) == 1
     assert "bun upgrade" in capsys.readouterr().out
+
+
+def _live_pi(tmp_path, monkeypatch, name: str, started_at: float) -> None:
+    """A live pi session file, as the pi extension writes it, for a process that is really running."""
+    from pengupool import model
+    monkeypatch.setattr(model, "CLAUDE", tmp_path / "claude")     # never read the real Claude sessions
+    model.PI_LIVE.mkdir(parents=True, exist_ok=True)
+    (model.PI_LIVE / f"{os.getpid()}.json").write_text(json.dumps(
+        {"pid": os.getpid(), "kind": "interactive", "status": "idle", "startedAt": started_at,
+         "sessionId": "01a133da-0000-0000-0000-000000000000", "cwd": str(tmp_path), "name": name,
+         "sessionFile": str(tmp_path / "s.jsonl"), "updatedAt": started_at}))
+
+
+def test_setup_names_the_session_it_upgraded_out_from_under(env, tmp_path, monkeypatch, capsys):
+    """omp imports the extension once, at process startup: a session alive when setup wrote a new one
+    still runs the code it loaded, so `/new` there silently starts a session outside the tree. setup
+    says which sessions those are and how to pick the new extension up — before that, nothing did."""
+    _live_pi(tmp_path, monkeypatch, "live", started_at=time.time() * 1000 - 1000)
+    assert install.main(["setup", "pi"]) == 0
+    out = capsys.readouterr().out
+    assert "live still runs the extension loaded at startup" in out and "Shift+R" in out
+
+
+def test_a_session_started_after_the_change_needs_no_restart(env, tmp_path, monkeypatch, capsys):
+    install.main(["setup", "pi"])
+    _live_pi(tmp_path, monkeypatch, "fresh", started_at=install._pi_extension().stat().st_mtime * 1000 + 60_000)
+    capsys.readouterr()
+    install.main(["setup", "--check", "pi"])
+    assert "Shift+R" not in capsys.readouterr().out
+
+
+def test_setting_up_again_leaves_an_unchanged_extension_alone(env, capsys):
+    """Its mtime has to mean 'last change', not 'last run': otherwise every setup would make every
+    running session look like it missed an update."""
+    install.main(["setup", "pi"])
+    before = install._pi_extension().stat().st_mtime_ns
+    capsys.readouterr()
+    assert install.main(["setup", "pi"]) == 0
+    assert "already current" in capsys.readouterr().out
+    assert install._pi_extension().stat().st_mtime_ns == before

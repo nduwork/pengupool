@@ -5,6 +5,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- `/new` in a pi session started before a PenguPool update silently dropped the session's group and role:
+  omp imports an extension once, at process startup, so that session still ran the previous one — the one
+  without `ctl carry`. `pengupool setup` now names the running pi sessions that need a restart (`Shift+R`) to
+  pick the new extension up, and rewrites the extension only when its content changed, so a plain setup run
+  is never mistaken for an update.
+
 ## [1.4.0] - 2026-10-12
 
 ### Added
