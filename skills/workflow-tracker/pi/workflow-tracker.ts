@@ -26,8 +26,9 @@ function sessionIdOf(ctx: any): string {
 }
 
 // A subagent (omp runs this extension for each, in the session's process) or a one-shot run is not the
-// session: its own id has no chain, so the nudge would have it `steps.sh set` — and its shell keys the
-// session's tracker (omp refreshes the spawn env only for the main agent), overwriting the session's chain.
+// session. Its own id has no chain, so the nudge would have it run `steps.sh set`, and its shell keys the
+// session's tracker (omp refreshes the spawn env only for the main agent), so that overwrites the session's chain.
+// The same rule as `pooled` in pengupool/pi_extension.ts: the two extensions load apart, so keep them in step.
 const ownSession = (ctx: any): boolean => ctx?.agent?.kind !== "sub" && ctx?.mode !== "print" && ctx?.mode !== "json"
 
 export default function (pi: ExtensionAPI) {

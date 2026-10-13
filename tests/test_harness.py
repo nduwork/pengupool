@@ -262,13 +262,12 @@ def test_sessions_from_plain_pi_still_resume_under_omp(tmp_path, monkeypatch):
 def test_a_shared_omp_folder_lists_and_restores_each_cwd_on_its_own(tmp_path, monkeypatch):
     """omp names ~/a-b and ~/a/b's folder alike: each cwd's sessions are its own, in its own cwd."""
     monkeypatch.setattr(model, "CLAUDE", tmp_path / "claude")
+    monkeypatch.setenv("HOME", str(tmp_path))
     one, two = tmp_path / "a-b", tmp_path / "a" / "b"
     one.mkdir(), two.mkdir(parents=True)
-    shared = tmp_path / "root" / "sessions" / "-a-b"
+    shared = harness.pi_dir(str(one))
+    assert harness.pi_dir(str(two)) == shared                 # the collision itself
     shared.mkdir(parents=True)
-    monkeypatch.setattr(harness, "pi_roots", lambda: [tmp_path / "root"])
-    monkeypatch.setattr(harness, "pi_dirs", lambda cwd: [shared])
-    monkeypatch.setattr(harness, "pi_transcript", lambda cwd, sid: next(shared.glob(f"*_{sid}.jsonl"), None))
     other = "0192f7a1-2222-7000-8000-000000000002"
     for name, sid, cwd in (("2026-10-12T10-00-00-000Z", SID, one), ("2026-10-12T11-00-00-000Z", other, two)):
         (shared / f"{name}_{sid}.jsonl").write_text(j({"type": "session", "id": sid, "cwd": str(cwd)}) + "\n")

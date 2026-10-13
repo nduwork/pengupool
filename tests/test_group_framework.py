@@ -442,7 +442,7 @@ def test_authorize_checks_the_session_whose_process_tree_asks(monkeypatch, capsy
     assert ctl.main(["authorize", E, "other"]) == 3          # forged as the solo E: still checked as D
     assert ctl.main(["authorize", "", "other"]) == 3         # the env var unset: same
     monkeypatch.setattr(ctl.profiles, "caller", lambda: B)   # B is a grouped Claude session
-    assert ctl.main(["authorize", "", "f" * 8]) == 3 and "SendMessage" in capsys.readouterr().err
+    assert ctl.main(["authorize", "", "f" * 8]) == 3 and "outside your tree" in capsys.readouterr().err
     monkeypatch.setattr(ctl.profiles, "caller", lambda: E)   # an ungrouped one stays unmanaged
     assert ctl.main(["authorize", "", "f" * 8]) == 0
     monkeypatch.setattr(ctl.profiles, "caller", lambda: "")  # outside any session: the extension's word

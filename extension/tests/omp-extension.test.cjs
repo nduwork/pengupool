@@ -214,7 +214,8 @@ test('contact_supervisor is checked against the session id and the target its en
   await x.handlers.session_start({ type: 'session_start' }, x.ctx);
   const r = await x.handlers.tool_call({ toolName: 'contact_supervisor', input: { reason: 'need_decision' } }, x.ctx);
   assert.equal(r.block, true);
-  assert.deepEqual([...x.calls.at(-1)], ['ctl', 'authorize', 'sid-1', 'boss-id']);
+  assert.equal(JSON.stringify(x.calls.slice(-2)), JSON.stringify([['ctl', 'authorize', 'sid-1', 'boss-id'],
+                                                                ['ctl', 'authorize', 'sid-1', 'boss']]));
   const quiet = load({});   // no supervisor named: nothing to deliver to, nothing to check
   await quiet.handlers.tool_call({ toolName: 'contact_supervisor', input: {} }, quiet.ctx);
   assert.equal(quiet.calls.length, 0);

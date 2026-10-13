@@ -764,7 +764,7 @@ ${HARNESS_TABS_HTML}
   function poolRow(cls, name, title){ const row = hel('div', { class:cls, title }); const nm = hel('span', { class:'nm' });
     nm.textContent = name; row.appendChild(nm); return row; }
   // Sessions on the map whose folder is one of dirs (a repo's main checkout or a worktree).
-  function liveIn(dirs){ return last ? (last.everyone || flat(last.roots)).filter(n => n.cwd && dirs.some(d => n.cwd===d || n.cwd.startsWith(d+'/'))) : []; }
+  function liveIn(dirs){ return last ? last.everyone.filter(n => n.cwd && dirs.some(d => n.cwd===d || n.cwd.startsWith(d+'/'))) : []; }
   function liveButton(nodes){ const b = hel('button', { class:'live', title:'Running here: '+nodes.map(n => n.name).join(', ') });
     b.textContent = '● '+nodes.length;
     b.addEventListener('click', ev => { ev.stopPropagation();   // light their cards for a moment

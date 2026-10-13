@@ -19,6 +19,7 @@ export interface SessionNode {
   tmux_pane: string;   // "" unless the session is hosted in a tmux pane (started by PenguPool)
   harness?: Harness;   // absent from older backends, meaning "cc"
   summary?: string;    // one-line role from the session's profile ('' or absent = role not set)
+  pending?: true;      // a pane whose agent has written no session yet: shares its pane and cwd, not its id
   children: SessionNode[];
 }
 

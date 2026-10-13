@@ -214,7 +214,7 @@ test('a child that is still a starting pane card is grouped once its session sho
     const h = harness();
     await h.manager.newSession('/repo', 'worker', harnessName, true, 'lead');
     const real = { ...node, ...(harnessName === 'pi' ? { harness: 'pi' } : {}) };
-    h.manager.reconcile([{ ...real, id: card }]);   // serve's card: same pane and cwd, no session yet
+    h.manager.reconcile([{ ...real, id: card, pending: true }]);   // serve's card: same pane and cwd, no session yet
     assert.ok(!h.requests.some((args) => args[0] === 'group'), `${harnessName}: the card is not the session`);
     h.manager.reconcile([real]);
     assert.equal(JSON.stringify(h.requests.filter((args) => args[0] === 'group')), '[["group","sid","lead"]]');

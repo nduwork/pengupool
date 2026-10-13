@@ -3,10 +3,6 @@ import { Harness, SessionNode } from './serveClient';
 import { flatten } from './harness';
 import { runCtl } from './util';
 
-/** serve's card for a pane whose agent has written no session yet (`pane-3`, `pi-pane-3`, tmux.pending_id):
- *  it shares the new session's pane and cwd, but is not the session to group or follow. */
-const started = (node: SessionNode): boolean => !/^(?:\w+-)?pane-\d+$/.test(node.id);
-
 const LEGACY_STATE_KEY = 'pengupool.attachedTerminals';
 
 const LAST_SESSION_KEY = 'pengupool.lastSession';   // the session this window last opened
@@ -101,8 +97,10 @@ export class TerminalManager implements vscode.Disposable {
       for (const terminal of vscode.window.terminals) { this.removeLegacyTerminal(terminal, names); }
       this.legacyNames.clear();
     }
+    // a pending card shares the new session's pane and cwd, but is not the session to group or follow
+    const started = flatten(roots).filter((node) => !node.pending);
     this.placements = this.placements.filter(({ match, parent }) => {
-      const hit = flatten(roots).filter(started).find(match);
+      const hit = started.find(match);
       if (hit) {
         void runCtl(['group', hit.id, parent]).then((r) => {
           if (r.code !== 0) { vscode.window.showErrorMessage(`PenguPool: ${r.stderr || 'could not group the new session'}`); }
@@ -113,7 +111,7 @@ export class TerminalManager implements vscode.Disposable {
     for (const [harness, slot] of this.slots) {
       if (!slot.pending) { continue; }
       // pane ids are per tmux server: a cc %3 and a pi %3 are different panes
-      const hit = flatten(roots).filter(started).find((node) => (node.harness ?? 'cc') === harness &&
+      const hit = started.find((node) => (node.harness ?? 'cc') === harness &&
         node.tmux_pane === slot.pending?.pane && node.cwd === slot.pending?.cwd,
       );
       if (hit) {

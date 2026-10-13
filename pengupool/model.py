@@ -49,6 +49,7 @@ class Node:
     ctx_pct: float | None = None  # Claude status-line % of context used (None = unavailable)
     harness: str = "cc"  # "cc" | "pi" (see harness.py)
     summary: str = ""  # one-line role from the session's profile ('' = role not set)
+    pending: bool = False  # serve's card for a pane whose agent has no session yet
 
     @property
     def repo(self) -> str:
@@ -155,11 +156,18 @@ class ProcTable:
         return row[0] if row else 0
 
 
+def _lstart(s: str) -> time.struct_time | None:
+    """'Fri Sep  18 00:39:01 2026' (`ps lstart`, procStart) → its fields, or None."""
+    try:
+        return time.strptime(" ".join(str(s).split()), "%a %b %d %H:%M:%S %Y")
+    except ValueError:
+        return None
+
+
 def _start_epoch(s: str, utc: bool) -> float:
     """'Fri Sep 18 00:39:01 2026' → epoch. Claude writes procStart in UTC; `ps lstart` is local time."""
-    try:
-        t = time.strptime(" ".join(str(s).split()), "%a %b %d %H:%M:%S %Y")
-    except ValueError:
+    t = _lstart(s)
+    if t is None:
         return 0.0
     import calendar
     return float(calendar.timegm(t)) if utc else time.mktime(t)
@@ -168,9 +176,8 @@ def _start_epoch(s: str, utc: bool) -> float:
 def _local_epochs(s: str) -> list[float]:
     """`ps lstart` local time → every epoch it can be: two in the hour a DST fall-back repeats, where
     mktime alone picks the first and a process started in the second would read as a recycled pid."""
-    try:
-        t = time.strptime(" ".join(str(s).split()), "%a %b %d %H:%M:%S %Y")
-    except ValueError:
+    t = _lstart(s)
+    if t is None:
         return []
     out = set()
     for dst in (0, 1):
@@ -638,14 +645,14 @@ def past_sessions(cwd: str, limit: int = 20) -> list[tuple[str, str, str]]:
             return 0.0
     files = [(f, "cc") for d in _cc_dirs(cwd) for f in d.glob("*.jsonl")] + \
             [(f, "pi") for d in harness.pi_dirs(cwd) for f in d.glob("*_*.jsonl")]
-    out = []
+    out, real = [], os.path.realpath(cwd)
     for f, h in sorted(files, key=lambda fh: mtime(fh[0]), reverse=True):
         if len(out) >= limit:
             break
         if h == "cc" and _cc_cwd(f) not in (cwd, None):  # foo_bar and foo-bar share one Claude folder
             continue
         # ~/a-b and ~/a/b share one omp folder; omp names it after the resolved path (/tmp → /private/tmp)
-        if h == "pi" and (fc := _cc_cwd(f)) is not None and os.path.realpath(fc) != os.path.realpath(cwd):
+        if h == "pi" and (fc := _cc_cwd(f)) is not None and os.path.realpath(fc) != real:
             continue
         sid = f.stem if h == "cc" else f.stem.split("_", 1)[1]
         title, first = "", ""
@@ -684,8 +691,9 @@ def _transcript_cwds(d: Path, window: float) -> list[str]:
     turned back into a cwd, and two cwds can share one (Claude's foo_bar and foo-bar, omp's ~/a-b and
     ~/a/b), so each file's head says. Claude writes cwd on every line, pi on the header."""
     out: list[str] = []
-    for f in sorted(d.glob("*.jsonl"), key=_mtime, reverse=True)[:PAST_PER_DIR * 4]:
-        if time.time() - _mtime(f) > window:
+    recent = sorted(((_mtime(f), f) for f in d.glob("*.jsonl")), reverse=True)[:PAST_PER_DIR * 4]
+    for m, f in recent:
+        if time.time() - m > window:
             break
         cwd = _cc_cwd(f)  # a hostile or half-written transcript reads as None
         if cwd and cwd not in out:
@@ -699,8 +707,8 @@ def _transcript_dirs(window: float) -> list[tuple[str, str]]:
     dirs = [(d, "pi") for root in harness.pi_roots() for d in (root / "sessions").glob("*")] + \
            [(d, "cc") for d in (CLAUDE / "projects").glob("*")]
     for d, h in dirs:
-        if not d.is_dir() or time.time() - max((_mtime(f) for f in d.glob("*.jsonl")), default=0.0) > window:
-            continue
+        if not d.is_dir():
+            continue   # a folder with nothing inside the window yields no cwd
         found += [(cwd, h) for cwd in _transcript_cwds(d, window)]
     return found
 

@@ -435,9 +435,9 @@ def _slash(sid: str, what: str, name: str = "") -> int:
         text = "/compact"
     elif what == "clear" and not name:  # the new id keeps its group and role: Claude's SessionStart hook,
         text = harness.CLEAR[h]          # pi's extension through `ctl carry`
-    elif what == "rename" and h == "pi" and name.strip().casefold() in ("", "menu"):  # `/alias` opens a dialog
-        print("pi-intercom reads a blank name or \"menu\" as a request for its /alias dialog: pick another name",
-              file=sys.stderr)
+    elif what == "rename" and name.strip().casefold() in harness.RENAME_RESERVED[h]:
+        print(f"{harness.RENAME[h]} reads {name.strip() or 'a blank name'!r} as a request for its dialog: "
+              "pick another name", file=sys.stderr)
         return 2
     elif what == "rename" and re.fullmatch(r"[^\x00-\x1f\x7f]{1,80}", name):  # one printable line
         text = f"{harness.RENAME[h]} {name}"
@@ -545,12 +545,8 @@ def _authorize(sid: str, recipient: str) -> int:
         sid = profiles.caller() or sid
     except PermissionError:  # inside a session it cannot place: keep the extension's word for it
         pass
-    t = routing.settled_tree()  # a fault exits 1: the send goes unchecked
-    if t.harness.get(sid) == "cc" and routing.adjacent(t, sid):  # pi-intercom reaches only pi sessions
-        print("PenguPool: a grouped Claude Code session messages its own tree with SendMessage, not through "
-              "an omp run's pi-intercom", file=sys.stderr)
-        return 3
-    ok, reason = routing.authorize_send(sid, recipient, t)
+    # only the pi extension calls this, so the message travels by pi-intercom, whoever the sender is
+    ok, reason = routing.authorize_send(sid, recipient, routing.settled_tree(), channel="pi")  # a fault exits 1
     if not ok:
         print(reason, file=sys.stderr)
     return 0 if ok else 3

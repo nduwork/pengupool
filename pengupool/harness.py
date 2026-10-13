@@ -20,6 +20,8 @@ SOCK = {"cc": "pengupool", "pi": "pengupool-pi"}  # one tmux sessions server (-L
 TOOL = {"cc": "SendMessage", "pi": "the intercom tool (action send or ask)"}
 # slash command that renames a live session; pi-intercom's /alias sets the name intercom addresses
 RENAME = {"cc": "/rename", "pi": "/alias"}
+# names the rename command reads as something else: pi-intercom's `/alias`, `/alias menu` open its dialog
+RENAME_RESERVED = {"cc": (), "pi": ("", "menu")}
 # slash command that restarts a live session's conversation under a new id, in the same process
 CLEAR = {"cc": "/clear", "pi": "/new"}
 

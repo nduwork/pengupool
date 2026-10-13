@@ -12,8 +12,8 @@ All notable changes to this project are documented here. The format follows
   name. A one-shot `omp -p` run is checked as the session whose process tree it runs in, whatever
   `PENGUPOOL_SESSION` it was started with, and `contact_supervisor` is checked like `send`.
 - A pi subagent no longer gets the workflow-tracker nudge, which could make it overwrite its session's chain.
-- `ctl past` and **Run all** kept the sessions of two cwds omp files in one folder (`~/a-b`, `~/a/b`) apart
-  wrongly: one cwd listed the other's, and restore reopened them in the wrong folder.
+- omp files the sessions of `~/a-b` and `~/a/b` in one folder. `ctl past` listed one cwd's sessions under the
+  other, and **Run all** reopened them in the wrong folder.
 - A cwd under macOS's `$TMPDIR` given by its canonical path (`/private/var/…`) now finds its omp sessions.
 - The Log missed a pi-intercom message whenever the sender's own transcript was not read (a subagent, a
   one-shot run, a session that had exited). It also hid every message to or from a closed session while
@@ -24,7 +24,7 @@ All notable changes to this project are documented here. The format follows
 - A child started from a parent's menu landed at the top level when its agent took a moment to start.
 - Shift+Enter adds a new line in the pi terminal too, instead of sending the prompt.
 - The Agent pool drawer counts sessions of both harnesses. Quick Switch names the harness while both run.
-- Renaming a pi session to "menu" or a blank name is refused (pi-intercom opens its alias dialog for those).
+- Renaming a pi session to "menu" or a blank name is refused. pi-intercom opens its alias dialog for those.
 
 ## [1.4.0] - 2026-10-12
 

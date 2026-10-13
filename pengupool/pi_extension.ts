@@ -107,6 +107,7 @@ const pollName = () => {
 export default function (pi: ExtensionAPI) {
   // A pool session is the top-level session of an interactive run (omp's tui or rpc mode): not a
   // subagent, and not a one-shot print or json run, which ends with its answer.
+  // skills/workflow-tracker/pi/workflow-tracker.ts keeps the same rule as `ownSession`
   const pooled = (ctx: AgentCtx) => ctx.agent?.kind !== "sub" && ctx.mode !== "print" && ctx.mode !== "json"
   const saveContext = (ctx: AgentCtx) => {
     const pct = ctx.getContextUsage?.()?.percent
@@ -187,11 +188,11 @@ export default function (pi: ExtensionAPI) {
       targets = [process.env.PI_SUBAGENT_ORCHESTRATOR_SESSION_ID, process.env.PI_SUBAGENT_ORCHESTRATOR_TARGET]
         .map((t) => String(t || "").trim()).filter(Boolean)
     } else return
-    for (const to of targets) {
-      const r = await run(["ctl", "authorize", String(live.sessionId || STARTED_BY), to])
-      // only a checked refusal (exit 3) blocks: a PenguPool fault or timeout never cuts sessions off
-      if (r.code === 3) return { block: true, reason: r.err }
-    }
+    const sender = String(live.sessionId || STARTED_BY)
+    const checks = await Promise.all(targets.map((to) => run(["ctl", "authorize", sender, to])))
+    // only a checked refusal (exit 3) blocks: a PenguPool fault or timeout never cuts sessions off
+    const refused = checks.find((r) => r.code === 3)
+    if (refused) return { block: true, reason: refused.err }
   })
   // omp gives no shutdown reason; after /new, /resume or a fork branch the rebind writes it again.
   // A subagent's session ending is not this process's session ending.
