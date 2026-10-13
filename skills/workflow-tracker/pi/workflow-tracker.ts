@@ -25,12 +25,18 @@ function sessionIdOf(ctx: any): string {
   try { return String(ctx?.sessionManager?.getSessionId?.() || "") } catch { return "" }
 }
 
+// A subagent (omp runs this extension for each, in the session's process) or a one-shot run is not the
+// session: its own id has no chain, so the nudge would have it `steps.sh set` — and its shell keys the
+// session's tracker (omp refreshes the spawn env only for the main agent), overwriting the session's chain.
+const ownSession = (ctx: any): boolean => ctx?.agent?.kind !== "sub" && ctx?.mode !== "print" && ctx?.mode !== "json"
+
 export default function (pi: ExtensionAPI) {
   // omp keeps the process and swaps the session under it on /new, /resume, /fork (`session_switch`) and
   // on a fork branch (`session_branch`); it captures the env its tools spawn with right after those
   // events. Setting the key only before a prompt would be too late for that capture, and the session's
   // own steps.sh calls would keep keying the previous session's tracker.
   const bind = (ctx: unknown): string => {
+    if (!ownSession(ctx)) return ""
     const sessionId = sessionIdOf(ctx)
     if (sessionId) process.env.STEP_STATUS_SESSION = sessionId
     return sessionId
@@ -39,6 +45,7 @@ export default function (pi: ExtensionAPI) {
   pi.on("session_switch", async (_event, ctx) => { bind(ctx) })
   pi.on("session_branch", async (_event, ctx) => { bind(ctx) })
   pi.on("before_agent_start", async (event, ctx) => {
+    if (!ownSession(ctx)) return
     const sessionId = bind(ctx)
     const line = await sh("hook_prompt.sh", [], ctx.cwd, JSON.stringify({ cwd: ctx.cwd, session_id: sessionId }))
     if (!line) return

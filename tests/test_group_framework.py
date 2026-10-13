@@ -431,3 +431,30 @@ def test_a_pi_target_checks_as_the_session_pi_intercom_delivers_to():
     ok, why = routing.authorize_send(Q, P[:8], t)
     assert not ok and "1234abcd is not adjacent" in why
     assert routing.authorize_send(R, "anything", t) == (True, "")            # ungrouped: unmanaged
+
+
+def test_authorize_checks_the_session_whose_process_tree_asks(monkeypatch, capsys):
+    """`ctl authorize` names its sender, but an `omp -p` run can be started with any PENGUPOOL_SESSION:
+    the session the call runs under wins, and a grouped Claude session cannot reach pi through omp."""
+    t = _tree()
+    monkeypatch.setattr(routing, "settled_tree", lambda: t)
+    monkeypatch.setattr(ctl.profiles, "caller", lambda: D)
+    assert ctl.main(["authorize", E, "other"]) == 3          # forged as the solo E: still checked as D
+    assert ctl.main(["authorize", "", "other"]) == 3         # the env var unset: same
+    monkeypatch.setattr(ctl.profiles, "caller", lambda: B)   # B is a grouped Claude session
+    assert ctl.main(["authorize", "", "f" * 8]) == 3 and "SendMessage" in capsys.readouterr().err
+    monkeypatch.setattr(ctl.profiles, "caller", lambda: E)   # an ungrouped one stays unmanaged
+    assert ctl.main(["authorize", "", "f" * 8]) == 0
+    monkeypatch.setattr(ctl.profiles, "caller", lambda: "")  # outside any session: the extension's word
+    assert ctl.main(["authorize", D, "lead"]) == 3 and ctl.main(["authorize", E, "lead"]) == 0
+
+
+def test_a_tilde_in_a_pi_alias_is_part_of_the_name():
+    """The pool marks a namesake as name~pid; pi-intercom matches a "foo~bar" alias whole, so "foo"
+    must not check as it (intercom would hand "foo" on to whichever session is called that)."""
+    P, Q, R = "1234abcd-0000", "5678abcd-0000", "9999abcd-0000"
+    t = routing.Tree(parent={P: None, Q: P, R: None}, children={P: [Q], Q: [], R: []},
+                     name={P: "foo~bar", Q: "kid", R: "kid~4242"}, harness={P: "pi", Q: "pi", R: "pi"})
+    assert not routing.authorize_send(Q, "foo", t)[0]
+    assert routing.authorize_send(Q, "foo~bar", t) == (True, "")
+    assert routing.resolve(t, Q, "kid") == {Q, R}             # the pool's own ~pid mark still drops

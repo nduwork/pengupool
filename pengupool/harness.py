@@ -98,7 +98,9 @@ def pi_dir_names(cwd: str) -> list[str]:
     under $HOME is `-<relative>`, anything else is `--<absolute>--`; last comes the `--<absolute>--`
     name omp migrates away from, which an install it has not migrated yet still holds. Mirrors omp's
     getDefaultSessionDirName (`src/session/session-paths.ts`, omp 18.10)."""
-    home, temp = _inside(cwd, os.path.expanduser("~")), _inside(cwd, _tmp_root())
+    # omp compares against the canonical roots: macOS's $TMPDIR /var/folders/… is /private/var/folders/…
+    home = _inside(cwd, os.path.realpath(os.path.expanduser("~")))
+    temp = _inside(cwd, os.path.realpath(_tmp_root()))
     names: list[str] = []
     if temp is not None:
         names.append(_rel_dir_name("-tmp", temp))

@@ -68,8 +68,8 @@ def resolve(t: Tree, sender: str, recipient: str) -> set[str]:
     h = t.harness.get(sender)
     same = [s for s in t.name if t.harness[s] == h]
 
-    def by_name(r: str) -> set[str]:
-        return {s for s in same if t.name[s].split("~")[0].strip().casefold() == r.casefold()}
+    def by_name(r: str) -> set[str]:  # drop only the pool's own `~<pid>` mark: "foo~bar" is a name
+        return {s for s in same if re.sub(r"~\d+$", "", t.name[s]).strip().casefold() == r.casefold()}
     if h == "pi":
         # pi-intercom's own order (resolveSessionTarget): exact id, then name, then id prefix; it strips
         # no "[ref]", so neither does this, or a name could check as one session and deliver to another
@@ -178,7 +178,10 @@ def authorize_send(sender: str, recipient: str, t: Tree | None = None) -> tuple[
     A name that is no live Claude session (a teammate, a typo) is left to Claude. pi-intercom reaches
     only sessions, and more of them than the pool can name (a short id prefix, the alias it gives an
     unnamed session, a peer outside PenguPool), so for pi a target the pool cannot resolve is refused.
-    A session the user tagged with @name in the current prompt is reachable directly (see grant)."""
+    A session the user tagged with @name in the current prompt is reachable directly (see grant).
+    pi-intercom's `reply` is not checked: it goes only to whoever messaged the session, and a grouped
+    sender's message was checked where it was sent. An ungrouped sender is not managed, so a grouped
+    session can answer one from outside its tree; closing that means gating delivery, not replies."""
     t = t or live_tree()
     if sender not in t.parent or not adjacent(t, sender):
         return True, ""

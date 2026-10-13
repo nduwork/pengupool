@@ -294,3 +294,14 @@ def test_a_process_started_in_the_repeated_dst_hour_is_alive(monkeypatch):
     finally:
         monkeypatch.delenv("TZ")
         time.tzset()
+
+
+def test_a_canonical_cwd_under_a_symlinked_temp_root_is_still_tmp(tmp_path, monkeypatch):
+    """macOS's $TMPDIR is /var/folders/…, which is /private/var/folders/…: omp compares the canonical
+    root, so a cwd given canonically sits under it too."""
+    real = tmp_path / "real-tmp"
+    (real / "proj").mkdir(parents=True)
+    (tmp_path / "tmp-link").symlink_to(real, target_is_directory=True)
+    monkeypatch.setenv("TMPDIR", str(tmp_path / "tmp-link"))
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    assert harness.pi_dir_names(str(real / "proj"))[0] == "-tmp-proj"

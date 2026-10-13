@@ -539,7 +539,18 @@ def _route(sid: str, target: str) -> int:
 
 
 def _authorize(sid: str, recipient: str) -> int:
-    ok, reason = routing.authorize_send(sid, recipient, routing.settled_tree())  # a fault exits 1: unchecked
+    # The sender is the session whose process tree this runs in, when there is one: the pi extension's
+    # `sid` for a one-shot run comes from an env var the agent that started it could unset or rewrite.
+    try:
+        sid = profiles.caller() or sid
+    except PermissionError:  # inside a session it cannot place: keep the extension's word for it
+        pass
+    t = routing.settled_tree()  # a fault exits 1: the send goes unchecked
+    if t.harness.get(sid) == "cc" and routing.adjacent(t, sid):  # pi-intercom reaches only pi sessions
+        print("PenguPool: a grouped Claude Code session messages its own tree with SendMessage, not through "
+              "an omp run's pi-intercom", file=sys.stderr)
+        return 3
+    ok, reason = routing.authorize_send(sid, recipient, t)
     if not ok:
         print(reason, file=sys.stderr)
     return 0 if ok else 3
