@@ -20,6 +20,8 @@ SOCK = {"cc": "pengupool", "pi": "pengupool-pi"}  # one tmux sessions server (-L
 TOOL = {"cc": "SendMessage", "pi": "the intercom tool (action send or ask)"}
 # slash command that renames a live session; pi-intercom's /alias sets the name intercom addresses
 RENAME = {"cc": "/rename", "pi": "/alias"}
+# slash command that restarts a live session's conversation under a new id, in the same process
+CLEAR = {"cc": "/clear", "pi": "/new"}
 
 PI = Path(os.environ.get("PI_CODING_AGENT_DIR", Path.home() / ".omp" / "agent"))
 # plain pi's dir, where sessions started before 1.3.0 keep their transcripts; omp resumes them by path

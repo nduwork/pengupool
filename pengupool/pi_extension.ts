@@ -13,7 +13,9 @@
 //    applies)
 //  - omp has no --name flag: `ctl new` passes the name in PENGUPOOL_SESSION_NAME and the first start sets it
 //  - a process that comes to host another session (`/new`, `/resume`, `/fork`, a fork branch) is rebound
-//    from scratch — live file, profile, registry line, env — so the pool never points at the old one
+//    from scratch — live file, profile, registry line, env — so the pool never points at the old one.
+//    `/new` is pi's fresh context, like Claude's /clear: `ctl carry` hands the new id the old one's group
+//    and role, and the new session takes the old one's name
 //  - a subagent (task tool, eval `agent()`, `/tan` clone) runs in the same process, and omp rebinds this
 //    extension to its session too. It is not a pool session: it never takes over the live file, registry,
 //    profile or env, and its end does not remove them. Its intercom sends are checked as the session's own.
@@ -102,16 +104,23 @@ export default function (pi: ExtensionAPI) {
 
   // Everything that follows the session id: the live file PenguPool polls, the cwd→pane registry
   // line and the workspace profile, plus the env var this session's tools inherit so `ctl` knows who
-  // is calling. Runs again for every session the process comes to host.
-  const bind = async (ctx: SessionCtx) => {
+  // is calling. Runs again for every session the process comes to host. `/new` (`reason` "new") is
+  // pi's fresh context, like Claude's /clear: the new id takes over the old one's name, group and role.
+  const bind = async (ctx: SessionCtx, reason = "") => {
     if (!pooled(ctx)) return
     const sessionId = ctx.sessionManager.getSessionId()
     const wanted = process.env.PENGUPOOL_SESSION_NAME
-    delete process.env.PENGUPOOL_SESSION_NAME  // only the session ctl started: a later /new is not named alike
+    delete process.env.PENGUPOOL_SESSION_NAME  // only the session ctl started: one resumed later keeps its own name
     if (wanted && !pi.getSessionName()) pi.setSessionName(wanted)
     process.env.PENGUPOOL_SESSION = sessionId
-    const moved = sessionId !== live.sessionId
+    const previous = String(live.sessionId || "")
+    const moved = sessionId !== previous
     if (moved) await run(["ctl", "register", sessionId, ctx.cwd, "--key-stdin"], `${GRANT_KEY}\n`)  // before the first prompt
+    if (moved && previous && reason === "new") {
+      // both ids are now registered with this process's key, which is what lets ctl move the seat
+      await run(["ctl", "carry", previous, sessionId], `${GRANT_KEY}\n`)
+      if (live.name && !pi.getSessionName()) pi.setSessionName(String(live.name))
+    }
     update({ sessionId, cwd: ctx.cwd, name: pi.getSessionName() || "", sessionFile: ctx.sessionManager.getSessionFile(),
              ...(moved ? { status: "idle" } : {}) })
     if (!moved) return
@@ -128,7 +137,7 @@ export default function (pi: ExtensionAPI) {
   // omp keeps the process and swaps the session under it on /new, /resume, /fork (`session_switch`)
   // and on a branch that forks (`session_branch`): without rebinding there, PenguPool keeps showing
   // the previous session's id, name and context for this pane. omp's own SESSION_IDENTITY_EVENTS.
-  pi.on("session_switch", async (_event, ctx) => { await bind(ctx) })
+  pi.on("session_switch", async (event, ctx) => { await bind(ctx, event.reason) })
   pi.on("session_branch", async (_event, ctx) => { await bind(ctx) })
   // omp sends no session_info_changed, so a rename shows up when the run ends
   pi.on("agent_start", async (_event, ctx) => { if (pooled(ctx)) update({ status: "busy" }) })

@@ -39,8 +39,10 @@ Verbs:
                                   session (used by the pi extension); the prompt's @session tags open a
                                   direct line only when the pi extension's key leads stdin
     slash <sid> compact | clear | rename <name>  type the slash command into the session's own pane (user
-                                  only); clear keeps the session's group and role (Claude Code only)
+                                  only); clear (Claude Code's /clear, pi's /new) keeps the session's group and role
     register <sid> <cwd> [--key-stdin]  create/refresh a session's profile (workspace scan; used by the pi extension)
+    carry <old> <new>             a pi session's /new: hand the old id's group and role to the new id. The
+                                  pi extension's key leads stdin, and must be the one both ids registered
     describe <sid> [--summary S] [--responsibility R] [--keywords "a, b"]
                                   set what a session owns; allowed from the session itself, its parent, or the user
     profile <sid>                 JSON profile of a session (summary, responsibility, workspace, who edited it)
@@ -430,12 +432,12 @@ def _slash(sid: str, what: str, name: str = "") -> int:
     h = harness.of(s)
     if what == "compact" and not name:
         text = "/compact"
-    elif what == "clear" and not name and h == "cc":  # the SessionStart hook keeps its group and role
-        text = "/clear"
+    elif what == "clear" and not name:  # the new id keeps its group and role: Claude's SessionStart hook,
+        text = harness.CLEAR[h]          # pi's extension through `ctl carry`
     elif what == "rename" and re.fullmatch(r"[^\x00-\x1f\x7f]{1,80}", name):  # one printable line
         text = f"{harness.RENAME[h]} {name}"
     else:
-        print("usage: pengupool ctl slash <sid> compact | clear (Claude Code only) | rename <name>", file=sys.stderr)
+        print("usage: pengupool ctl slash <sid> compact | clear | rename <name>", file=sys.stderr)
         return 2
     return 0 if tmux.slash(pane, text, h) else 1
 
@@ -446,6 +448,23 @@ def _register(sid: str, cwd: str, opt: str = "") -> int:
         key = sys.stdin.readline().strip()
         if not routing.register_key(sid, key, os.getppid()):  # ppid: the pi process that holds the key
             print("grant key already held by a live process; @tags will not grant for this caller", file=sys.stderr)
+    return 0
+
+
+def _carry(old: str, new: str) -> int:
+    """pi's /new restarts the conversation under a new id in the same process and pane, like Claude's
+    /clear: move the old id's place in the tree and its role to the new id. Only the pi process that
+    held the old id may: its in-memory key, on stdin, must be the one both ids were registered with, so
+    an agent's shell (which never sees the key) cannot take over another session's seat."""
+    key = sys.stdin.readline().strip()
+    if old == new or not (model._SID.fullmatch(old) and model._SID.fullmatch(new)):
+        print("usage: pengupool ctl carry <old> <new> (the pi extension's key on stdin)", file=sys.stderr)
+        return 2
+    if not (routing.key_ok(old, key) and routing.key_ok(new, key)):
+        print(f"only the pi process that held {old} can hand its place to {new}", file=sys.stderr)
+        return 3
+    model.rekey_groups(old, new)
+    profiles.carry_over(old, new)
     return 0
 
 
@@ -573,6 +592,7 @@ def main(argv: list[str] | None = None) -> int:
         ("slash", 3): lambda: _slash(a[0], a[1], a[2]),
         ("register", 2): lambda: _register(a[0], a[1]),
         ("register", 3): lambda: _register(a[0], a[1], a[2]),
+        ("carry", 2): lambda: _carry(a[0], a[1]),
         ("profile", 1): lambda: _profile(a[0]),
         ("tree", 1): lambda: _tree(a[0]),
         ("route", 2): lambda: _route(a[0], a[1]),

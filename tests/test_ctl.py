@@ -337,8 +337,38 @@ def test_slash_types_into_the_sessions_own_pane_and_only_for_the_user(monkeypatc
     assert ctl.main(["slash", "c1", "compact"]) == 0
     assert ctl.main(["slash", "c1", "rename", "api"]) == 0
     assert ctl.main(["slash", "p1", "rename", "docs"]) == 0
-    assert typed == [("%1", "/compact", "cc"), ("%1", "/rename api", "cc"), ("%2", "/alias docs", "pi")]
+    assert ctl.main(["slash", "c1", "clear"]) == 0
+    assert ctl.main(["slash", "p1", "clear"]) == 0                   # pi's fresh context is /new
+    assert typed == [("%1", "/compact", "cc"), ("%1", "/rename api", "cc"), ("%2", "/alias docs", "pi"),
+                     ("%1", "/clear", "cc"), ("%2", "/new", "pi")]
     assert ctl.main(["slash", "c1", "rename", "a\nsecond prompt"]) == 2  # never a newline into the agent
     monkeypatch.setattr(ctl.profiles, "caller", lambda: "c1")          # from inside a session
     assert ctl.main(["slash", "p1", "compact"]) == 2
-    assert len(typed) == 3
+    assert len(typed) == 5
+
+
+def test_carry_moves_a_pi_seat_only_for_the_process_that_held_it(tmp_path, monkeypatch):
+    """pi's /new: the old id's group and role go to the new id, but only for the pi process whose key both
+    ids were registered with. An agent's shell knows no key, so it cannot take another session's seat."""
+    import io
+    import sys
+    from pengupool import routing
+    old, new, other = "aaaaaaaa-0001", "aaaaaaaa-0002", "aaaaaaaa-0003"
+    monkeypatch.setattr(routing, "KEYS", tmp_path / "keys")
+    monkeypatch.setattr(model, "GROUPS", tmp_path / "groups.json")
+    monkeypatch.setattr(ctl.profiles, "PROFILES", tmp_path / "profiles")
+    monkeypatch.setattr(model, "pid_alive", lambda *a, **k: True)
+    model.save_groups({old: "parent-1", "child-1": old})
+    key = "k" * 48
+    for sid in (old, new):
+        assert routing.register_key(sid, key, 4242)
+    ctl.profiles._save({"schema": 1, "session_id": old, "summary": "owns the parser", "workspace": {}})
+    monkeypatch.setattr(sys, "stdin", io.StringIO("wrong" * 10 + "\n"))
+    assert ctl.main(["carry", old, new]) == 3
+    assert model.load_groups() == {old: "parent-1", "child-1": old}
+    monkeypatch.setattr(sys, "stdin", io.StringIO(key + "\n"))
+    assert ctl.main(["carry", old, other]) == 3                    # an id this process never registered
+    monkeypatch.setattr(sys, "stdin", io.StringIO(key + "\n"))
+    assert ctl.main(["carry", old, new]) == 0
+    assert model.load_groups() == {new: "parent-1", "child-1": new}  # as child and as parent
+    assert ctl.profiles.load(new)["summary"] == "owns the parser"

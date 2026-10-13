@@ -5,6 +5,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Fresh Context for pi sessions. `Shift+C` (or right-click → **Fresh Context**) types `/new` into an omp
+  session, and the new session keeps the old one's group and role, as Claude Code's `/clear` does, and its name.
+  Typing `/new` in the session does the same. The PenguPool pi extension hands the seat over with the new
+  `ctl carry <old> <new>`, which only the omp process that held both ids can call: its in-memory key, on
+  stdin, must be the one both ids were registered with
+
 ## [1.3.0] - 2026-10-12
 
 ### Changed
