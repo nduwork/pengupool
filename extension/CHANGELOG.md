@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.0
+
+- run pi sessions in oh-my-pi (v1.3.0) (#96)
+
+Ships with PenguPool v1.3.0.
+
 ## 0.10.0
 
 - agent pool on the map (v1.2.0) (#95)

@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-12
+
 ### Changed
 - pi sessions now run in **oh-my-pi** (`omp`), a pi fork. New pi sessions start with `omp` and resume with
   `omp --resume`. omp has no `--name` flag, so `ctl new` passes the name in `PENGUPOOL_SESSION_NAME` and the
@@ -47,6 +49,7 @@ All notable changes to this project are documented here. The format follows
 - Under omp, pi-intercom's "New intercom message above." nudge can reach the model one step before the
   message itself does. The message still arrives in the same turn
 
+- Editor extension: 0.11.0 (install both with `install.sh`; they ship together in this tag).
 ## [1.2.0] - 2026-10-12
 
 ### Added
