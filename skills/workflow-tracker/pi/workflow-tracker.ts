@@ -69,6 +69,8 @@ export default function (pi: ExtensionAPI) {
   pi.on("agent_end", async (_event, ctx: any) => {
     if (ctx?.hasPendingMessages?.()) return  // the owner has queued the next prompt: its turn ends later
     const { code, out } = await run(["audit"], ctx.cwd)
+    // omp starts a nextTurn message's turn at once; plain pi queues it for the owner's next prompt and
+    // ignores triggerTurn, so `make install-tracker` drops the deliverAs from the plain pi copy.
     if (code === 2 && out) pi.sendMessage({ customType: "workflow-tracker", content: out, display: true } as any, { deliverAs: "nextTurn", triggerTurn: true })
   })
 }

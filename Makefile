@@ -76,7 +76,7 @@ install-tracker-pi:
 	$(if $(TRACKER_PI),ln -sfn "$(BIN)" "$(PI_AGENT)/skills/workflow-tracker/scripts")
 	$(if $(TRACKER_PI),@echo "workflow-tracker: pi extension + skill → $(PI_AGENT) (restart oh-my-pi sessions to load)")
 	$(if $(TRACKER_PLAIN_PI),mkdir -p "$(PLAIN_PI_AGENT)/extensions")
-	$(if $(TRACKER_PLAIN_PI),sed 's|__STEP_STATUS_BIN__|$(BIN)|' skills/workflow-tracker/pi/workflow-tracker.ts > "$(PLAIN_PI_AGENT)/extensions/workflow-tracker.ts")
+	$(if $(TRACKER_PLAIN_PI),sed -e 's|__STEP_STATUS_BIN__|$(BIN)|' -e 's|{ deliverAs: "nextTurn". triggerTurn: true }|{ triggerTurn: true }|' skills/workflow-tracker/pi/workflow-tracker.ts > "$(PLAIN_PI_AGENT)/extensions/workflow-tracker.ts")
 	$(if $(TRACKER_CODEX),CODEX_HOOKS="$(HOME)/.codex/hooks.json" bash "$(BIN)/wire_hooks.sh" --codex)
 	$(if $(TRACKER_CODEX),@echo "workflow-tracker: Codex hooks → ~/.codex/hooks.json (Codex asks you to trust them on its next start)")
 

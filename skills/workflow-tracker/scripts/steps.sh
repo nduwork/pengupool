@@ -135,7 +135,9 @@ reset_ticks() { [[ -f "$TICKS" && ! -L "$TICKS" ]] && rm -f "$TICKS"; return 0; 
 active_step() {
   local st name detail
   [[ -f "$STATE" && ! -L "$STATE" ]] || return 0
-  while IFS=$'\t' read -r st name detail || [[ -n "${name-}" ]]; do [[ "$st" == active ]] && { printf '%s' "$name"; return 0; }; done < "$STATE"
+  while IFS=$'\t' read -r st name detail || [[ -n "${name-}" ]]; do
+    [[ "$st" == active ]] && { printf '%s' "$name" | tr -d '\000-\010\013-\037\177'; return 0; }
+  done < "$STATE"
 }
 
 # live — the current chain has an active step and has not expired: there is something to keep current.
@@ -723,6 +725,8 @@ selfcheck() {
   bash "$s" audit || fail audit-loops                                   # asked once; a second stop passes
   bash "$s" tick "make"; bash "$s" tick 'bash "/x/steps.sh" done a' >/dev/null   # the tracker call itself never counts
   [[ "$(cat "$d/.ticks")" == 1 ]] || fail "tick-counts-steps-call: $(cat "$d/.ticks")"
+  bash "$s" done nosuchstep 2>/dev/null && fail failed-step-accepted
+  out="$(bash "$s" audit)"; [[ $? -eq 2 && "$out" == *"1 tool calls"* ]] || fail "failed-command-cleared-ticks: $out"
   bash "$s" done a >/dev/null; bash "$s" audit || fail audit-after-done
   out="$(for i in 1 2 3; do STEP_STATUS_NUDGE=3 bash "$s" tick x; done)"
   [[ "$out" == *"3 tool calls since the tracker last moved"* && "$(printf '%s\n' "$out" | grep -c .)" == 1 ]] || fail "nudge: $out"
@@ -734,8 +738,15 @@ selfcheck() {
 }
 
 main() {
+  local cmd="${1:-render}" rc=0
+  _steps_main "$@" || rc=$?
+  # Only a tracker move that took effect clears the count: a mistyped step name must leave the guard armed.
+  case "$cmd" in set|start|done|fail|cycle|clear|use) (( rc == 0 )) && reset_ticks ;; esac
+  return $rc
+}
+
+_steps_main() {
   local cmd="${1:-render}"; shift || true
-  case "$cmd" in set|start|done|fail|cycle|clear|use) reset_ticks ;; esac   # the agent moved the tracker
   case "$cmd" in
     set)   if [[ "${1-}" == --name || "${1-}" == -n ]]; then
              need_name "${2-}" "set --name" && check_steps "${@:3}" && switch_chain "$2" || return $?; shift 2   # validate before touching `current'
