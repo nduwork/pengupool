@@ -21,6 +21,14 @@
 #                                     --all adds other sessions' chains as session/<id>, and `shared`
 #                                     prefixes the repo's shared ones
 #   steps.sh note [text]              set (or print) a one-line context note for the current chain
+#   steps.sh tick [tool-text]         a harness hook calls this after each tool the agent runs: counts work
+#                                     since the tracker last moved, and every $STEP_STATUS_NUDGE calls
+#                                     (default 15) prints a reminder for the agent. A call whose text runs
+#                                     steps.sh is the agent updating the tracker, so it is not counted
+#   steps.sh audit                    a harness hook calls this when the agent ends its turn: exit 2 with
+#                                     the reason when an active chain saw work this turn but never moved,
+#                                     so the hook makes the agent update it before stopping. It resets the
+#                                     count, so it asks once, never loops
 #   steps.sh --selfcheck              run the built-in check
 #
 # --session <id> and --shared pick the tracker for one call: a session's own (see State below) or the
@@ -105,6 +113,58 @@ expired() {
   local m; m="$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f" 2>/dev/null)" || return 1
   [[ "$m" =~ ^[0-9]+$ ]] || return 1
   (( $(date +%s) - m > DONE_TTL ))
+}
+
+# Guard: progress must not depend on the agent remembering. Every tool call the agent makes ticks a
+# counter (.ticks, beside the chain); anything that moves the tracker resets it. The harness hooks call
+# `tick` (a nudge every NUDGE calls) and `audit` (at the end of a turn: refuse to stop while an active
+# chain saw work but never moved). Harness-neutral: the hooks only pass events through.
+NUDGE="${STEP_STATUS_NUDGE:-15}"; NUDGE="${NUDGE//[^0-9]/}"; NUDGE="${NUDGE:0:4}"
+NUDGE=$((10#${NUDGE:-15})); (( NUDGE > 0 )) || NUDGE=15
+SELF="${BASH_SOURCE[0]}"
+TICKS="$DIR/.ticks"
+
+read_ticks() {
+  local n=""
+  [[ -f "$TICKS" && ! -L "$TICKS" ]] && n="$(head -c 12 "$TICKS")"
+  n="${n//[^0-9]/}"; echo $((10#${n:-0}))
+}
+reset_ticks() { [[ -f "$TICKS" && ! -L "$TICKS" ]] && rm -f "$TICKS"; return 0; }
+
+# active_step — the name of the current chain's active step (empty when none).
+active_step() {
+  local st name detail
+  [[ -f "$STATE" && ! -L "$STATE" ]] || return 0
+  while IFS=$'\t' read -r st name detail || [[ -n "${name-}" ]]; do [[ "$st" == active ]] && { printf '%s' "$name"; return 0; }; done < "$STATE"
+}
+
+# live — the current chain has an active step and has not expired: there is something to keep current.
+live() {
+  [[ -f "$STATE" && ! -L "$STATE" ]] || return 1
+  expired "$STATE" && return 1
+  local st name detail
+  while IFS=$'\t' read -r st name detail || [[ -n "${name-}" ]]; do [[ "$st" == active ]] && return 0; done < "$STATE"
+  return 1
+}
+
+tick() {
+  [[ "${1-}" == *steps.sh* ]] && return 0   # the agent updating the tracker is not work it forgot to record
+  live || return 0                           # no chain to keep current: nothing to count (and no dir to create)
+  safe_state || return 0
+  local n; n=$(( $(read_ticks) + 1 ))
+  printf '%s\n' "$n" | atomic_write "$TICKS" || return 0
+  (( n % NUDGE == 0 )) || return 0
+  echo "[workflow-tracker] $n tool calls since the tracker last moved: $(render) — if step \"$(active_step)\" is finished run bash \"$SELF\" done \"$(active_step)\"; if you moved on, start <step>."
+}
+
+audit() {
+  live || return 0
+  local n; n="$(read_ticks)"
+  (( n > 0 )) || return 0
+  reset_ticks   # ask once: if the agent stops again without new work, let it
+  local a; a="$(active_step)"
+  echo "[workflow-tracker] Before you end this turn, bring the tracker up to date — you ran $n tool calls since it last moved: $(render). The active step is \"$a\" (step names are the ones after the [chain] label). If it is finished run bash \"$SELF\" done \"$a\" (the next step becomes active), and the same for any later step you also finished; fail <step> for one you dropped. If \"$a\" really is still in progress, say so with bash \"$SELF\" start \"$a\" \"<what remains>\". Then quote the echoed chain."
+  return 2
 }
 
 sym() { case "$1" in done) printf '✓';; active) printf '●';; failed) printf '✗';; *) printf '○';; esac; }
@@ -654,11 +714,28 @@ selfcheck() {
   [[ "$L" == *"session/bbb [s2] x ● → y ○"* ]] || fail "list-all: $L"
   [[ "$L" == *"shared [shared] repo-step ●"* ]] || fail "list-all-shared: $L"
   [[ "$(STEP_STATUS_SESSION=aaa bash "$s" list)" != *"session/bbb"* ]] || fail "list-without-all: $(STEP_STATUS_SESSION=aaa bash "$s" list)"
+  # the guard: tool calls tick, moving the tracker resets, audit refuses a turn end once, nudges every NUDGE
+  unset STEP_STATUS_SESSION
+  bash "$s" set --name guard a b >/dev/null
+  bash "$s" audit || fail audit-without-work-blocked
+  bash "$s" tick "ls -la"; bash "$s" tick "npm test"
+  out="$(bash "$s" audit)"; [[ $? -eq 2 && "$out" == *"2 tool calls"* && "$out" == *"[guard] a ● → b ○"* && "$out" == *'done "a"'* ]] || fail "audit-should-block: $out"
+  bash "$s" audit || fail audit-loops                                   # asked once; a second stop passes
+  bash "$s" tick "make"; bash "$s" tick 'bash "/x/steps.sh" done a' >/dev/null   # the tracker call itself never counts
+  [[ "$(cat "$d/.ticks")" == 1 ]] || fail "tick-counts-steps-call: $(cat "$d/.ticks")"
+  bash "$s" done a >/dev/null; bash "$s" audit || fail audit-after-done
+  out="$(for i in 1 2 3; do STEP_STATUS_NUDGE=3 bash "$s" tick x; done)"
+  [[ "$out" == *"3 tool calls since the tracker last moved"* && "$(printf '%s\n' "$out" | grep -c .)" == 1 ]] || fail "nudge: $out"
+  bash "$s" done b >/dev/null; bash "$s" tick x; bash "$s" audit || fail audit-finished-chain   # no active step: nothing to keep
+  bash "$s" clear; rm -rf "$d/nochain"; mkdir "$d/nochain"
+  local abs; abs="$(cd "$(dirname "$s")" && pwd)/$(basename "$s")"
+  ( cd "$d/nochain" && STEP_STATUS_DIR="$d/nochain/.step-status" bash "$abs" tick x && [[ ! -e "$d/nochain/.step-status" ]] ) || fail tick-without-chain-created-dir
   rm -rf "$root"; echo "selfcheck OK"
 }
 
 main() {
   local cmd="${1:-render}"; shift || true
+  case "$cmd" in set|start|done|fail|cycle|clear|use) reset_ticks ;; esac   # the agent moved the tracker
   case "$cmd" in
     set)   if [[ "${1-}" == --name || "${1-}" == -n ]]; then
              need_name "${2-}" "set --name" && check_steps "${@:3}" && switch_chain "$2" || return $?; shift 2   # validate before touching `current'
@@ -677,9 +754,11 @@ main() {
     use)   need_name "${1-}" use && use_chain "$1" ;;
     list)  list_chains "${1-}" ;;
     note)  note_chain "$@" ;;
+    tick)  tick "${1-}" ;;
+    audit) audit ;;
     --selfcheck) selfcheck ;;
-    -h|--help) sed -n '2,25p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' ;;
-    *) echo "steps.sh: unknown command '$cmd' — commands: set start done fail assert cycle msg render clear use list note (-h for help)" >&2
+    -h|--help) sed -n '2,33p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' ;;
+    *) echo "steps.sh: unknown command '$cmd' — commands: set start done fail assert cycle msg render clear use list note tick audit (-h for help)" >&2
        case "$cmd" in advance|next|finish|complete|completed|ok|mark|check|tick|step)
          echo "steps.sh: to mark a step finished: steps.sh done <step> (the next planned step becomes active)" >&2 ;; esac
        return 2 ;;

@@ -203,18 +203,30 @@ tracking instructions and keys the session (it never erases a chain). A `UserPro
 injects this session's chain (or a nudge to `set` one) into every turn, so the ticker does not depend
 on Claude remembering this skill exists.
 
+**The guard** makes sure steps are not missed, whichever harness runs the agent. Every tool call you
+make ticks a counter (`steps.sh tick`); anything that moves the tracker resets it, and your own
+`steps.sh` calls never count. Every 15 calls (`STEP_STATUS_NUDGE`) a reminder with the chain lands in
+your context. When you end a turn while a chain has an active step and you worked without moving it,
+`steps.sh audit` holds the turn open once, with the reason: mark what finished with `done`, or say
+the step is still running with `start <step> "<what remains>"`. Claude and Codex get this through
+`hook_turn.sh` (PostToolUse and Stop); pi and oh-my-pi through the extension (`tool_result`,
+`agent_end`).
+
 ## Setup
 
 `make install-tracker` copies the scripts to `~/.claude/step-status/bin` and, for Claude Code, runs
-`wire_hooks.sh` from there to register the two hooks in `~/.claude/settings.json`
-(`wire_hooks.sh --unwire` removes them). Under pi it installs a pi extension that does the hooks' job:
-the chain or nudge is appended to every prompt. Tell the user to restart Claude Code afterwards.
+`wire_hooks.sh` from there to register its hooks in `~/.claude/settings.json` (SessionStart,
+UserPromptSubmit, and the guard's PostToolUse and Stop; `wire_hooks.sh --unwire` removes them). With
+Codex installed it also runs `wire_hooks.sh --codex`, which registers UserPromptSubmit, PostToolUse
+and Stop in `~/.codex/hooks.json`; Codex asks you to trust new hooks before it runs them. Under pi and
+oh-my-pi it installs an extension that does the hooks' job: the chain or nudge appended to every
+prompt, and the guard. Tell the user to restart Claude Code afterwards.
 
 ## Checks
 
 ```bash
 bash skills/workflow-tracker/scripts/steps.sh --selfcheck
-bash skills/workflow-tracker/scripts/wire_hooks.sh --selfcheck   # settings.json wire/unwire round trip
+bash skills/workflow-tracker/scripts/wire_hooks.sh --selfcheck   # settings.json and Codex hooks.json wire/unwire
 for s in skills/workflow-tracker/scripts/*.sh; do bash -n "$s"; done
 ```
 

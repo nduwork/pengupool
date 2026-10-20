@@ -8,6 +8,9 @@
 //    rebound on each of those events — that is when omp reads the env its tools spawn with
 //  - before each prompt, hook_prompt.sh's line (this session's chain, or the nudge to set one) is
 //    appended to the system prompt, like the UserPromptSubmit/SessionStart hooks
+//  - the guard, as hook_turn.sh is for Claude and Codex: each tool result ticks steps.sh (a reminder is
+//    appended to the result every few calls), and when the agent ends a turn with an active chain that
+//    saw work but never moved, steps.sh audit's reason starts one more turn to bring it up to date
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent"
 import { execFile } from "node:child_process"
 import * as path from "node:path"
@@ -17,6 +20,12 @@ const sh = (script: string, args: string[], cwd: string, input = "") => new Prom
   const child = execFile("bash", [path.join(BIN, script), ...args], { cwd, timeout: 10000 },
     (e, out) => resolve(e ? "" : String(out).trim()))  // the tracker is optional: never break the turn
   child.stdin?.end(input)
+})
+
+// run: steps.sh with its exit code, for the guard (audit answers 2 with the reason on stdout).
+const run = (args: string[], cwd: string) => new Promise<{ code: number; out: string }>((resolve) => {
+  execFile("bash", [path.join(BIN, "steps.sh"), ...args], { cwd, timeout: 10000 },
+    (e: any, out) => resolve({ code: e ? (typeof e.code === "number" ? e.code : 1) : 0, out: String(out ?? "").trim() }))
 })
 
 // pi's session id, or "" when the context cannot say (an older pi, a test double). Without it the
@@ -52,5 +61,14 @@ export default function (pi: ExtensionAPI) {
     if (!line) return
     const sp: unknown = event.systemPrompt  // omp: string[] parts; plain pi: one string
     return { systemPrompt: Array.isArray(sp) ? [...sp, line] : `${sp}\n\n${line}` } as any
+  })
+  pi.on("tool_result", async (event: any, ctx) => {
+    const { out } = await run(["tick", JSON.stringify(event.input ?? "").slice(0, 2000)], ctx.cwd)
+    if (out) return { content: [...(event.content ?? []), { type: "text", text: out }] } as any
+  })
+  pi.on("agent_end", async (_event, ctx: any) => {
+    if (ctx?.hasPendingMessages?.()) return  // the owner has queued the next prompt: its turn ends later
+    const { code, out } = await run(["audit"], ctx.cwd)
+    if (code === 2 && out) pi.sendMessage({ customType: "workflow-tracker", content: out, display: true } as any, { deliverAs: "nextTurn", triggerTurn: true })
   })
 }
