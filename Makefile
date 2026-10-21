@@ -10,7 +10,11 @@ TRACKER_CC := $(if $(filter pi,$(HARNESS)),,1)
 # pi steps run after `pengupool setup` see an omp it just installed.
 TRACKER_PI := $(if $(filter pi both,$(HARNESS)),1,$(if $(filter auto,$(HARNESS)),$(shell { command -v omp || test -x "$${BUN_INSTALL:-$$HOME/.bun}/bin/omp"; } >/dev/null && echo 1)))
 WT := skills/workflow-tracker/scripts
-SCRIPTS := steps.sh hook_session_start.sh hook_prompt.sh wire_hooks.sh
+SCRIPTS := steps.sh hook_session_start.sh hook_prompt.sh hook_turn.sh wire_hooks.sh
+# The guard (hook_turn.sh) also goes to Codex and plain pi when they are installed.
+TRACKER_CODEX := $(shell command -v codex >/dev/null && echo 1)
+PLAIN_PI_AGENT ?= $(HOME)/.pi/agent
+TRACKER_PLAIN_PI := $(shell command -v pi >/dev/null && echo 1)
 # Scripts older versions installed into $(BIN); install-tracker removes them once settings stop using them.
 OLD_SCRIPTS := statusline.sh capture_context.py wire_statusline.sh
 WIRE_ENV := CLAUDE_SETTINGS="$(CLAUDE_SETTINGS)" STEP_STATUS_HOME="$(STEP_STATUS_HOME)"
@@ -71,6 +75,10 @@ install-tracker-pi:
 	$(if $(TRACKER_PI),cp skills/workflow-tracker/SKILL.md "$(PI_AGENT)/skills/workflow-tracker/SKILL.md")
 	$(if $(TRACKER_PI),ln -sfn "$(BIN)" "$(PI_AGENT)/skills/workflow-tracker/scripts")
 	$(if $(TRACKER_PI),@echo "workflow-tracker: pi extension + skill → $(PI_AGENT) (restart oh-my-pi sessions to load)")
+	$(if $(TRACKER_PLAIN_PI),mkdir -p "$(PLAIN_PI_AGENT)/extensions")
+	$(if $(TRACKER_PLAIN_PI),sed -e 's|__STEP_STATUS_BIN__|$(BIN)|' -e 's|{ deliverAs: "nextTurn". triggerTurn: true }|{ triggerTurn: true }|' skills/workflow-tracker/pi/workflow-tracker.ts > "$(PLAIN_PI_AGENT)/extensions/workflow-tracker.ts")
+	$(if $(TRACKER_CODEX),CODEX_HOOKS="$(HOME)/.codex/hooks.json" bash "$(BIN)/wire_hooks.sh" --codex)
+	$(if $(TRACKER_CODEX),@echo "workflow-tracker: Codex hooks → ~/.codex/hooks.json (Codex asks you to trust them on its next start)")
 
 # The pool-groups skill is instructions only: the single write it makes (`ctl group-plan`) belongs to the
 # backend, and applying a proposal stays the user's step.
@@ -102,8 +110,9 @@ uninstall-skill-repo:
 uninstall-tracker:
 	@if [ -f "$(BIN)/wire_hooks.sh" ]; then $(WIRE_ENV) bash "$(BIN)/wire_hooks.sh" --unwire; \
 	elif [ -f "$(BIN)/wire_statusline.sh" ]; then $(WIRE_ENV) bash "$(BIN)/wire_statusline.sh" --unwire; fi
+	@if [ -f "$(BIN)/wire_hooks.sh" ] && [ -f "$(HOME)/.codex/hooks.json" ]; then bash "$(BIN)/wire_hooks.sh" --unwire --codex; fi
 	for f in $(SCRIPTS) $(OLD_SCRIPTS); do rm -f "$(BIN)/$$f"; done
-	rm -f "$(PI_AGENT)/extensions/workflow-tracker.ts"
+	rm -f "$(PI_AGENT)/extensions/workflow-tracker.ts" "$(PLAIN_PI_AGENT)/extensions/workflow-tracker.ts"
 	rm -rf "$(PI_AGENT)/skills/workflow-tracker"
 
 uninstall:

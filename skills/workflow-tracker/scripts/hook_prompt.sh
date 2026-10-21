@@ -17,7 +17,8 @@ except Exception:
 # main-worktree-root .step-status — a worktree session inherits its repo's tracker. The session id
 # selects that session's own chain there; without one, steps.sh falls back to PenguPool's session id
 # when this harness has one, and to the shared chain otherwise.
-[[ -n "$SESSION" ]] && export STEP_STATUS_SESSION="$SESSION"
+# STEP_HOOK_KEYED: the caller (hook_turn.sh for Codex) already chose the key the agent's tools use.
+[[ -n "$SESSION" && -z "${STEP_HOOK_KEYED:-}" ]] && export STEP_STATUS_SESSION="$SESSION"
 LINE="$(cd "$CWD" 2>/dev/null && bash "$HERE/steps.sh" render 2>/dev/null)"
 STEPS="bash \"$HERE/steps.sh\""
 if [[ -n "$LINE" ]]; then
