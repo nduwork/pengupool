@@ -5,6 +5,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- workflow-tracker guard: the tracker can no longer be left behind silently, in any harness. Each tool
+  call is counted, a reminder every 15 calls names the active step (`STEP_STATUS_NUDGE`), and a turn
+  that worked without moving the tracker is held once at its end until the step is marked done or
+  acknowledged with `start <step> "<what remains>"`. Claude Code and Codex get it through hooks
+  (`hook_turn.sh`; Codex asks to trust them once), pi and oh-my-pi through the extension.
+
+### Fixed
+- A tracker command that failed (a mistyped step name) no longer clears the guard's count.
+- In plain pi the turn-end hold now starts a turn instead of waiting for the next prompt.
+
 ## [1.4.2] - 2026-10-13
 
 ### Fixed
